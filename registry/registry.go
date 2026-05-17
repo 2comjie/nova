@@ -8,11 +8,7 @@ type Registry interface {
 	Close()
 }
 type Discover interface {
-	Watch() (Watcher, error)
 	List() ([]*endpoint.ServiceInstance, error)
-}
-
-type Watcher interface {
 	Next() ([]*endpoint.ServiceInstance, error)
 	Close()
 }

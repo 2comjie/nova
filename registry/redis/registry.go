@@ -78,6 +78,8 @@ func (r *Registry) Register(serviceInstance endpoint.ServiceInstance) error {
 		return finalErr
 	}
 
+	r.publishEvent("register", serviceInstance.ID)
+
 	if r.stopChs[serviceInstance.ID] == nil {
 		r.stopChs[serviceInstance.ID] = make(chan struct{})
 		help.SafeGo(func() {
@@ -112,6 +114,8 @@ func (r *Registry) Deregister(instanceID string) error {
 		logCtx.Errorf("deregister failed")
 		return finalErr
 	}
+
+	r.publishEvent("deregister", instanceID)
 
 	if r.stopChs[instanceID] != nil {
 		close(r.stopChs[instanceID])
@@ -157,10 +161,18 @@ func (r *Registry) keepAlive(stopCh chan struct{}, aliveKey string) {
 	}
 }
 
+func (r *Registry) publishEvent(event string, instanceID string) {
+	r.rc.Publish(r.ctx, r.notifyKey(), event+":"+instanceID)
+}
+
 func (r *Registry) aliveKey(instanceID string) string {
 	return r.option.prefix + ":expire:" + instanceID
 }
 
 func (r *Registry) hashKey() string {
 	return r.option.prefix + ":hash"
+}
+
+func (r *Registry) notifyKey() string {
+	return r.option.prefix + ":notify"
 }
