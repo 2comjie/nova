@@ -2,11 +2,10 @@ package registry
 
 import "github.com/2comjie/wali/core/endpoint"
 
-type Register interface {
-	Registry(service endpoint.ServiceInstance) error
-	Close()
+type Registry interface {
+	Register(instance endpoint.ServiceInstance) error
+	Deregister(instanceID string) error
 }
-
 type Discover interface {
 	Watch() (Watcher, error)
 	List() ([]*endpoint.ServiceInstance, error)
