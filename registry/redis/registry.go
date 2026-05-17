@@ -31,14 +31,29 @@ type Registry struct {
 	rw      sync.RWMutex
 }
 
+func NewRegistry(rc redis.UniversalClient, opts ...Option) *Registry {
+	o := defaultOption()
+	for _, fn := range opts {
+		fn(o)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Registry{
+		rc:      rc,
+		option:  o,
+		ctx:     ctx,
+		cancel:  cancel,
+		stopChs: make(map[string]chan struct{}),
+	}
+}
+
 func (r *Registry) Register(serviceInstance endpoint.ServiceInstance) error {
 	r.rw.Lock()
 	defer r.rw.Unlock()
-	// 设置hash 和 expire key
 
 	logCtx := zap.S().With("service", serviceInstance.ID)
 	aliveKey := r.aliveKey(serviceInstance.ID)
 	hashKey := r.hashKey()
+	ttlSeconds := int(r.option.ttl / time.Second)
 
 	var finalErr error
 	success := help.Retry(r.ctx, 3, time.Second, func() bool {
@@ -48,32 +63,75 @@ func (r *Registry) Register(serviceInstance endpoint.ServiceInstance) error {
 			finalErr = err
 			return false
 		}
-		err = r.rc.Eval(r.ctx, registerScript, []string{hashKey, aliveKey}, data, serviceInstance.ID, r.option.ttl).Err()
+		err = r.rc.Eval(r.ctx, registerScript, []string{hashKey, aliveKey}, data, serviceInstance.ID, ttlSeconds).Err()
 		if err != nil {
 			logCtx.Errorf("eval register script err %+v", err)
 			finalErr = err
 			return false
 		}
 		finalErr = nil
-
-		if r.stopChs[serviceInstance.ID] == nil {
-			r.stopChs[serviceInstance.ID] = make(chan struct{})
-			help.SafeGo(func() {
-				r.keepAlive(r.stopChs[serviceInstance.ID], aliveKey)
-			})
-		}
 		return true
 	})
+
 	if !success {
 		logCtx.Errorf("register failed")
-	} else {
-		logCtx.Debugf("register success")
+		return finalErr
 	}
-	return finalErr
+
+	if r.stopChs[serviceInstance.ID] == nil {
+		r.stopChs[serviceInstance.ID] = make(chan struct{})
+		help.SafeGo(func() {
+			r.keepAlive(r.stopChs[serviceInstance.ID], aliveKey)
+		})
+	}
+	logCtx.Debugf("register success")
+	return nil
+}
+
+func (r *Registry) Deregister(instanceID string) error {
+	r.rw.Lock()
+	defer r.rw.Unlock()
+
+	logCtx := zap.S().With("service", instanceID)
+	aliveKey := r.aliveKey(instanceID)
+	hashKey := r.hashKey()
+
+	var finalErr error
+	success := help.Retry(r.ctx, 3, time.Second, func() bool {
+		err := r.rc.Eval(r.ctx, deregisterScript, []string{hashKey, aliveKey}, instanceID).Err()
+		if err != nil {
+			logCtx.Errorf("eval deregister script err %+v", err)
+			finalErr = err
+			return false
+		}
+		finalErr = nil
+		return true
+	})
+
+	if !success {
+		logCtx.Errorf("deregister failed")
+		return finalErr
+	}
+
+	if r.stopChs[instanceID] != nil {
+		close(r.stopChs[instanceID])
+		delete(r.stopChs, instanceID)
+	}
+	logCtx.Debugf("deregister success")
+	return nil
+}
+
+func (r *Registry) Close() {
+	r.rw.Lock()
+	defer r.rw.Unlock()
+	r.cancel()
+	for id, ch := range r.stopChs {
+		close(ch)
+		delete(r.stopChs, id)
+	}
 }
 
 func (r *Registry) keepAlive(stopCh chan struct{}, aliveKey string) {
-
 	tk := time.NewTicker(r.option.tick)
 	defer tk.Stop()
 	logCtx := zap.S().With("aliveKey", aliveKey)
@@ -94,43 +152,9 @@ func (r *Registry) keepAlive(stopCh chan struct{}, aliveKey string) {
 			})
 			if !success {
 				logCtx.Errorf("keep alive failed")
-			} else {
-				logCtx.Debugf("keep alive success")
 			}
 		}
 	}
-}
-
-func (r *Registry) Deregister(instanceID string) error {
-	r.rw.Lock()
-	defer r.rw.Unlock()
-
-	logCtx := zap.S().With("service", instanceID)
-	aliveKey := r.aliveKey(instanceID)
-	hashKey := r.hashKey()
-
-	var finalErr error
-	success := help.Retry(r.ctx, 3, time.Second, func() bool {
-		err := r.rc.Eval(r.ctx, deregisterScript, []string{hashKey, aliveKey}, instanceID).Err()
-		if err != nil {
-			logCtx.Errorf("eval deregister script err %+v", err)
-			finalErr = err
-			return false
-		}
-		if r.stopChs[instanceID] != nil {
-			close(r.stopChs[instanceID])
-			delete(r.stopChs, instanceID)
-		}
-		finalErr = nil
-		return true
-	})
-
-	if !success {
-		logCtx.Errorf("deregister failed")
-	} else {
-		logCtx.Debugf("deregister success")
-	}
-	return finalErr
 }
 
 func (r *Registry) aliveKey(instanceID string) string {

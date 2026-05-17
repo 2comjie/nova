@@ -30,7 +30,7 @@ func WithTTL(ttl time.Duration) Option {
 
 func defaultOption() *option {
 	return &option{
-		prefix: "registry:",
+		prefix: "registry",
 		tick:   time.Second * 5,
 		ttl:    time.Second * 10,
 	}
