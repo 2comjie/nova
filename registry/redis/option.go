@@ -1,0 +1,37 @@
+package redis
+
+import "time"
+
+type option struct {
+	prefix string
+	tick   time.Duration
+	ttl    time.Duration
+}
+
+type Option func(*option)
+
+func WithPrefix(prefix string) Option {
+	return func(o *option) {
+		o.prefix = prefix
+	}
+}
+
+func WithTick(tick time.Duration) Option {
+	return func(o *option) {
+		o.tick = tick
+	}
+}
+
+func WithTTL(ttl time.Duration) Option {
+	return func(o *option) {
+		o.ttl = ttl
+	}
+}
+
+func defaultOption() *option {
+	return &option{
+		prefix: "registry:",
+		tick:   time.Second * 5,
+		ttl:    time.Second * 10,
+	}
+}
