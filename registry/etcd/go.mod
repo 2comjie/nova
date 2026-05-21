@@ -5,8 +5,10 @@ go 1.24.3
 require (
 	github.com/2comjie/wali v0.0.0
 	go.etcd.io/etcd/client/v3 v3.5.21
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.28.0
 )
+
+replace github.com/2comjie/wali => ../../
 
 require (
 	github.com/coreos/go-semver v0.3.0 // indirect
@@ -25,5 +27,3 @@ require (
 	google.golang.org/grpc v1.59.0 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 )
-
-
