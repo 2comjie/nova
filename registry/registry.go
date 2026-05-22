@@ -8,7 +8,8 @@ type Registry interface {
 	Close()
 }
 type Discover interface {
-	List() ([]*endpoint.ServiceInstance, error)
-	Next() ([]*endpoint.ServiceInstance, error)
+	List() (map[string]endpoint.ServiceInstance, error)
+	Next() (map[string]endpoint.ServiceInstance, error)
+	Get(instanceID string) (endpoint.ServiceInstance, error)
 	Close()
 }

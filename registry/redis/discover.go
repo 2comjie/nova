@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"strings"
 	"sync"
@@ -13,6 +14,9 @@ import (
 	"go.uber.org/zap"
 )
 
+//go:embed delete_if_expired.lua
+var deleteIfExpiredScript string
+
 type Discover struct {
 	option *option
 	rc     redis.UniversalClient
@@ -20,8 +24,14 @@ type Discover struct {
 	cancel context.CancelFunc
 
 	mu        sync.RWMutex
-	instances []*endpoint.ServiceInstance
+	instances map[string]endpoint.ServiceInstance
 	notify    chan struct{}
+}
+
+func (d *Discover) Get(instanceID string) (endpoint.ServiceInstance, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.instances[instanceID], nil
 }
 
 func NewDiscover(rc redis.UniversalClient, opts ...Option) *Discover {
@@ -43,17 +53,21 @@ func NewDiscover(rc redis.UniversalClient, opts ...Option) *Discover {
 	return d
 }
 
-func (d *Discover) List() ([]*endpoint.ServiceInstance, error) {
+func (d *Discover) List() (map[string]endpoint.ServiceInstance, error) {
 	d.mu.RLock()
 	if d.instances != nil {
 		defer d.mu.RUnlock()
 		return d.instances, nil
 	}
 	d.mu.RUnlock()
-	return d.fetchAll()
+	m, err := d.fetchAll()
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
-func (d *Discover) Next() ([]*endpoint.ServiceInstance, error) {
+func (d *Discover) Next() (map[string]endpoint.ServiceInstance, error) {
 	select {
 	case <-d.ctx.Done():
 		return nil, d.ctx.Err()
@@ -101,7 +115,7 @@ func (d *Discover) watchExpire() {
 			}
 			if strings.HasPrefix(msg.Payload, prefix) {
 				instanceID := strings.TrimPrefix(msg.Payload, prefix)
-				d.rc.HDel(d.ctx, d.hashKey(), instanceID)
+				d.rc.Eval(d.ctx, deleteIfExpiredScript, []string{d.aliveKey(instanceID), d.hashKey()}, instanceID)
 				d.refresh()
 			}
 		}
@@ -137,24 +151,24 @@ func (d *Discover) refresh() {
 	}
 }
 
-func (d *Discover) fetchAll() ([]*endpoint.ServiceInstance, error) {
+func (d *Discover) fetchAll() (map[string]endpoint.ServiceInstance, error) {
 	hash, err := d.rc.HGetAll(d.ctx, d.hashKey()).Result()
 	if err != nil {
 		return nil, err
 	}
-	var instances []*endpoint.ServiceInstance
+	instances := make(map[string]endpoint.ServiceInstance, len(hash))
 	for id, value := range hash {
 		alive, err := d.rc.Exists(d.ctx, d.aliveKey(id)).Result()
 		if err != nil || alive == 0 {
-			d.rc.HDel(d.ctx, d.hashKey(), id)
+			d.rc.Eval(d.ctx, deleteIfExpiredScript, []string{d.aliveKey(id), d.hashKey()}, id)
 			continue
 		}
-		inst := &endpoint.ServiceInstance{}
-		if err := json.Unmarshal([]byte(value), inst); err != nil {
+		inst := endpoint.ServiceInstance{}
+		if err := json.Unmarshal([]byte(value), &inst); err != nil {
 			zap.S().Errorf("unmarshal service %s err %+v", id, err)
 			continue
 		}
-		instances = append(instances, inst)
+		instances[id] = inst
 	}
 	return instances, nil
 }
