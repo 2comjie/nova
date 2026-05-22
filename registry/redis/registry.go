@@ -53,7 +53,7 @@ func (r *Registry) Register(serviceInstance endpoint.ServiceInstance) error {
 	logCtx := zap.S().With("service", serviceInstance.ID)
 	aliveKey := r.aliveKey(serviceInstance.ID)
 	hashKey := r.hashKey()
-	ttlSeconds := int(r.option.ttl / time.Second)
+	ttlSeconds := int(r.option.ttl.Seconds())
 
 	var finalErr error
 	success := help.Retry(r.ctx, 3, time.Second, func() bool {

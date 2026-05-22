@@ -30,8 +30,16 @@ type Discover struct {
 
 func (d *Discover) Get(instanceID string) (endpoint.ServiceInstance, error) {
 	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.instances[instanceID], nil
+	if d.instances != nil {
+		defer d.mu.RUnlock()
+		return d.instances[instanceID], nil
+	}
+	d.mu.RUnlock()
+	m, err := d.fetchAll()
+	if err != nil {
+		return endpoint.ServiceInstance{}, err
+	}
+	return m[instanceID], nil
 }
 
 func NewDiscover(rc redis.UniversalClient, opts ...Option) *Discover {
