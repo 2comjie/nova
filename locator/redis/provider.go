@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/2comjie/wali/core/help"
+	"github.com/dgraph-io/ristretto/v2"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -32,8 +33,7 @@ type Provider struct {
 	stopChs map[string]chan struct{}
 	rw      sync.RWMutex
 
-	mu        sync.RWMutex
-	instances map[string]map[string]string
+	cache *ristretto.Cache[string, string]
 }
 
 func NewProvider(rc redis.UniversalClient, opts ...Option) *Provider {
@@ -42,16 +42,26 @@ func NewProvider(rc redis.UniversalClient, opts ...Option) *Provider {
 		fn(o)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+
+	cache, err := ristretto.NewCache(&ristretto.Config[string, string]{
+		NumCounters: o.cacheMaxCost * 10,
+		MaxCost:     o.cacheMaxCost,
+		BufferItems: 64,
+	})
+	if err != nil {
+		zap.S().Fatalf("create ristretto cache err %+v", err)
+	}
+
 	p := &Provider{
 		rc:      rc,
 		option:  o,
 		ctx:     ctx,
 		cancel:  cancel,
 		stopChs: make(map[string]chan struct{}),
+		cache:   cache,
 	}
 	help.SafeGo(p.watchNotify)
 	help.SafeGo(p.watchExpire)
-	help.SafeGo(p.pollFetch)
 	return p
 }
 
@@ -81,6 +91,7 @@ func (p *Provider) Bind(name string, key string, instanceID string) error {
 		return finalErr
 	}
 
+	p.cache.Del(name + ":" + key)
 	p.publishEvent("bind", name, key)
 
 	stopKey := name + ":" + key
@@ -109,6 +120,7 @@ func (p *Provider) Unbind(name string, key string) error {
 		return err
 	}
 
+	p.cache.Del(name + ":" + key)
 	p.publishEvent("unbind", name, key)
 
 	stopKey := name + ":" + key
@@ -122,23 +134,18 @@ func (p *Provider) Unbind(name string, key string) error {
 }
 
 func (p *Provider) Locate(name string, key string) (string, error) {
-	p.mu.RLock()
-	if p.instances != nil {
-		nameMap, ok := p.instances[name]
-		if ok {
-			id, ok := nameMap[key]
-			if ok {
-				p.mu.RUnlock()
-				return id, nil
-			}
-		}
+	locKey := name + ":" + key
+
+	if id, ok := p.cache.Get(locKey); ok {
+		return id, nil
 	}
-	p.mu.RUnlock()
 
 	id, err := p.rc.HGet(p.ctx, p.hashKey(name), key).Result()
 	if err != nil {
 		return "", err
 	}
+
+	p.cache.SetWithTTL(locKey, id, 1, p.option.ttl*3)
 	return id, nil
 }
 
@@ -150,6 +157,7 @@ func (p *Provider) Close() {
 		close(ch)
 		delete(p.stopChs, key)
 	}
+	p.cache.Close()
 }
 
 func (p *Provider) keepAlive(aliveKey string, stopCh chan struct{}) {
@@ -186,11 +194,15 @@ func (p *Provider) watchNotify() {
 		select {
 		case <-p.ctx.Done():
 			return
-		case _, ok := <-ch:
+		case msg, ok := <-ch:
 			if !ok {
 				return
 			}
-			p.refresh()
+			parts := strings.SplitN(msg.Payload, ":", 3)
+			if len(parts) == 3 {
+				name, key := parts[1], parts[2]
+				p.cache.Del(name + ":" + key)
+			}
 		}
 	}
 }
@@ -218,68 +230,10 @@ func (p *Provider) watchExpire() {
 				name, key := parts[0], parts[1]
 				p.rc.Eval(p.ctx, deleteIfExpiredScript,
 					[]string{p.hashKey(name), p.aliveKey(name, key)}, key)
-				p.refresh()
+				p.cache.Del(name + ":" + key)
 			}
 		}
 	}
-}
-
-func (p *Provider) pollFetch() {
-	ticker := time.NewTicker(time.Second * 30)
-	defer ticker.Stop()
-	p.refresh()
-	for {
-		select {
-		case <-p.ctx.Done():
-			return
-		case <-ticker.C:
-			p.refresh()
-		}
-	}
-}
-
-func (p *Provider) refresh() {
-	instances, err := p.fetchAll()
-	if err != nil {
-		zap.S().Errorf("refresh instances err %+v", err)
-		return
-	}
-	p.mu.Lock()
-	p.instances = instances
-	p.mu.Unlock()
-}
-
-func (p *Provider) fetchAll() (map[string]map[string]string, error) {
-	names, err := p.rc.SMembers(p.ctx, p.nameSetKey()).Result()
-	if err != nil {
-		return nil, err
-	}
-	instances := make(map[string]map[string]string)
-	for _, name := range names {
-		hash, err := p.rc.HGetAll(p.ctx, p.hashKey(name)).Result()
-		if err != nil {
-			continue
-		}
-		if len(hash) == 0 {
-			p.rc.SRem(p.ctx, p.nameSetKey(), name)
-			continue
-		}
-		nameMap := make(map[string]string, len(hash))
-		for key, id := range hash {
-			aliveKey := p.aliveKey(name, key)
-			alive, err := p.rc.Exists(p.ctx, aliveKey).Result()
-			if err != nil || alive == 0 {
-				p.rc.Eval(p.ctx, deleteIfExpiredScript,
-					[]string{p.hashKey(name), aliveKey}, key)
-				continue
-			}
-			nameMap[key] = id
-		}
-		if len(nameMap) > 0 {
-			instances[name] = nameMap
-		}
-	}
-	return instances, nil
 }
 
 func (p *Provider) publishEvent(event string, name string, key string) {

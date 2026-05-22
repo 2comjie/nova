@@ -32,8 +32,6 @@ func TestProvider_BindAndLocate(t *testing.T) {
 		t.Fatalf("bind failed: %v", err)
 	}
 
-	time.Sleep(time.Millisecond * 100) // wait for pollFetch
-
 	id, err := p.Locate("game", "room_1")
 	if err != nil {
 		t.Fatalf("locate failed: %v", err)
@@ -49,10 +47,7 @@ func TestProvider_BindUpdate(t *testing.T) {
 	defer p.Close()
 
 	p.Bind("game", "room_1", "instance_a")
-	time.Sleep(time.Millisecond * 100)
-
 	p.Bind("game", "room_1", "instance_b")
-	time.Sleep(time.Millisecond * 100)
 
 	id, err := p.Locate("game", "room_1")
 	if err != nil {
@@ -68,8 +63,6 @@ func TestProvider_LocateNotFound(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:locate_notfound"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	time.Sleep(time.Millisecond * 100)
-
 	_, err := p.Locate("game", "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for nonexistent key")
@@ -82,7 +75,6 @@ func TestProvider_Unbind(t *testing.T) {
 	defer p.Close()
 
 	p.Bind("game", "room_1", "instance_a")
-	time.Sleep(time.Millisecond * 100)
 
 	id, err := p.Locate("game", "room_1")
 	if err != nil {
@@ -93,7 +85,6 @@ func TestProvider_Unbind(t *testing.T) {
 	}
 
 	p.Unbind("game", "room_1")
-	time.Sleep(time.Millisecond * 100)
 
 	_, err = p.Locate("game", "room_1")
 	if err == nil {
@@ -108,7 +99,6 @@ func TestProvider_MultiName(t *testing.T) {
 
 	p.Bind("game", "room_1", "inst_game_1")
 	p.Bind("chat", "room_1", "inst_chat_1")
-	time.Sleep(time.Millisecond * 100)
 
 	id, err := p.Locate("game", "room_1")
 	if err != nil {
@@ -127,19 +117,28 @@ func TestProvider_MultiName(t *testing.T) {
 	}
 }
 
-func TestProvider_LocateColdCache(t *testing.T) {
+func TestProvider_LocateCache(t *testing.T) {
 	rc := testClient(t)
-	p := NewProvider(rc, WithPrefix("test:cold_cache"), WithTTL(time.Second*10), WithTick(time.Second*3))
+	p := NewProvider(rc, WithPrefix("test:locate_cache"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	// bind and locate immediately, before pollFetch populates cache
-	p.Bind("game", "room_1", "instance_cold")
+	p.Bind("game", "room_1", "instance_x")
 
+	// first call: cache miss, HGet falls through
 	id, err := p.Locate("game", "room_1")
 	if err != nil {
-		t.Fatalf("locate (cold cache) failed: %v", err)
+		t.Fatalf("locate failed: %v", err)
 	}
-	if id != "instance_cold" {
-		t.Fatalf("expected instance_cold, got %s", id)
+	if id != "instance_x" {
+		t.Fatalf("expected instance_x, got %s", id)
+	}
+
+	// second call: should hit ristretto cache
+	id, err = p.Locate("game", "room_1")
+	if err != nil {
+		t.Fatalf("locate (cached) failed: %v", err)
+	}
+	if id != "instance_x" {
+		t.Fatalf("expected instance_x from cache, got %s", id)
 	}
 }
