@@ -7,14 +7,14 @@ import (
 
 const GateName = "gate"
 
-type Provider interface {
+type Locator interface {
 	Bind(name string, key string, instanceId string) error
 	Unbind(name string, key string) error
 	Locate(name string, key string) (string, error)
 	Close()
 }
 type NodeLocator struct {
-	provider Provider
+	provider Locator
 
 	discover registry.Discover
 }
@@ -43,18 +43,18 @@ func (l *NodeLocator) Locate(name string, key string) (endpoint.ServiceInstance,
 }
 
 type GateLocator struct {
-	provider Provider
+	provider Locator
 
 	discover registry.Discover
 }
 
-func NewGateLocator(provider Provider, discover registry.Discover) *GateLocator {
+func NewGateLocator(provider Locator, discover registry.Discover) *GateLocator {
 	return &GateLocator{
 		provider: provider,
 		discover: discover,
 	}
 }
-func NewNodeLocator(provider Provider, discover registry.Discover) *NodeLocator {
+func NewNodeLocator(provider Locator, discover registry.Discover) *NodeLocator {
 	return &NodeLocator{
 		provider: provider,
 		discover: discover,

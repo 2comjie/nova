@@ -1,5 +1,11 @@
 package endpoint
 
+import (
+	"net"
+
+	"github.com/spf13/cast"
+)
+
 type Status int32
 
 const (
@@ -27,4 +33,8 @@ type RpcService struct {
 	Port int    `json:"port"`
 	Name string `json:"name"`
 	Desc string `json:"desc"`
+}
+
+func (r RpcService) Target() string {
+	return net.JoinHostPort(r.Host, cast.ToString(r.Port))
 }
