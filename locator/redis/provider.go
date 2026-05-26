@@ -65,7 +65,8 @@ func NewProvider(rc redis.UniversalClient, opts ...Option) *Provider {
 	return p
 }
 
-func (p *Provider) Bind(name string, key string, instanceID string) error {
+func (p *Provider) Bind(ctx context.Context, name string, key string, instanceID string) error {
+	_ = ctx
 	p.rw.Lock()
 	defer p.rw.Unlock()
 
@@ -106,7 +107,8 @@ func (p *Provider) Bind(name string, key string, instanceID string) error {
 	return nil
 }
 
-func (p *Provider) Unbind(name string, key string) error {
+func (p *Provider) Unbind(ctx context.Context, name string, key string) error {
+	_ = ctx
 	p.rw.Lock()
 	defer p.rw.Unlock()
 
@@ -133,7 +135,8 @@ func (p *Provider) Unbind(name string, key string) error {
 	return nil
 }
 
-func (p *Provider) Locate(name string, key string) (string, error) {
+func (p *Provider) Locate(ctx context.Context, name string, key string) (string, error) {
+	_ = ctx
 	locKey := name + ":" + key
 
 	if id, ok := p.cache.Get(locKey); ok {

@@ -1,6 +1,10 @@
 package registry
 
-import "github.com/2comjie/wali/core/endpoint"
+import (
+	"context"
+
+	"github.com/2comjie/wali/core/endpoint"
+)
 
 type Registry interface {
 	Register(instance endpoint.ServiceInstance) error
@@ -8,8 +12,8 @@ type Registry interface {
 	Close()
 }
 type Discover interface {
-	List() (map[string]endpoint.ServiceInstance, error)
-	Next() (map[string]endpoint.ServiceInstance, error)
-	Get(instanceID string) (endpoint.ServiceInstance, error)
+	List(ctx context.Context) (map[string]endpoint.ServiceInstance, error)
+	Next(ctx context.Context) (map[string]endpoint.ServiceInstance, error)
+	Get(ctx context.Context, nstanceID string) (endpoint.ServiceInstance, error)
 	Close()
 }

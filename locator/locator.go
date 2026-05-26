@@ -1,6 +1,8 @@
 package locator
 
 import (
+	"context"
+
 	"github.com/2comjie/wali/core/endpoint"
 	"github.com/2comjie/wali/registry"
 )
@@ -8,9 +10,9 @@ import (
 const GateName = "gate"
 
 type Locator interface {
-	Bind(name string, key string, instanceId string) error
-	Unbind(name string, key string) error
-	Locate(name string, key string) (string, error)
+	Bind(ctx context.Context, name string, key string, instanceId string) error
+	Unbind(ctx context.Context, name string, key string) error
+	Locate(ctx context.Context, name string, key string) (string, error)
 	Close()
 }
 type NodeLocator struct {
@@ -19,27 +21,27 @@ type NodeLocator struct {
 	discover registry.Discover
 }
 
-func (l *NodeLocator) Bind(name string, key string, instanceId string) error {
+func (l *NodeLocator) Bind(ctx context.Context, name string, key string, instanceId string) error {
 	if name == GateName {
 		return ErrNodeNotSupport
 	}
-	return l.provider.Bind(name, key, instanceId)
+	return l.provider.Bind(ctx, name, key, instanceId)
 }
-func (l *NodeLocator) Unbind(name string, key string) error {
+func (l *NodeLocator) Unbind(ctx context.Context, name string, key string) error {
 	if name == GateName {
 		return ErrNodeNotSupport
 	}
-	return l.provider.Unbind(name, key)
+	return l.provider.Unbind(ctx, name, key)
 }
-func (l *NodeLocator) Locate(name string, key string) (endpoint.ServiceInstance, error) {
+func (l *NodeLocator) Locate(ctx context.Context, name string, key string) (endpoint.ServiceInstance, error) {
 	if name == GateName {
 		return endpoint.ServiceInstance{}, ErrNodeNotSupport
 	}
-	instanceId, err := l.provider.Locate(name, key)
+	instanceId, err := l.provider.Locate(ctx, name, key)
 	if err != nil {
 		return endpoint.ServiceInstance{}, err
 	}
-	return l.discover.Get(instanceId)
+	return l.discover.Get(ctx, instanceId)
 }
 
 type GateLocator struct {
@@ -60,16 +62,16 @@ func NewNodeLocator(provider Locator, discover registry.Discover) *NodeLocator {
 		discover: discover,
 	}
 }
-func (l *GateLocator) Bind(key string, instanceId string) error {
-	return l.provider.Bind(GateName, key, instanceId)
+func (l *GateLocator) Bind(ctx context.Context, key string, instanceId string) error {
+	return l.provider.Bind(ctx, GateName, key, instanceId)
 }
-func (l *GateLocator) Unbind(key string) error {
-	return l.provider.Unbind(GateName, key)
+func (l *GateLocator) Unbind(ctx context.Context, key string) error {
+	return l.provider.Unbind(ctx, GateName, key)
 }
-func (l *GateLocator) Locate(key string) (endpoint.ServiceInstance, error) {
-	instanceId, err := l.provider.Locate(GateName, key)
+func (l *GateLocator) Locate(ctx context.Context, key string) (endpoint.ServiceInstance, error) {
+	instanceId, err := l.provider.Locate(ctx, GateName, key)
 	if err != nil {
 		return endpoint.ServiceInstance{}, err
 	}
-	return l.discover.Get(instanceId)
+	return l.discover.Get(ctx, instanceId)
 }

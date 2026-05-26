@@ -54,7 +54,7 @@ type RpcServiceInstance struct {
 	serviceInstance endpoint.ServiceInstance
 }
 
-func (c *Client) Service(serviceName string) (*grpc.ClientConn, error) {
+func (c *Client) Service(ctx context.Context, serviceName string) (*grpc.ClientConn, error) {
 	rpcServiceInstance, err := c.pickService(serviceName)
 	if err != nil {
 		return nil, err
@@ -62,11 +62,11 @@ func (c *Client) Service(serviceName string) (*grpc.ClientConn, error) {
 	return c.pool.Get(rpcServiceInstance.rpcService.Target())
 }
 
-func (c *Client) Node(serviceName string, instanceID string) (*grpc.ClientConn, error) {
+func (c *Client) Node(ctx context.Context, serviceName string, instanceID string) (*grpc.ClientConn, error) {
 	if instanceID == "" {
 		return nil, ErrInvalidTarget
 	}
-	serviceInstance, err := c.discover.Get(instanceID)
+	serviceInstance, err := c.discover.Get(ctx, instanceID)
 	if err != nil {
 		return nil, err
 	}
@@ -86,11 +86,11 @@ func (c *Client) Route(ctx context.Context, serviceName string, key string) (*gr
 	if key == "" {
 		return nil, ErrInvalidTarget
 	}
-	instanceId, err := c.locator.Locate(serviceName, key)
+	instanceId, err := c.locator.Locate(ctx, serviceName, key)
 	if err != nil {
 		return nil, err
 	}
-	return c.Node(serviceName, instanceId)
+	return c.Node(ctx, serviceName, instanceId)
 }
 
 func (c *Client) Close() {
@@ -105,7 +105,7 @@ func (c *Client) watch() {
 			return
 		default:
 		}
-		list, err := c.discover.Next()
+		list, err := c.discover.Next(c.ctx)
 		if err != nil {
 			zap.S().Errorf("rpc client discover.Next() failed: %v", err)
 			continue

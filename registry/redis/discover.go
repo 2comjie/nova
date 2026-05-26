@@ -28,14 +28,14 @@ type Discover struct {
 	notify    chan struct{}
 }
 
-func (d *Discover) Get(instanceID string) (endpoint.ServiceInstance, error) {
+func (d *Discover) Get(ctx context.Context, instanceID string) (endpoint.ServiceInstance, error) {
 	d.mu.RLock()
 	if d.instances != nil {
 		defer d.mu.RUnlock()
 		return d.instances[instanceID], nil
 	}
 	d.mu.RUnlock()
-	m, err := d.fetchAll()
+	m, err := d.fetchAll(ctx)
 	if err != nil {
 		return endpoint.ServiceInstance{}, err
 	}
@@ -61,24 +61,26 @@ func NewDiscover(rc redis.UniversalClient, opts ...Option) *Discover {
 	return d
 }
 
-func (d *Discover) List() (map[string]endpoint.ServiceInstance, error) {
+func (d *Discover) List(ctx context.Context) (map[string]endpoint.ServiceInstance, error) {
 	d.mu.RLock()
 	if d.instances != nil {
 		defer d.mu.RUnlock()
 		return d.instances, nil
 	}
 	d.mu.RUnlock()
-	m, err := d.fetchAll()
+	m, err := d.fetchAll(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func (d *Discover) Next() (map[string]endpoint.ServiceInstance, error) {
+func (d *Discover) Next(ctx context.Context) (map[string]endpoint.ServiceInstance, error) {
 	select {
 	case <-d.ctx.Done():
 		return nil, d.ctx.Err()
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	case <-d.notify:
 		d.mu.RLock()
 		defer d.mu.RUnlock()
@@ -145,7 +147,7 @@ func (d *Discover) pollFetch() {
 }
 
 func (d *Discover) refresh() {
-	instances, err := d.fetchAll()
+	instances, err := d.fetchAll(d.ctx)
 	if err != nil {
 		zap.S().Errorf("refresh instances err %+v", err)
 		return
@@ -159,7 +161,8 @@ func (d *Discover) refresh() {
 	}
 }
 
-func (d *Discover) fetchAll() (map[string]endpoint.ServiceInstance, error) {
+func (d *Discover) fetchAll(ctx context.Context) (map[string]endpoint.ServiceInstance, error) {
+	_ = ctx
 	hash, err := d.rc.HGetAll(d.ctx, d.hashKey()).Result()
 	if err != nil {
 		return nil, err
