@@ -48,6 +48,17 @@ func (p *ConnPool) Get(addr string) (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
+func (p *ConnPool) Prune(activeAddrs map[string]bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for addr, conn := range p.conns {
+		if !activeAddrs[addr] {
+			_ = conn.Close()
+			delete(p.conns, addr)
+		}
+	}
+}
+
 func (p *ConnPool) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()

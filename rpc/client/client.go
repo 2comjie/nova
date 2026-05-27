@@ -113,7 +113,14 @@ func (c *Client) watch() {
 
 		c.mu.Lock()
 		c.rpcServiceInstanceMap = c.extractRpcService(list)
+		activeAddrs := make(map[string]bool)
+		for _, instances := range c.rpcServiceInstanceMap {
+			for _, inst := range instances {
+				activeAddrs[inst.rpcService.Target()] = true
+			}
+		}
 		c.mu.Unlock()
+		c.pool.Prune(activeAddrs)
 		zap.S().Debugf("rpc client watch: %v", c.rpcServiceInstanceMap)
 	}
 }
