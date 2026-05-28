@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -58,7 +59,7 @@ func lookupString(tree map[string]any, expr string) string {
 		}
 		return ""
 	}
-	s, _ := v.(string)
+	s := fmt.Sprint(v)
 	if s == "" {
 		if len(args) > 1 {
 			return args[1]
