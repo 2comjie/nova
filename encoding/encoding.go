@@ -1,6 +1,20 @@
 package encoding
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/2comjie/wali/encoding/json"
+	"github.com/2comjie/wali/encoding/proto"
+	"github.com/2comjie/wali/encoding/xml"
+	"github.com/2comjie/wali/encoding/yml"
+)
+
+func init() {
+	RegisterCodec(&json.JsonCodec{})
+	RegisterCodec(&proto.ProtoCodec{})
+	RegisterCodec(&xml.XmlCodec{})
+	RegisterCodec(&yml.YamlCodec{})
+}
 
 type Codec interface {
 	Marshal(v any) ([]byte, error)

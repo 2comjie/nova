@@ -2,24 +2,18 @@ package json
 
 import (
 	"encoding/json"
-
-	"github.com/2comjie/wali/encoding"
 )
 
-func init() {
-	encoding.RegisterCodec(&jsonCodec{})
-}
+type JsonCodec struct{}
 
-type jsonCodec struct{}
-
-func (c *jsonCodec) Marshal(v any) ([]byte, error) {
+func (c *JsonCodec) Marshal(v any) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-func (c *jsonCodec) Unmarshal(data []byte, v any) error {
+func (c *JsonCodec) Unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v)
 }
 
-func (c *jsonCodec) Name() string {
+func (c *JsonCodec) Name() string {
 	return "json"
 }

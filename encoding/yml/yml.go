@@ -1,24 +1,19 @@
 package yml
 
 import (
-	"github.com/2comjie/wali/encoding"
 	"gopkg.in/yaml.v3"
 )
 
-func init() {
-	encoding.RegisterCodec(&yamlCodec{})
-}
+type YamlCodec struct{}
 
-type yamlCodec struct{}
-
-func (c *yamlCodec) Marshal(v any) ([]byte, error) {
+func (c *YamlCodec) Marshal(v any) ([]byte, error) {
 	return yaml.Marshal(v)
 }
 
-func (c *yamlCodec) Unmarshal(data []byte, v any) error {
+func (c *YamlCodec) Unmarshal(data []byte, v any) error {
 	return yaml.Unmarshal(data, v)
 }
 
-func (c *yamlCodec) Name() string {
+func (c *YamlCodec) Name() string {
 	return "yaml"
 }
