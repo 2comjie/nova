@@ -13,7 +13,9 @@ func init() {
 	RegisterCodec(&json.JsonCodec{})
 	RegisterCodec(&proto.ProtoCodec{})
 	RegisterCodec(&xml.XmlCodec{})
-	RegisterCodec(&yml.YamlCodec{})
+	// yaml also maps to "yml" for .yml file extension
+	registeredCodecs["yml"] = &yml.YamlCodec{}
+	registeredCodecs["yaml"] = &yml.YamlCodec{}
 }
 
 type Codec interface {
