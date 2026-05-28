@@ -100,11 +100,11 @@ func (d *Discover) watchNotify() {
 		select {
 		case <-d.ctx.Done():
 			return
-		case _, ok := <-ch:
+		case msg, ok := <-ch:
 			if !ok {
 				return
 			}
-			d.refresh()
+			d.handleEvent([]byte(msg.Payload))
 		}
 	}
 }
@@ -126,7 +126,10 @@ func (d *Discover) watchExpire() {
 			if strings.HasPrefix(msg.Payload, prefix) {
 				instanceID := strings.TrimPrefix(msg.Payload, prefix)
 				d.rc.Eval(d.ctx, deleteIfExpiredScript, []string{d.aliveKey(instanceID), d.hashKey()}, instanceID)
-				d.refresh()
+				d.mu.Lock()
+				delete(d.instances, instanceID)
+				d.mu.Unlock()
+				d.notifyChange()
 			}
 		}
 	}
@@ -155,6 +158,38 @@ func (d *Discover) refresh() {
 	d.mu.Lock()
 	d.instances = instances
 	d.mu.Unlock()
+	d.notifyChange()
+}
+
+func (d *Discover) handleEvent(payload []byte) {
+	var event UpdateEvent
+	if err := json.Unmarshal(payload, &event); err != nil {
+		zap.S().Errorf("unmarshal event err %+v, fallback to full refresh", err)
+		d.refresh()
+		return
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.instances == nil {
+		d.instances = make(map[string]endpoint.ServiceInstance)
+	}
+
+	switch event.Type {
+	case EventRegister, EventUpdateMeta, EventDeleteMeta:
+		d.instances[event.Instance.ID] = event.Instance
+	case EventDeregister:
+		delete(d.instances, event.Instance.ID)
+	default:
+		zap.S().Warnf("unknown event type: %s", event.Type)
+		return
+	}
+
+	d.notifyChange()
+}
+
+func (d *Discover) notifyChange() {
 	select {
 	case d.notify <- struct{}{}:
 	default:

@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -78,7 +79,7 @@ func (r *Registry) Register(serviceInstance endpoint.ServiceInstance) error {
 		return finalErr
 	}
 
-	r.publishEvent("register", serviceInstance.ID)
+	r.publishEvent(UpdateEvent{Type: EventRegister, Instance: serviceInstance})
 
 	if r.stopChs[serviceInstance.ID] == nil {
 		r.stopChs[serviceInstance.ID] = make(chan struct{})
@@ -115,13 +116,152 @@ func (r *Registry) Deregister(instanceID string) error {
 		return finalErr
 	}
 
-	r.publishEvent("deregister", instanceID)
+	r.publishEvent(UpdateEvent{Type: EventDeregister, Instance: endpoint.ServiceInstance{ID: instanceID}})
 
 	if r.stopChs[instanceID] != nil {
 		close(r.stopChs[instanceID])
 		delete(r.stopChs, instanceID)
 	}
 	logCtx.Debugf("deregister success")
+	return nil
+}
+
+func (r *Registry) UpdateMetaData(instanceId string, meta map[string]string) error {
+	r.rw.Lock()
+	defer r.rw.Unlock()
+
+	logCtx := zap.S().With("service", instanceId)
+	hashKey := r.hashKey()
+	aliveKey := r.aliveKey(instanceId)
+
+	var updatedInst endpoint.ServiceInstance
+	var finalErr error
+	success := help.Retry(r.ctx, 3, time.Second, func() bool {
+		exists, err := r.rc.Exists(r.ctx, aliveKey).Result()
+		if err != nil {
+			logCtx.Errorf("check alive key err %+v", err)
+			finalErr = err
+			return false
+		}
+		if exists == 0 {
+			finalErr = fmt.Errorf("instance %s not found or expired", instanceId)
+			logCtx.Warnf("update meta data failed: %v", finalErr)
+			return false
+		}
+
+		data, err := r.rc.HGet(r.ctx, hashKey, instanceId).Result()
+		if err != nil {
+			logCtx.Errorf("hget err %+v", err)
+			finalErr = err
+			return false
+		}
+
+		var inst endpoint.ServiceInstance
+		if err := json.Unmarshal([]byte(data), &inst); err != nil {
+			logCtx.Errorf("unmarshal err %+v", err)
+			finalErr = err
+			return false
+		}
+
+		if inst.MetaData == nil {
+			inst.MetaData = make(map[string]string)
+		}
+		for k, v := range meta {
+			inst.MetaData[k] = v
+		}
+
+		newData, err := json.Marshal(inst)
+		if err != nil {
+			logCtx.Errorf("marshal err %+v", err)
+			finalErr = err
+			return false
+		}
+
+		if err := r.rc.HSet(r.ctx, hashKey, instanceId, newData).Err(); err != nil {
+			logCtx.Errorf("hset err %+v", err)
+			finalErr = err
+			return false
+		}
+		updatedInst = inst
+		finalErr = nil
+		return true
+	})
+
+	if !success {
+		logCtx.Errorf("update meta data failed")
+		return finalErr
+	}
+
+	r.publishEvent(UpdateEvent{Type: EventUpdateMeta, Instance: updatedInst})
+	logCtx.Debugf("update meta data success")
+	return nil
+}
+
+func (r *Registry) DeleteMetaData(instanceId string, keys []string) error {
+	r.rw.Lock()
+	defer r.rw.Unlock()
+
+	logCtx := zap.S().With("service", instanceId)
+	hashKey := r.hashKey()
+	aliveKey := r.aliveKey(instanceId)
+
+	var updatedInst endpoint.ServiceInstance
+	var finalErr error
+	success := help.Retry(r.ctx, 3, time.Second, func() bool {
+		exists, err := r.rc.Exists(r.ctx, aliveKey).Result()
+		if err != nil {
+			logCtx.Errorf("check alive key err %+v", err)
+			finalErr = err
+			return false
+		}
+		if exists == 0 {
+			finalErr = fmt.Errorf("instance %s not found or expired", instanceId)
+			logCtx.Warnf("delete meta data failed: %v", finalErr)
+			return false
+		}
+
+		data, err := r.rc.HGet(r.ctx, hashKey, instanceId).Result()
+		if err != nil {
+			logCtx.Errorf("hget err %+v", err)
+			finalErr = err
+			return false
+		}
+
+		var inst endpoint.ServiceInstance
+		if err := json.Unmarshal([]byte(data), &inst); err != nil {
+			logCtx.Errorf("unmarshal err %+v", err)
+			finalErr = err
+			return false
+		}
+
+		for _, key := range keys {
+			delete(inst.MetaData, key)
+		}
+
+		newData, err := json.Marshal(inst)
+		if err != nil {
+			logCtx.Errorf("marshal err %+v", err)
+			finalErr = err
+			return false
+		}
+
+		if err := r.rc.HSet(r.ctx, hashKey, instanceId, newData).Err(); err != nil {
+			logCtx.Errorf("hset err %+v", err)
+			finalErr = err
+			return false
+		}
+		updatedInst = inst
+		finalErr = nil
+		return true
+	})
+
+	if !success {
+		logCtx.Errorf("delete meta data failed")
+		return finalErr
+	}
+
+	r.publishEvent(UpdateEvent{Type: EventDeleteMeta, Instance: updatedInst})
+	logCtx.Debugf("delete meta data success")
 	return nil
 }
 
@@ -161,8 +301,13 @@ func (r *Registry) keepAlive(stopCh chan struct{}, aliveKey string) {
 	}
 }
 
-func (r *Registry) publishEvent(event string, instanceID string) {
-	r.rc.Publish(r.ctx, r.notifyKey(), event+":"+instanceID)
+func (r *Registry) publishEvent(event UpdateEvent) {
+	data, err := json.Marshal(event)
+	if err != nil {
+		zap.S().Errorf("marshal event err %+v", err)
+		return
+	}
+	r.rc.Publish(r.ctx, r.notifyKey(), data)
 }
 
 func (r *Registry) aliveKey(instanceID string) string {

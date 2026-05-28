@@ -9,6 +9,8 @@ import (
 type Registry interface {
 	Register(instance endpoint.ServiceInstance) error
 	Deregister(instanceID string) error
+	UpdateMetaData(instanceId string, meta map[string]string) error // 更新服务元数据
+	DeleteMetaData(instanceId string, keys []string) error          // 删除 meta data
 	Close()
 }
 type Discover interface {
