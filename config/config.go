@@ -55,15 +55,11 @@ func New(opts ...Option) Config {
 }
 
 func (c *config) Load() error {
+	if err := c.reload(); err != nil {
+		return err
+	}
+
 	for _, src := range c.sources {
-		kvs, err := src.Load()
-		if err != nil {
-			return err
-		}
-		if err := c.reader.Merge(kvs...); err != nil {
-			zap.S().Errorf("config: merge source: %v", err)
-			return err
-		}
 		w, err := src.Watch()
 		if err != nil {
 			zap.S().Errorf("config: watch source: %v", err)
@@ -74,7 +70,23 @@ func (c *config) Load() error {
 			c.watchLoop(w)
 		})
 	}
-	return c.reader.Resolve()
+	return nil
+}
+
+func (c *config) reload() error {
+	var kvs []*KeyValue
+	for _, src := range c.sources {
+		next, err := src.Load()
+		if err != nil {
+			return err
+		}
+		kvs = append(kvs, next...)
+	}
+	if err := c.reader.Load(kvs...); err != nil {
+		return err
+	}
+	c.syncCachedValues()
+	return nil
 }
 
 func (c *config) Scan(v any) error {
@@ -89,21 +101,23 @@ func (c *config) Value(key string) Value {
 	if v, ok := c.cache.Load(key); ok {
 		return v.(Value)
 	}
-	av, ok := readValue(c.reader.values, key)
+	val, ok := c.reader.Value(key)
 	if !ok {
 		return nil
 	}
+	av := &atomicValue{}
+	av.Store(clone(val))
 	c.cache.Store(key, av)
 	return av
 }
 
 func (c *config) Watch(key string, o Observer) error {
-	v, _ := readValue(c.reader.values, key)
-	if v == nil || v.Load() == nil {
+	val, ok := c.reader.Value(key)
+	if !ok || val == nil {
 		return ErrNotFound
 	}
 	c.observers.Store(key, &observerState{
-		snapshot: clone(v.Load()),
+		snapshot: clone(val),
 		fn:       o,
 	})
 	return nil
@@ -118,7 +132,7 @@ func (c *config) Close() error {
 
 func (c *config) watchLoop(w Watcher) {
 	for {
-		kvs, err := w.Next()
+		_, err := w.Next()
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return
@@ -126,16 +140,26 @@ func (c *config) watchLoop(w Watcher) {
 			zap.S().Errorf("config: watch next: %v", err)
 			continue
 		}
-		if err := c.reader.Merge(kvs...); err != nil {
-			zap.S().Errorf("config: watch merge: %v", err)
-			continue
-		}
-		if err := c.reader.Resolve(); err != nil {
-			zap.S().Errorf("config: watch resolve: %v", err)
+		if err := c.reload(); err != nil {
+			zap.S().Errorf("config: reload source: %v", err)
 			continue
 		}
 		c.notifyObservers()
 	}
+}
+
+func (c *config) syncCachedValues() {
+	c.cache.Range(func(key, value any) bool {
+		k := key.(string)
+		v := value.(Value)
+		current, ok := c.reader.Value(k)
+		if !ok {
+			v.Store(nil)
+			return true
+		}
+		v.Store(clone(current))
+		return true
+	})
 }
 
 func (c *config) notifyObservers() {
@@ -143,19 +167,19 @@ func (c *config) notifyObservers() {
 		k := key.(string)
 		s := value.(*observerState)
 
-		nv, ok := readValue(c.reader.values, k)
+		current, ok := c.reader.Value(k)
 		if !ok {
-			return true
+			current = nil
 		}
-		current := nv.Load()
 		if reflect.DeepEqual(s.snapshot, current) {
 			return true
 		}
 		s.snapshot = clone(current)
-		if cv, ok := c.cache.Load(k); ok {
-			cv.(Value).Store(current)
-		}
-		s.fn(k, nv)
+		nv := &atomicValue{}
+		nv.Store(clone(current))
+		help.SafeGo(func() {
+			s.fn(k, nv)
+		})
 		return true
 	})
 }

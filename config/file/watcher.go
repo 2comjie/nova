@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/2comjie/wali/config"
@@ -13,8 +14,10 @@ import (
 var _ config.Watcher = (*watcher)(nil)
 
 type watcher struct {
-	f  *file
-	fw *fsnotify.Watcher
+	f         *file
+	fw        *fsnotify.Watcher
+	watchPath string
+	isDir     bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -25,41 +28,79 @@ func newWatcher(f *file) (config.Watcher, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := fw.Add(f.path); err != nil {
+
+	fi, err := os.Stat(f.path)
+	if err != nil {
+		fw.Close()
 		return nil, err
 	}
+	watchPath := f.path
+	if !fi.IsDir() {
+		watchPath = filepath.Dir(f.path)
+	}
+	if err := fw.Add(watchPath); err != nil {
+		fw.Close()
+		return nil, err
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
-	return &watcher{f: f, fw: fw, ctx: ctx, cancel: cancel}, nil
+	return &watcher{f: f, fw: fw, watchPath: watchPath, isDir: fi.IsDir(), ctx: ctx, cancel: cancel}, nil
 }
 
 func (w *watcher) Next() ([]*config.KeyValue, error) {
-	select {
-	case <-w.ctx.Done():
-		return nil, w.ctx.Err()
-	case event := <-w.fw.Events:
-		if event.Has(fsnotify.Rename) {
-			if _, err := os.Stat(event.Name); err == nil || os.IsExist(err) {
-				if err := w.fw.Add(event.Name); err != nil {
-					return nil, err
-				}
+	for {
+		select {
+		case <-w.ctx.Done():
+			return nil, w.ctx.Err()
+		case event, ok := <-w.fw.Events:
+			if !ok {
+				return nil, context.Canceled
 			}
-		}
-		fi, err := os.Stat(w.f.path)
-		if err != nil {
+			if !w.relevant(event) {
+				continue
+			}
+			w.debounce()
+			return w.f.Load()
+		case err, ok := <-w.fw.Errors:
+			if !ok {
+				return nil, context.Canceled
+			}
 			return nil, err
 		}
-		path := w.f.path
-		if fi.IsDir() {
-			path = filepath.Join(w.f.path, filepath.Base(event.Name))
+	}
+}
+
+func (w *watcher) relevant(event fsnotify.Event) bool {
+	if event.Has(fsnotify.Chmod) {
+		return false
+	}
+	if w.isDir {
+		return strings.HasPrefix(filepath.Clean(event.Name), filepath.Clean(w.f.path)+string(os.PathSeparator))
+	}
+	return filepath.Clean(event.Name) == filepath.Clean(w.f.path)
+}
+
+func (w *watcher) debounce() {
+	timer := time.NewTimer(100 * time.Millisecond)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-w.ctx.Done():
+			return
+		case event := <-w.fw.Events:
+			if w.relevant(event) {
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(100 * time.Millisecond)
+			}
+		case <-timer.C:
+			return
 		}
-		time.Sleep(time.Millisecond)
-		kv, err := w.f.loadFile(path)
-		if err != nil {
-			return nil, err
-		}
-		return []*config.KeyValue{kv}, nil
-	case err := <-w.fw.Errors:
-		return nil, err
 	}
 }
 

@@ -31,6 +31,22 @@ type atomicValue struct {
 	atomic.Value
 }
 
+type valueBox struct {
+	value any
+}
+
+func (v *atomicValue) Load() any {
+	box := v.Value.Load()
+	if box == nil {
+		return nil
+	}
+	return box.(*valueBox).value
+}
+
+func (v *atomicValue) Store(val any) {
+	v.Value.Store(&valueBox{value: val})
+}
+
 func (v *atomicValue) typeAssertError() error {
 	return fmt.Errorf("type assert to %v failed", reflect.TypeOf(v.Load()))
 }

@@ -34,6 +34,25 @@ func (r *Reader) Merge(kvs ...*KeyValue) error {
 	return nil
 }
 
+func (r *Reader) Load(kvs ...*KeyValue) error {
+	current := make(map[string]any)
+	for _, kv := range kvs {
+		next := make(map[string]any)
+		if err := r.opts.decoder(kv, next); err != nil {
+			return err
+		}
+		r.opts.mergeFunc(current, normalize(next).(map[string]any))
+	}
+	if err := r.opts.resolver(current); err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	r.values = current
+	r.mu.Unlock()
+	return nil
+}
+
 func (r *Reader) Resolve() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
