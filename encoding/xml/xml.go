@@ -1,13 +1,19 @@
 package xml
 
 import (
+	"bytes"
 	"encoding/xml"
 	"reflect"
 
 	"github.com/clbanning/mxj"
+	"golang.org/x/net/html/charset"
 )
 
 type XmlCodec struct{}
+
+func init() {
+	mxj.XmlCharsetReader = charset.NewReaderLabel
+}
 
 func (c *XmlCodec) Marshal(v any) ([]byte, error) {
 	return xml.Marshal(v)
@@ -26,7 +32,9 @@ func (c *XmlCodec) Unmarshal(data []byte, v any) error {
 		rv.Set(reflect.ValueOf(m))
 		return nil
 	}
-	return xml.Unmarshal(data, v)
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = charset.NewReaderLabel
+	return decoder.Decode(v)
 }
 
 func (c *XmlCodec) Name() string {
