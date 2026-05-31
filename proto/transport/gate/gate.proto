@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package wali.transport.gate;
+
+option go_package = "github.com/2comjie/wali/pb/transport/pbGate/pbGate;pbGate";
+
+// ─── 连接管理 ────────────────────────────────────────────────────────────────
+
+message BindRequest {
+  string uid = 1;
+  int64  cid = 2;
+}
+message BindResponse {}
+
+message UnbindRequest {
+  string uid = 1;
+}
+message UnbindResponse {}
+
+// ─── 查询 ────────────────────────────────────────────────────────────────────
+
+message GetIpRequest {
+  oneof target {
+    int64  cid = 1;
+    string uid = 2;
+  }
+}
+message GetIpResponse {
+  string ip = 1;
+}
+
+message IsOnlineRequest {
+  oneof target {
+    int64  cid = 1;
+    string uid = 2;
+  }
+}
+message IsOnlineResponse {
+  bool online = 1;
+}
+
+// ─── 属性管理 ────────────────────────────────────────────────────────────────
+
+message SetAttributeRequest {
+  string              uid   = 1;
+  map<string, string> attrs = 2;
+}
+message SetAttributeResponse {
+  bool updated = 1;
+}
+
+message GetAttributeRequest {
+  string uid = 1;
+  string key = 2;
+}
+message GetAttributeResponse {
+  string value = 1;
+}
+
+message DeleteAttributeRequest {
+  string uid = 1;
+  string key = 2;
+}
+message DeleteAttributeResponse {}
+
+// ─── 控制 ────────────────────────────────────────────────────────────────────
+
+message KickRequest {
+  oneof target {
+    int64  cid = 1;
+    string uid = 2;
+  }
+}
+message KickResponse {}
+
+// ─── 推送 ────────────────────────────────────────────────────────────────────
+
+// 单播：按 cid 或 uid 推送
+message PushRequest {
+  oneof target {
+    int64  cid = 1;
+    string uid = 2;
+  }
+  bytes data = 3;
+}
+message PushResponse {}
+
+// 组播：按 uid 列表推送
+message MulticastToUsersRequest {
+  repeated string uid  = 1;
+  bytes           data = 2;
+}
+message MulticastToUsersResponse {
+  int64 success_count = 1;
+}
+
+// 组播：按 cid 列表推送
+message MulticastToConnsRequest {
+  repeated int64 cid  = 1;
+  bytes          data = 2;
+}
+message MulticastToConnsResponse {
+  int64 success_count = 1;
+}
+
+// 广播：推送给所有在线连接
+message BroadcastRequest {
+  bytes data = 1;
+}
+message BroadcastResponse {
+  int64 success_count = 1;
+}
+
+// ─── Service ─────────────────────────────────────────────────────────────────
+
+service GateService {
+  // 连接管理
+  rpc Bind(BindRequest)     returns (BindResponse);
+  rpc Unbind(UnbindRequest) returns (UnbindResponse);
+
+  // 查询
+  rpc GetIp(GetIpRequest)       returns (GetIpResponse);
+  rpc IsOnline(IsOnlineRequest) returns (IsOnlineResponse);
+
+  // 属性管理
+  rpc SetAttribute(SetAttributeRequest)       returns (SetAttributeResponse);
+  rpc GetAttribute(GetAttributeRequest)       returns (GetAttributeResponse);
+  rpc DeleteAttribute(DeleteAttributeRequest) returns (DeleteAttributeResponse);
+
+  // 控制
+  rpc Kick(KickRequest) returns (KickResponse);
+
+  // 推送
+  rpc Push(PushRequest)                         returns (PushResponse);
+  rpc MulticastToUsers(MulticastToUsersRequest) returns (MulticastToUsersResponse);
+  rpc MulticastToConns(MulticastToConnsRequest) returns (MulticastToConnsResponse);
+  rpc Broadcast(BroadcastRequest)               returns (BroadcastResponse);
+}
