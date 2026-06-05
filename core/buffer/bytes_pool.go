@@ -5,62 +5,73 @@ import (
 	"sync"
 )
 
-var defaultBytesPool = NewBytesPool(32)
-
-func MallocBytes(cap int) *Bytes {
-	return defaultBytesPool.Get(cap)
-}
+var globalBytesPool = NewBytesPool(4096)
 
 type BytesPool struct {
 	pools []*sync.Pool
 }
 
-func NewBytesPool(grade int) *BytesPool {
-	p := &BytesPool{}
-	if grade < 0 {
-		return p
+func NewBytesPool(maxSize int) *BytesPool {
+	if maxSize < 1 {
+		maxSize = 1
 	}
-	p.pools = make([]*sync.Pool, grade+1)
-	for i := range p.pools {
+	grade := bits.Len(uint(maxSize))
+	b := &BytesPool{pools: make([]*sync.Pool, grade)}
+	for i := 0; i < grade; i++ {
 		size := 1 << i
-		pool := &sync.Pool{}
-		pool.New = func() any { return &Bytes{buf: make([]byte, size), pool: pool} }
-		p.pools[i] = pool
-	}
-	return p
-}
-
-func (p *BytesPool) Get(size int) *Bytes {
-	pool := p.getPool(size)
-	if pool == nil {
-		if size < 0 {
-			size = 0
+		b.pools[i] = &sync.Pool{
+			New: func() any {
+				return make([]byte, size)
+			},
 		}
-		return &Bytes{buf: make([]byte, size)}
 	}
-	b := pool.Get().(*Bytes)
-	b.buf = b.buf[:size]
-	b.pool = pool
-	b.released.Store(false)
 	return b
 }
 
-// 获取对象池
-func (p *BytesPool) getPool(size int) *sync.Pool {
-	if len(p.pools) == 0 {
-		return nil
+func (b *BytesPool) Allocate(size int) []byte {
+	if size <= 0 {
+		return make([]byte, 0)
 	}
 
-	i := fastCeilLog2(size)
-	if i >= len(p.pools) {
-		return nil
+	index := b.getIndex(size)
+	// 超过最大池化大小，直接创建新切片
+	if index >= len(b.pools) {
+		return make([]byte, size)
 	}
-	return p.pools[i]
+
+	// 从池获取
+	buf := b.pools[index].Get().([]byte)
+	// 重置长度为申请大小（容量不变）
+	return buf[:size]
 }
 
-func fastCeilLog2(n int) int {
+func (b *BytesPool) Release(buf []byte) {
+	if buf == nil || cap(buf) == 0 {
+		return
+	}
+
+	index := b.getIndex(cap(buf))
+	if index >= len(b.pools) {
+		return
+	}
+
+	clear(buf[:cap(buf)])
+	b.pools[index].Put(buf[:cap(buf)])
+}
+
+// getIndex 计算 2 的指数索引
+func (b *BytesPool) getIndex(n int) int {
 	if n <= 1 {
 		return 0
 	}
+	// bytes.Len 会返回最小的位数，刚好对应 2^index >= n
 	return bits.Len(uint(n - 1))
+}
+
+func AllocateBytes(size int) []byte {
+	return globalBytesPool.Allocate(size)
+}
+
+func ReleaseBytes(buf []byte) {
+	globalBytesPool.Release(buf)
 }
