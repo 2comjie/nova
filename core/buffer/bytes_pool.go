@@ -3,9 +3,11 @@ package buffer
 import (
 	"math/bits"
 	"sync"
+
+	"github.com/2comjie/wali/core/bytes"
 )
 
-var globalBytesPool = NewBytesPool(4096)
+var globalBytesPool = NewBytesPool(2 * bytes.MB)
 
 type BytesPool struct {
 	pools []*sync.Pool
