@@ -5,4 +5,5 @@ use (
 	./locator/redis
 	./registry/redis
 	./examples
+	./network/tcp
 )
