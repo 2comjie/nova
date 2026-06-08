@@ -60,15 +60,15 @@ func (p *defaultPacker) PackBuffer(messageType MessageType, route int32, seq int
 		dataLen = data.Len()
 	}
 
-	// size = head(1) + route(4) + seq(4) + data
-	bodySize := 9 + dataLen
+	// size = head(4) + route(4) + seq(4) + data
+	bodySize := 12 + dataLen
 
 	// 构造 header 各段（走内存池，不 alloc）
 	sizeBuf := buffer.MallocBytes(4)
 	p.options.byteOrder.PutUint32(sizeBuf.Bytes(), uint32(bodySize))
 
-	headBuf := buffer.MallocBytes(1)
-	headBuf.Bytes()[0] = byte(messageType)
+	headBuf := buffer.MallocBytes(4)
+	p.options.byteOrder.PutUint32(headBuf.Bytes(), uint32(messageType))
 
 	routeBuf := buffer.MallocBytes(4)
 	p.options.byteOrder.PutUint32(routeBuf.Bytes(), uint32(route))

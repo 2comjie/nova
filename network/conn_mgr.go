@@ -18,7 +18,7 @@ func NewConnMgr(options *Options) *BaseConnMgr {
 	cm := &BaseConnMgr{}
 	cm.options = options
 	cm.partitions = make([]*connPartition, 100)
-	for i, _ := range cm.partitions {
+	for i := range cm.partitions {
 		cm.partitions[i] = &connPartition{connections: make(map[int64]*BaseConn)}
 	}
 	return cm

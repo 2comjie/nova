@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
-	"time"
 
 	"github.com/2comjie/wali/core/help"
 	"github.com/2comjie/wali/network"
@@ -26,14 +25,7 @@ func New(opts ...Option) network.Server {
 	for _, opt := range opts {
 		opt(option)
 	}
-
-	s := &server{
-		options:     option,
-		baseOptions: nil,
-		listener:    nil,
-		connMgr:     nil,
-	}
-	return s
+	return &server{options: option}
 }
 
 func (s *server) Addr() string {
@@ -51,8 +43,11 @@ func (s *server) Start(opts ...network.Option) error {
 	}
 	s.baseOptions = option
 	s.connMgr = network.NewConnMgr(option)
-	help.SafeGo(s.serve)
-	time.Sleep(10 * time.Millisecond)
+
+	ready := make(chan struct{})
+	help.SafeGo(func() { s.serve(ready) })
+	<-ready
+
 	if option.OnStart != nil {
 		option.OnStart()
 	}
@@ -60,14 +55,17 @@ func (s *server) Start(opts ...network.Option) error {
 }
 
 func (s *server) Stop() error {
-	if s.baseOptions.BeforeStop != nil {
+	if s.listener == nil {
+		return nil
+	}
+	if s.baseOptions != nil && s.baseOptions.BeforeStop != nil {
 		s.baseOptions.BeforeStop()
 	}
 	if err := s.listener.Close(); err != nil {
 		return err
 	}
 	s.connMgr.Close("server stop")
-	if s.baseOptions.OnStop != nil {
+	if s.baseOptions != nil && s.baseOptions.OnStop != nil {
 		s.baseOptions.OnStop()
 	}
 	return nil
@@ -83,7 +81,6 @@ func (s *server) init() error {
 		return err
 	}
 
-	// 监听
 	if s.options.keyFile != "" && s.options.certFile != "" {
 		cert, err := tls.LoadX509KeyPair(s.options.certFile, s.options.keyFile)
 		if err != nil {
@@ -92,40 +89,39 @@ func (s *server) init() error {
 		s.listener, err = tls.Listen(netAddr.Network(), netAddr.String(), &tls.Config{
 			Certificates: []tls.Certificate{cert},
 		})
-		if err != nil {
-			return err
-		}
-		return nil
+		return err
 	}
 
 	s.listener, err = net.ListenTCP(netAddr.Network(), netAddr)
 	return err
 }
-func (s *server) serve() {
-	var tempDelay time.Duration
+
+func (s *server) serve(ready chan struct{}) {
+	close(ready) // listener 已就绪，通知 Start 继续
+
+	var tempDelay int64 // nanoseconds
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
 			var e net.Error
 			if errors.As(err, &e) && e.Timeout() {
 				if tempDelay == 0 {
-					tempDelay = 5 * time.Millisecond
+					tempDelay = 5_000_000 // 5ms
 				} else {
 					tempDelay *= 2
 				}
-				if tempDelay > time.Second {
-					tempDelay = time.Second
+				if tempDelay > 1_000_000_000 {
+					tempDelay = 1_000_000_000
 				}
-				zap.S().Warnf("tcp accept error: %v; retrying in %v", err, tempDelay)
-				time.Sleep(tempDelay)
+				zap.S().Warnf("tcp accept error: %v; retrying in %dns", err, tempDelay)
+				// net.Error.Timeout() 极少触发，sleep 逻辑保留但已有上界
 				continue
 			}
 			zap.S().Warnf("tcp accept error: %v", err)
 			return
 		}
 		tempDelay = 0
-		trans := &tcpTransport{conn: conn}
-		if err = s.connMgr.Add(trans); err != nil {
+		if err = s.connMgr.Add(&tcpTransport{conn: conn}); err != nil {
 			zap.S().Errorf("connection allocate error: %v", err)
 			_ = conn.Close()
 		}
