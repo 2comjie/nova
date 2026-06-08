@@ -33,6 +33,54 @@ type Options struct {
 }
 type Option func(*Options)
 
+func WithOnStart(fn OnStart) Option {
+	return func(o *Options) { o.OnStart = fn }
+}
+
+func WithBeforeStop(fn BeforeStop) Option {
+	return func(o *Options) { o.BeforeStop = fn }
+}
+
+func WithOnStop(fn OnStop) Option {
+	return func(o *Options) { o.OnStop = fn }
+}
+
+func WithOnConnect(fn OnConnect) Option {
+	return func(o *Options) { o.OnConnect = fn }
+}
+
+func WithOnDisconnect(fn OnDisconnect) Option {
+	return func(o *Options) { o.OnDisconnect = fn }
+}
+
+func WithOnHeartbeat(fn OnHeartbeat) Option {
+	return func(o *Options) { o.OnHeartbeat = fn }
+}
+
+func WithOnMessage(fn OnMessage) Option {
+	return func(o *Options) { o.OnMessage = fn }
+}
+
+func WithHeartbeatInterval(d time.Duration) Option {
+	return func(o *Options) { o.HeartbeatInterval = d }
+}
+
+func WithHeartbeatCheckInterval(d time.Duration) Option {
+	return func(o *Options) { o.HeartbeatCheckInterval = d }
+}
+
+func WithPacker(p packet.Packer) Option {
+	return func(o *Options) { o.Packer = p }
+}
+
+func WithMaxConn(n int64) Option {
+	return func(o *Options) { o.MaxConn = n }
+}
+
+func WithWriteChSize(n int) Option {
+	return func(o *Options) { o.WriteChSize = n }
+}
+
 func DefaultOption() *Options {
 	return &Options{
 		OnStart:                nil,
