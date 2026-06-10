@@ -7,27 +7,27 @@ import (
 
 type client struct {
 	network.BaseClient
-	options     *options
-	baseOptions *network.Options
+	options *options
 }
 
-func NewClient(kcpOpts []Option, baseOpts ...network.Option) network.Client {
+func NewClient(opts ...Option) network.Client {
 	o := defaultOption()
-	for _, opt := range kcpOpts {
+	for _, opt := range opts {
 		opt(o)
 	}
+	return &client{options: o}
+}
+
+func (c *client) Connect(baseOpts ...network.Option) error {
 	bo := network.DefaultOption()
 	for _, opt := range baseOpts {
 		opt(bo)
 	}
-	return &client{options: o, baseOptions: bo}
-}
 
-func (c *client) Connect() error {
 	sess, err := kcp.DialWithOptions(c.options.addr, nil, 0, 0)
 	if err != nil {
 		return err
 	}
-	c.BaseClient.Init(&kcpTransport{sess: sess}, c.baseOptions)
+	c.BaseClient.Init(&kcpTransport{sess: sess}, bo)
 	return nil
 }

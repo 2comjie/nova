@@ -9,28 +9,28 @@ import (
 
 type client struct {
 	network.BaseClient
-	options     *options
-	baseOptions *network.Options
+	options *options
 }
 
-func NewClient(tcpOpts []Option, baseOpts ...network.Option) network.Client {
+func NewClient(opts ...Option) network.Client {
 	o := defaultOption()
-	for _, opt := range tcpOpts {
+	for _, opt := range opts {
 		opt(o)
 	}
+	return &client{options: o}
+}
+
+func (c *client) Connect(baseOpts ...network.Option) error {
 	bo := network.DefaultOption()
 	for _, opt := range baseOpts {
 		opt(bo)
 	}
-	return &client{options: o, baseOptions: bo}
-}
 
-func (c *client) Connect() error {
 	conn, err := c.dial()
 	if err != nil {
 		return err
 	}
-	c.BaseClient.Init(&tcpTransport{conn: conn}, c.baseOptions)
+	c.BaseClient.Init(&tcpTransport{conn: conn}, bo)
 	return nil
 }
 
