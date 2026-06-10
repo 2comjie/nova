@@ -1,6 +1,9 @@
 package kcp
 
 import (
+	"errors"
+	"net"
+
 	"github.com/2comjie/wali/core/help"
 	"github.com/2comjie/wali/network"
 	kcp "github.com/xtaci/kcp-go"
@@ -72,7 +75,9 @@ func (s *server) serve(ready chan struct{}) {
 	for {
 		sess, err := s.listener.AcceptKCP()
 		if err != nil {
-			zap.S().Warnf("kcp accept error: %v", err)
+			if !errors.Is(err, net.ErrClosed) {
+				zap.S().Warnf("kcp accept error: %v", err)
+			}
 			return
 		}
 		if err = s.connMgr.Add(&kcpTransport{sess: sess}); err != nil {

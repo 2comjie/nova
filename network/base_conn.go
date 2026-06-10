@@ -32,6 +32,7 @@ type BaseConn struct {
 	state   atomic.Int32
 	trans   Transport
 	options *Options
+	mgr     *BaseConnMgr
 
 	chWrite chan connWrite
 	done    chan struct{} // write goroutine 完成信号，不可替换为 ctx
@@ -116,6 +117,7 @@ func (c *BaseConn) init(mgr *BaseConnMgr, id int64, trans Transport) {
 	c.state.Store(int32(ConnOpened))
 	c.trans = trans
 	c.options = mgr.options
+	c.mgr = mgr
 	c.chWrite = make(chan connWrite, c.options.WriteChSize)
 	c.done = make(chan struct{})
 	c.ctx, c.cancel = context.WithCancel(context.Background())
@@ -257,8 +259,9 @@ func (c *BaseConn) graceClose() error {
 }
 
 func (c *BaseConn) doClose() error {
-	c.cancel()       // 广播取消，read/checkHealth goroutine 退出
-	close(c.chWrite) // write goroutine 退出（forceClose 路径）
+	c.mgr.remove(c.id) // 从 connMgr 的 map 中移除
+	c.cancel()         // 广播取消，read/checkHealth goroutine 退出
+	close(c.chWrite)   // write goroutine 退出（forceClose 路径）
 	close(c.done)
 
 	err := c.trans.Close()

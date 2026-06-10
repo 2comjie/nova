@@ -117,7 +117,9 @@ func (s *server) serve(ready chan struct{}) {
 				// net.Error.Timeout() 极少触发，sleep 逻辑保留但已有上界
 				continue
 			}
-			zap.S().Warnf("tcp accept error: %v", err)
+			if !errors.Is(err, net.ErrClosed) {
+				zap.S().Warnf("tcp accept error: %v", err)
+			}
 			return
 		}
 		tempDelay = 0

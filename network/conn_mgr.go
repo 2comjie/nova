@@ -48,6 +48,11 @@ func (cm *BaseConnMgr) Close(reason string) {
 	wg.Wait()
 }
 
+func (cm *BaseConnMgr) remove(id int64) {
+	cm.partitions[id%int64(len(cm.partitions))].delete(id)
+	cm.total.Add(-1)
+}
+
 func (cm *BaseConnMgr) Stat() int64 {
 	return cm.total.Load()
 }
