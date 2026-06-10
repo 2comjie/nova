@@ -20,6 +20,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -379,6 +380,19 @@ func genConnLookup(g *protogen.GeneratedFile, service *protogen.Service, method 
 	} else if method.Desc.IsStreamingClient() {
 		g.P("conn, err = c.client.Route(ctx, ", strconv.Quote(service.GoName), ", routeKey)")
 	} else {
+		fieldName, ok := validateRouteKey(method)
+		if !ok {
+			field := method.Input.Desc.Fields().ByName(protoreflect.Name(fieldName))
+			if field == nil {
+				fmt.Fprintf(os.Stderr,
+					"WARNING: %s.%s route_key=%q, but field %q not found in %s\n",
+					service.Desc.FullName(), method.Desc.Name(), fieldName, fieldName, method.Input.Desc.FullName())
+			} else {
+				fmt.Fprintf(os.Stderr,
+					"WARNING: %s.%s route_key=%q, field %q is %s, must be string\n",
+					service.Desc.FullName(), method.Desc.Name(), fieldName, fieldName, field.Kind())
+			}
+		}
 		g.P("conn, err = c.client.Route(ctx, ", strconv.Quote(service.GoName), ", in.", routeKeyGetter(key), "())")
 	}
 	g.P("}")
@@ -490,6 +504,24 @@ func routeKey(method *protogen.Method) string {
 	v := proto.GetExtension(opts, pbOptions.E_RouteKey)
 	s, _ := v.(string)
 	return s
+}
+
+// validateRouteKey 校验 route_key 引用的字段存在且是 string 类型。
+// 返回值: (字段名, ok)。
+func validateRouteKey(method *protogen.Method) (string, bool) {
+	key := routeKey(method)
+	if key == "" {
+		return "", true // 没有 route_key，不需要校验
+	}
+
+	field := method.Input.Desc.Fields().ByName(protoreflect.Name(key))
+	if field == nil {
+		return key, false // 字段不存在
+	}
+	if field.Kind() != protoreflect.StringKind {
+		return key, false // 类型不是 string
+	}
+	return key, true
 }
 
 func routeKeyGetter(key string) string {
