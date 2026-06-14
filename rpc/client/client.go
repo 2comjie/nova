@@ -59,7 +59,7 @@ func (c *Client) Service(ctx context.Context, serviceName string) (*grpc.ClientC
 	if err != nil {
 		return nil, err
 	}
-	return c.pool.Get(rpcServiceInstance.rpcService.Target())
+	return c.pool.Get(rpcServiceInstance.serviceInstance.RpcTarget())
 }
 
 func (c *Client) Node(ctx context.Context, serviceName string, instanceID string) (*grpc.ClientConn, error) {
@@ -70,8 +70,10 @@ func (c *Client) Node(ctx context.Context, serviceName string, instanceID string
 	if err != nil {
 		return nil, err
 	}
-	rpcService := serviceInstance.RpcServices[serviceName]
-	return c.pool.Get(rpcService.Target())
+	if _, ok := serviceInstance.RpcServices[serviceName]; !ok {
+		return nil, ErrServiceNotFound
+	}
+	return c.pool.Get(serviceInstance.RpcTarget())
 }
 
 func (c *Client) Direct(ctx context.Context, addr string) (*grpc.ClientConn, error) {
@@ -116,7 +118,7 @@ func (c *Client) watch() {
 		activeAddrs := make(map[string]bool)
 		for _, instances := range c.rpcServiceInstanceMap {
 			for _, inst := range instances {
-				activeAddrs[inst.rpcService.Target()] = true
+				activeAddrs[inst.serviceInstance.RpcTarget()] = true
 			}
 		}
 		c.mu.Unlock()
