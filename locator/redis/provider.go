@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -145,6 +146,9 @@ func (p *Provider) Locate(ctx context.Context, name string, key string) (string,
 
 	id, err := p.rc.HGet(p.ctx, p.hashKey(name), key).Result()
 	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return "", nil
+		}
 		return "", err
 	}
 

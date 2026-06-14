@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/2comjie/wali/core/endpoint"
 	"github.com/2comjie/wali/core/util"
-	"github.com/2comjie/wali/examples/registry/internal/external"
+	"github.com/2comjie/wali/examples/internal/external"
 	redisRegistry "github.com/2comjie/wali/registry/redis"
 )
 
