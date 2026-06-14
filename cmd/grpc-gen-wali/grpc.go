@@ -29,13 +29,16 @@ import (
 )
 
 const (
-	contextPackage = protogen.GoImportPath("context")
-	grpcPackage    = protogen.GoImportPath("google.golang.org/grpc")
-	codesPackage   = protogen.GoImportPath("google.golang.org/grpc/codes")
-	statusPackage  = protogen.GoImportPath("google.golang.org/grpc/status")
+	contextPackage    = protogen.GoImportPath("context")
+	waliClientPackage = protogen.GoImportPath("github.com/2comjie/wali/rpc/client")
+	waliLXPackage     = protogen.GoImportPath("github.com/2comjie/wali/rpc/lx")
+	grpcPackage       = protogen.GoImportPath("google.golang.org/grpc")
+	codesPackage      = protogen.GoImportPath("google.golang.org/grpc/codes")
+	statusPackage     = protogen.GoImportPath("google.golang.org/grpc/status")
 )
 
 type serviceGenerateHelperInterface interface {
+	formatServiceNameSymbol(service *protogen.Service) string
 	formatFullMethodSymbol(service *protogen.Service, method *protogen.Method) string
 	genFullMethods(g *protogen.GeneratedFile, service *protogen.Service)
 	generateClientStruct(g *protogen.GeneratedFile, clientName string)
@@ -47,16 +50,17 @@ type serviceGenerateHelperInterface interface {
 
 type serviceGenerateHelper struct{}
 
+func (serviceGenerateHelper) formatServiceNameSymbol(service *protogen.Service) string {
+	return fmt.Sprintf("%s_ServiceName", service.GoName)
+}
+
 func (serviceGenerateHelper) formatFullMethodSymbol(service *protogen.Service, method *protogen.Method) string {
 	return fmt.Sprintf("%s_%s_FullMethodName", service.GoName, method.GoName)
 }
 
 func (serviceGenerateHelper) genFullMethods(g *protogen.GeneratedFile, service *protogen.Service) {
-	if len(service.Methods) == 0 {
-		return
-	}
-
 	g.P("const (")
+	g.P(helper.formatServiceNameSymbol(service), ` = "`, service.Desc.FullName(), `"`)
 	for _, method := range service.Methods {
 		fmSymbol := helper.formatFullMethodSymbol(service, method)
 		fmName := fmt.Sprintf("/%s/%s", service.Desc.FullName(), method.Desc.Name())
@@ -68,7 +72,7 @@ func (serviceGenerateHelper) genFullMethods(g *protogen.GeneratedFile, service *
 
 func (serviceGenerateHelper) generateClientStruct(g *protogen.GeneratedFile, clientName string) {
 	g.P("type ", unexport(clientName), " struct {")
-	g.P("cc ", grpcPackage.Ident("ClientConnInterface"))
+	g.P("cc *", waliClientPackage.Ident("Client"))
 	g.P("}")
 	g.P()
 }
@@ -235,10 +239,12 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
 		g.P(deprecationComment)
 	}
-	g.P("func New", clientName, " (cc ", grpcPackage.Ident("ClientConnInterface"), ") ", clientName, " {")
+	g.P("func New", clientName, " (cc *", waliClientPackage.Ident("Client"), ") ", clientName, " {")
 	helper.generateNewClientDefinitions(g, service, clientName)
 	g.P("}")
 	g.P()
+
+	genClientConnMethod(g, service)
 
 	var methodIndex, streamIndex int
 	// Client method implementations.
@@ -334,6 +340,24 @@ func clientSignature(g *protogen.GeneratedFile, method *protogen.Method) string 
 	return s
 }
 
+func genClientConnMethod(g *protogen.GeneratedFile, service *protogen.Service) {
+	serviceNameSymbol := helper.formatServiceNameSymbol(service)
+	g.P("func (c *", unexport(service.GoName), "Client) conn(ctx ", contextPackage.Ident("Context"), ") (*", grpcPackage.Ident("ClientConn"), ", error) {")
+	g.P("if cfg := ", waliLXPackage.Ident("FromContext"), "(ctx); cfg != nil {")
+	g.P("switch cfg.Mode {")
+	g.P("case ", waliLXPackage.Ident("ModeDirect"), ":")
+	g.P("return c.cc.Direct(ctx, cfg.Target)")
+	g.P("case ", waliLXPackage.Ident("ModeNode"), ":")
+	g.P("return c.cc.Node(ctx, ", serviceNameSymbol, ", cfg.Target)")
+	g.P("case ", waliLXPackage.Ident("ModeKey"), ":")
+	g.P("return c.cc.Route(ctx, ", serviceNameSymbol, ", cfg.Target)")
+	g.P("}")
+	g.P("}")
+	g.P("return c.cc.Service(ctx, ", serviceNameSymbol, ")")
+	g.P("}")
+	g.P()
+}
+
 func clientStreamInterface(g *protogen.GeneratedFile, method *protogen.Method) string {
 	typeParam := g.QualifiedGoIdent(method.Input.GoIdent) + ", " + g.QualifiedGoIdent(method.Output.GoIdent)
 	if method.Desc.IsStreamingClient() && method.Desc.IsStreamingServer() {
@@ -356,7 +380,9 @@ func genClientMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 	g.P("cOpts := append([]", grpcPackage.Ident("CallOption"), "{", grpcPackage.Ident("StaticMethod()"), "}, opts...)")
 	if !method.Desc.IsStreamingServer() && !method.Desc.IsStreamingClient() {
 		g.P("out := new(", method.Output.GoIdent, ")")
-		g.P(`err := c.cc.Invoke(ctx, `, fmSymbol, `, in, out, cOpts...)`)
+		g.P("conn, err := c.conn(ctx)")
+		g.P("if err != nil { return nil, err }")
+		g.P(`err = conn.Invoke(ctx, `, fmSymbol, `, in, out, cOpts...)`)
 		g.P("if err != nil { return nil, err }")
 		g.P("return out, nil")
 		g.P("}")
@@ -367,7 +393,9 @@ func genClientMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 	typeParam := g.QualifiedGoIdent(method.Input.GoIdent) + ", " + g.QualifiedGoIdent(method.Output.GoIdent)
 	streamImpl := g.QualifiedGoIdent(grpcPackage.Ident("GenericClientStream")) + "[" + typeParam + "]"
 	serviceDescVar := service.GoName + "_ServiceDesc"
-	g.P("stream, err := c.cc.NewStream(ctx, &", serviceDescVar, ".Streams[", index, `], `, fmSymbol, `, cOpts...)`)
+	g.P("conn, err := c.conn(ctx)")
+	g.P("if err != nil { return nil, err }")
+	g.P("stream, err := conn.NewStream(ctx, &", serviceDescVar, ".Streams[", index, `], `, fmSymbol, `, cOpts...)`)
 	g.P("if err != nil { return nil, err }")
 	g.P("x := &", streamImpl, "{ClientStream: stream}")
 	if !method.Desc.IsStreamingClient() {
