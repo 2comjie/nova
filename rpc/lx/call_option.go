@@ -29,8 +29,8 @@ func WithDirect(ctx context.Context, addr string) context.Context {
 	return set(ctx, &CallConfig{Mode: ModeDirect, Target: addr})
 }
 
-// WithKey sets the routing strategy to use key-based routing.
-func WithKey(ctx context.Context, key string) context.Context {
+// WithRouteKey sets the routing strategy to use key-based routing.
+func WithRouteKey(ctx context.Context, key string) context.Context {
 	return set(ctx, &CallConfig{Mode: ModeKey, Target: key})
 }
 

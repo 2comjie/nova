@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/2comjie/wali/core/help"
+	"github.com/2comjie/wali/logx"
 	"github.com/dgraph-io/ristretto/v2"
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 //go:embed bind.lua
@@ -49,7 +49,7 @@ func NewProvider(rc redis.UniversalClient, opts ...Option) *Provider {
 		BufferItems: 64,
 	})
 	if err != nil {
-		zap.S().Fatalf("create ristretto cache err %+v", err)
+		logx.Fatalf("create ristretto cache err %+v", err)
 	}
 
 	p := &Provider{
@@ -70,7 +70,7 @@ func (p *Provider) Bind(ctx context.Context, name string, key string, instanceID
 	p.rw.Lock()
 	defer p.rw.Unlock()
 
-	logCtx := zap.S().With("name", name).With("key", key).With("instanceID", instanceID)
+	logCtx := logx.WithField("name", name).WithField("key", key).WithField("instanceID", instanceID)
 	aliveKey := p.aliveKey(name, key)
 	hashKey := p.hashKey(name)
 	ttlSeconds := int(p.option.ttl.Seconds())
@@ -112,7 +112,7 @@ func (p *Provider) Unbind(ctx context.Context, name string, key string) error {
 	p.rw.Lock()
 	defer p.rw.Unlock()
 
-	logCtx := zap.S().With("name", name).With("key", key)
+	logCtx := logx.WithField("name", name).WithField("key", key)
 	aliveKey := p.aliveKey(name, key)
 	hashKey := p.hashKey(name)
 
@@ -166,7 +166,7 @@ func (p *Provider) Close() {
 func (p *Provider) keepAlive(aliveKey string, stopCh chan struct{}) {
 	tk := time.NewTicker(p.option.tick)
 	defer tk.Stop()
-	logCtx := zap.S().With("aliveKey", aliveKey)
+	logCtx := logx.WithField("aliveKey", aliveKey)
 	for {
 		select {
 		case <-stopCh:

@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/2comjie/wali/core/help"
+	"github.com/2comjie/wali/logx"
 	"github.com/2comjie/wali/network"
-	"go.uber.org/zap"
 	"nhooyr.io/websocket"
 )
 
@@ -76,7 +76,7 @@ func (s *server) serve(ready chan struct{}) {
 
 	ln, err := net.Listen("tcp", s.options.addr)
 	if err != nil {
-		zap.S().Errorf("ws listen error: %v", err)
+		logx.Errorf("ws listen error: %v", err)
 		close(ready)
 		return
 	}
@@ -86,7 +86,7 @@ func (s *server) serve(ready chan struct{}) {
 	if s.options.certFile != "" && s.options.keyFile != "" {
 		cert, err := tls.LoadX509KeyPair(s.options.certFile, s.options.keyFile)
 		if err != nil {
-			zap.S().Errorf("ws tls error: %v", err)
+			logx.Errorf("ws tls error: %v", err)
 			return
 		}
 		tlsLn := tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{cert}})
@@ -101,12 +101,12 @@ func (s *server) handleWS(w http.ResponseWriter, r *http.Request) {
 		InsecureSkipVerify: true, // 跨域由业务层控制
 	})
 	if err != nil {
-		zap.S().Warnf("ws accept error: %v", err)
+		logx.Warnf("ws accept error: %v", err)
 		return
 	}
 	trans := newTransport(r.Context(), conn)
 	if err = s.connMgr.Add(trans); err != nil {
-		zap.S().Errorf("connection allocate error: %v", err)
+		logx.Errorf("connection allocate error: %v", err)
 		_ = conn.Close(websocket.StatusPolicyViolation, "too many connections")
 	}
 }

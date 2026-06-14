@@ -5,9 +5,9 @@ import (
 	"net"
 
 	"github.com/2comjie/wali/core/help"
+	"github.com/2comjie/wali/logx"
 	"github.com/2comjie/wali/network"
 	kcp "github.com/xtaci/kcp-go"
-	"go.uber.org/zap"
 )
 
 const protocol = "kcp"
@@ -76,12 +76,12 @@ func (s *server) serve(ready chan struct{}) {
 		sess, err := s.listener.AcceptKCP()
 		if err != nil {
 			if !errors.Is(err, net.ErrClosed) {
-				zap.S().Warnf("kcp accept error: %v", err)
+				logx.Warnf("kcp accept error: %v", err)
 			}
 			return
 		}
 		if err = s.connMgr.Add(&kcpTransport{sess: sess}); err != nil {
-			zap.S().Errorf("connection allocate error: %v", err)
+			logx.Errorf("connection allocate error: %v", err)
 			_ = sess.Close()
 		}
 	}

@@ -8,8 +8,8 @@ import (
 	"github.com/2comjie/wali/core/endpoint"
 	"github.com/2comjie/wali/core/help"
 	"github.com/2comjie/wali/locator"
+	"github.com/2comjie/wali/logx"
 	"github.com/2comjie/wali/registry"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -107,7 +107,7 @@ func (c *Client) watch() {
 		}
 		list, err := c.discover.Next(c.ctx)
 		if err != nil {
-			zap.S().Errorf("rpc client discover.Next() failed: %v", err)
+			logx.Errorf("rpc client discover.Next() failed: %v", err)
 			continue
 		}
 
@@ -121,7 +121,7 @@ func (c *Client) watch() {
 		}
 		c.mu.Unlock()
 		c.pool.Prune(activeAddrs)
-		zap.S().Debugf("rpc client watch: %v", c.rpcServiceInstanceMap)
+		logx.Debugf("rpc client watch: %v", c.rpcServiceInstanceMap)
 	}
 }
 

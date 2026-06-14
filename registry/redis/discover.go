@@ -10,8 +10,8 @@ import (
 
 	"github.com/2comjie/wali/core/endpoint"
 	"github.com/2comjie/wali/core/help"
+	"github.com/2comjie/wali/logx"
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 //go:embed delete_if_expired.lua
@@ -152,7 +152,7 @@ func (d *Discover) pollFetch() {
 func (d *Discover) refresh() {
 	instances, err := d.fetchAll(d.ctx)
 	if err != nil {
-		zap.S().Errorf("refresh instances err %+v", err)
+		logx.Errorf("refresh instances err %+v", err)
 		return
 	}
 	d.mu.Lock()
@@ -164,7 +164,7 @@ func (d *Discover) refresh() {
 func (d *Discover) handleEvent(payload []byte) {
 	var event UpdateEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
-		zap.S().Errorf("unmarshal event err %+v, fallback to full refresh", err)
+		logx.Errorf("unmarshal event err %+v, fallback to full refresh", err)
 		d.refresh()
 		return
 	}
@@ -182,7 +182,7 @@ func (d *Discover) handleEvent(payload []byte) {
 	case EventDeregister:
 		delete(d.instances, event.Instance.ID)
 	default:
-		zap.S().Warnf("unknown event type: %s", event.Type)
+		logx.Warnf("unknown event type: %s", event.Type)
 		return
 	}
 
@@ -211,7 +211,7 @@ func (d *Discover) fetchAll(ctx context.Context) (map[string]endpoint.ServiceIns
 		}
 		inst := endpoint.ServiceInstance{}
 		if err := json.Unmarshal([]byte(value), &inst); err != nil {
-			zap.S().Errorf("unmarshal service %s err %+v", id, err)
+			logx.Errorf("unmarshal service %s err %+v", id, err)
 			continue
 		}
 		instances[id] = inst

@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/2comjie/wali/core/help"
-	"go.uber.org/zap"
+	"github.com/2comjie/wali/logx"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -62,7 +62,7 @@ func (c *config) Load() error {
 	for _, src := range c.sources {
 		w, err := src.Watch()
 		if err != nil {
-			zap.S().Errorf("config: watch source: %v", err)
+			logx.Errorf("config: watch source: %v", err)
 			return err
 		}
 		c.watchers = append(c.watchers, w)
@@ -137,11 +137,11 @@ func (c *config) watchLoop(w Watcher) {
 			if errors.Is(err, context.Canceled) {
 				return
 			}
-			zap.S().Errorf("config: watch next: %v", err)
+			logx.Errorf("config: watch next: %v", err)
 			continue
 		}
 		if err := c.reload(); err != nil {
-			zap.S().Errorf("config: reload source: %v", err)
+			logx.Errorf("config: reload source: %v", err)
 			continue
 		}
 		c.notifyObservers()

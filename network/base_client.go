@@ -10,8 +10,8 @@ import (
 
 	"github.com/2comjie/wali/core/buffer"
 	"github.com/2comjie/wali/core/help"
+	"github.com/2comjie/wali/logx"
 	"github.com/2comjie/wali/packet"
-	"go.uber.org/zap"
 )
 
 type pendingCall struct {
@@ -146,7 +146,7 @@ func (c *BaseClient) write() {
 				return err
 			}()
 			if err != nil && !errors.Is(err, net.ErrClosed) {
-				zap.S().Errorf("client write err %v", err)
+				logx.Errorf("client write err %v", err)
 			}
 		}
 	}
@@ -162,7 +162,7 @@ func (c *BaseClient) read() {
 
 		buff, err := c.options.Packer.ReadBuffer(c.trans)
 		if err != nil {
-			zap.S().Errorf("client read err %v", err)
+			logx.Errorf("client read err %v", err)
 			_ = c.Close()
 			return
 		}
@@ -189,7 +189,7 @@ func (c *BaseClient) read() {
 				fn(msg)
 			}
 		default:
-			zap.S().Warnf("client recv unexpected msg type %d", msg.MessageType())
+			logx.Warnf("client recv unexpected msg type %d", msg.MessageType())
 		}
 	}
 }
@@ -209,7 +209,7 @@ func (c *BaseClient) heartbeat() {
 			select {
 			case c.chWrite <- connWrite{typ: connDataPacket, msg: ping}:
 			default:
-				zap.S().Warn("client heartbeat: write chan full")
+				logx.Warn("client heartbeat: write chan full")
 			}
 		}
 	}

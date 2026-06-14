@@ -11,8 +11,8 @@ import (
 	"github.com/2comjie/wali/core/buffer"
 	"github.com/2comjie/wali/core/help"
 	innernet "github.com/2comjie/wali/core/net"
+	"github.com/2comjie/wali/logx"
 	"github.com/2comjie/wali/packet"
-	"go.uber.org/zap"
 )
 
 const (
@@ -71,7 +71,7 @@ func (c *BaseConn) Bind(uid string) { c.uid.Store(uid) }
 func (c *BaseConn) Unbind()         { c.uid.Store("") }
 
 func (c *BaseConn) Close(reason string, force ...bool) error {
-	zap.S().Debugf("conn %d close %s", c.id, reason)
+	logx.Debugf("conn %d close %s", c.id, reason)
 	if len(force) > 0 && force[0] {
 		return c.forceClose()
 	}
@@ -205,7 +205,7 @@ func (c *BaseConn) read() {
 			}
 		default:
 			_ = c.Close("unknown conn state", true)
-			zap.S().Errorf("unknown conn state")
+			logx.Errorf("unknown conn state")
 			return
 		}
 	}
@@ -231,7 +231,7 @@ func (c *BaseConn) write() {
 				return err
 			}()
 			if err != nil && !errors.Is(err, net.ErrClosed) {
-				zap.S().Errorf("write packet err %v", err)
+				logx.Errorf("write packet err %v", err)
 			}
 		}
 	}

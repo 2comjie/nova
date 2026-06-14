@@ -6,8 +6,8 @@ import (
 	"net"
 
 	"github.com/2comjie/wali/core/help"
+	"github.com/2comjie/wali/logx"
 	"github.com/2comjie/wali/network"
-	"go.uber.org/zap"
 )
 
 const protocol = "tcp"
@@ -113,18 +113,18 @@ func (s *server) serve(ready chan struct{}) {
 				if tempDelay > 1_000_000_000 {
 					tempDelay = 1_000_000_000
 				}
-				zap.S().Warnf("tcp accept error: %v; retrying in %dns", err, tempDelay)
+				logx.Warnf("tcp accept error: %v; retrying in %dns", err, tempDelay)
 				// net.Error.Timeout() 极少触发，sleep 逻辑保留但已有上界
 				continue
 			}
 			if !errors.Is(err, net.ErrClosed) {
-				zap.S().Warnf("tcp accept error: %v", err)
+				logx.Warnf("tcp accept error: %v", err)
 			}
 			return
 		}
 		tempDelay = 0
 		if err = s.connMgr.Add(&tcpTransport{conn: conn}); err != nil {
-			zap.S().Errorf("connection allocate error: %v", err)
+			logx.Errorf("connection allocate error: %v", err)
 			_ = conn.Close()
 		}
 	}

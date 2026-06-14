@@ -11,8 +11,8 @@ import (
 
 	"github.com/2comjie/wali/core/endpoint"
 	"github.com/2comjie/wali/core/help"
+	"github.com/2comjie/wali/logx"
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 //go:embed register.lua
@@ -51,7 +51,7 @@ func (r *Registry) Register(serviceInstance endpoint.ServiceInstance) error {
 	r.rw.Lock()
 	defer r.rw.Unlock()
 
-	logCtx := zap.S().With("service", serviceInstance.ID)
+	logCtx := logx.WithField("service", serviceInstance.ID)
 	aliveKey := r.aliveKey(serviceInstance.ID)
 	hashKey := r.hashKey()
 	ttlSeconds := int(r.option.ttl.Seconds())
@@ -95,7 +95,7 @@ func (r *Registry) Deregister(instanceID string) error {
 	r.rw.Lock()
 	defer r.rw.Unlock()
 
-	logCtx := zap.S().With("service", instanceID)
+	logCtx := logx.WithField("service", instanceID)
 	aliveKey := r.aliveKey(instanceID)
 	hashKey := r.hashKey()
 
@@ -130,7 +130,7 @@ func (r *Registry) UpdateMetaData(instanceId string, meta map[string]string) err
 	r.rw.Lock()
 	defer r.rw.Unlock()
 
-	logCtx := zap.S().With("service", instanceId)
+	logCtx := logx.WithField("service", instanceId)
 	hashKey := r.hashKey()
 	aliveKey := r.aliveKey(instanceId)
 
@@ -201,7 +201,7 @@ func (r *Registry) DeleteMetaData(instanceId string, keys []string) error {
 	r.rw.Lock()
 	defer r.rw.Unlock()
 
-	logCtx := zap.S().With("service", instanceId)
+	logCtx := logx.WithField("service", instanceId)
 	hashKey := r.hashKey()
 	aliveKey := r.aliveKey(instanceId)
 
@@ -278,7 +278,7 @@ func (r *Registry) Close() {
 func (r *Registry) keepAlive(stopCh chan struct{}, aliveKey string) {
 	tk := time.NewTicker(r.option.tick)
 	defer tk.Stop()
-	logCtx := zap.S().With("aliveKey", aliveKey)
+	logCtx := logx.WithField("aliveKey", aliveKey)
 	for {
 		select {
 		case <-stopCh:
@@ -304,7 +304,7 @@ func (r *Registry) keepAlive(stopCh chan struct{}, aliveKey string) {
 func (r *Registry) publishEvent(event UpdateEvent) {
 	data, err := json.Marshal(event)
 	if err != nil {
-		zap.S().Errorf("marshal event err %+v", err)
+		logx.Errorf("marshal event err %+v", err)
 		return
 	}
 	r.rc.Publish(r.ctx, r.notifyKey(), data)

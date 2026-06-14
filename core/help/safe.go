@@ -1,11 +1,11 @@
 package help
 
-import "go.uber.org/zap"
+import "github.com/2comjie/wali/logx"
 
 func SafeRun(f func()) {
 	defer func() {
 		if r := recover(); r != nil {
-			zap.S().Errorf("panic: %v", r)
+			logx.Errorf("panic: %v", r)
 		}
 	}()
 	f()
