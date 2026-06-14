@@ -21,6 +21,12 @@ type ServiceInstance struct {
 	Status      Status                `json:"status"`       // 服务状态
 	RpcServices map[string]RpcService `json:"rpc_services"` // name -> service
 	Routes      map[int32]Router      `json:"routes"`       // route -> router
+	RpcHost     string                `json:"rpc_host"`
+	RpcPort     int                   `json:"rpc_port"`
+}
+
+func (s ServiceInstance) RpcTarget() string {
+	return net.JoinHostPort(s.RpcHost, cast.ToString(s.RpcPort))
 }
 
 type Router struct {
@@ -29,12 +35,6 @@ type Router struct {
 }
 
 type RpcService struct {
-	Host string `json:"host"`
-	Port int    `json:"port"`
 	Name string `json:"name"`
 	Desc string `json:"desc"`
-}
-
-func (r RpcService) Target() string {
-	return net.JoinHostPort(r.Host, cast.ToString(r.Port))
 }
