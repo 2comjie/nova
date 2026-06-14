@@ -21,9 +21,6 @@ var bindScript string
 //go:embed unbind.lua
 var unbindScript string
 
-//go:embed delete_if_expired.lua
-var deleteIfExpiredScript string
-
 type Provider struct {
 	rc     redis.UniversalClient
 	option *option
@@ -62,7 +59,6 @@ func NewProvider(rc redis.UniversalClient, opts ...Option) *Provider {
 		cache:   cache,
 	}
 	help.SafeGo(p.watchNotify)
-	help.SafeGo(p.watchExpire)
 	return p
 }
 
@@ -72,13 +68,12 @@ func (p *Provider) Bind(ctx context.Context, name string, key string, instanceID
 	defer p.rw.Unlock()
 
 	logCtx := logx.WithField("name", name).WithField("key", key).WithField("instanceID", instanceID)
-	aliveKey := p.aliveKey(name, key)
 	hashKey := p.hashKey(name)
 	ttlSeconds := int(p.option.ttl.Seconds())
 
 	var finalErr error
 	success := help.Retry(p.ctx, 3, time.Second, func() bool {
-		err := p.rc.Eval(p.ctx, bindScript, []string{hashKey, aliveKey, p.nameSetKey()}, key, instanceID, ttlSeconds, name).Err()
+		err := p.rc.Eval(p.ctx, bindScript, []string{hashKey, p.nameSetKey()}, key, instanceID, ttlSeconds, name).Err()
 		if err != nil {
 			logCtx.Errorf("eval bind script err %+v", err)
 			finalErr = err
@@ -100,7 +95,7 @@ func (p *Provider) Bind(ctx context.Context, name string, key string, instanceID
 	if p.stopChs[stopKey] == nil {
 		p.stopChs[stopKey] = make(chan struct{})
 		help.SafeGo(func() {
-			p.keepAlive(aliveKey, p.stopChs[stopKey])
+			p.keepAlive(name, key, p.stopChs[stopKey])
 		})
 	}
 
@@ -114,10 +109,9 @@ func (p *Provider) Unbind(ctx context.Context, name string, key string) error {
 	defer p.rw.Unlock()
 
 	logCtx := logx.WithField("name", name).WithField("key", key)
-	aliveKey := p.aliveKey(name, key)
 	hashKey := p.hashKey(name)
 
-	err := p.rc.Eval(p.ctx, unbindScript, []string{hashKey, aliveKey, p.nameSetKey()}, key, name).Err()
+	err := p.rc.Eval(p.ctx, unbindScript, []string{hashKey, p.nameSetKey()}, key, name).Err()
 	if err != nil {
 		logCtx.Errorf("eval unbind script err %+v", err)
 		return err
@@ -152,7 +146,7 @@ func (p *Provider) Locate(ctx context.Context, name string, key string) (string,
 		return "", err
 	}
 
-	p.cache.SetWithTTL(locKey, id, 1, p.option.ttl*3)
+	p.cache.SetWithTTL(locKey, id, 1, p.cacheTTL())
 	return id, nil
 }
 
@@ -167,10 +161,10 @@ func (p *Provider) Close() {
 	p.cache.Close()
 }
 
-func (p *Provider) keepAlive(aliveKey string, stopCh chan struct{}) {
+func (p *Provider) keepAlive(name string, key string, stopCh chan struct{}) {
 	tk := time.NewTicker(p.option.tick)
 	defer tk.Stop()
-	logCtx := logx.WithField("aliveKey", aliveKey)
+	logCtx := logx.WithField("name", name).WithField("key", key)
 	for {
 		select {
 		case <-stopCh:
@@ -179,9 +173,9 @@ func (p *Provider) keepAlive(aliveKey string, stopCh chan struct{}) {
 			return
 		case <-tk.C:
 			success := help.Retry(p.ctx, 3, time.Second, func() bool {
-				err := p.rc.Expire(p.ctx, aliveKey, p.option.ttl).Err()
+				err := p.rc.Do(p.ctx, "HEXPIRE", p.hashKey(name), int(p.option.ttl.Seconds()), "FIELDS", 1, key).Err()
 				if err != nil {
-					logCtx.Errorf("expire alive key err %+v", err)
+					logCtx.Errorf("hexpire bind field err %+v", err)
 					return false
 				}
 				return true
@@ -191,6 +185,17 @@ func (p *Provider) keepAlive(aliveKey string, stopCh chan struct{}) {
 			}
 		}
 	}
+}
+
+func (p *Provider) cacheTTL() time.Duration {
+	if p.option.ttl <= 0 {
+		return 0
+	}
+	ttl := p.option.ttl / 2
+	if ttl <= 0 {
+		return p.option.ttl
+	}
+	return ttl
 }
 
 func (p *Provider) watchNotify() {
@@ -214,45 +219,12 @@ func (p *Provider) watchNotify() {
 	}
 }
 
-func (p *Provider) watchExpire() {
-	channel := "__keyevent@0__:expired"
-	pubsub := p.rc.PSubscribe(p.ctx, channel)
-	defer pubsub.Close()
-	ch := pubsub.Channel()
-	prefix := p.option.prefix + ":expire:"
-	for {
-		select {
-		case <-p.ctx.Done():
-			return
-		case msg, ok := <-ch:
-			if !ok {
-				return
-			}
-			if strings.HasPrefix(msg.Payload, prefix) {
-				rest := strings.TrimPrefix(msg.Payload, prefix)
-				parts := strings.SplitN(rest, ":", 2)
-				if len(parts) != 2 {
-					continue
-				}
-				name, key := parts[0], parts[1]
-				p.rc.Eval(p.ctx, deleteIfExpiredScript,
-					[]string{p.hashKey(name), p.aliveKey(name, key)}, key)
-				p.cache.Del(name + ":" + key)
-			}
-		}
-	}
-}
-
 func (p *Provider) publishEvent(event string, name string, key string) {
 	p.rc.Publish(p.ctx, p.notifyKey(), event+":"+name+":"+key)
 }
 
 func (p *Provider) hashKey(name string) string {
 	return p.option.prefix + fmt.Sprintf(":hash:%s", name)
-}
-
-func (p *Provider) aliveKey(name string, key string) string {
-	return p.option.prefix + fmt.Sprintf(":expire:%s:%s", name, key)
 }
 
 func (p *Provider) nameSetKey() string {

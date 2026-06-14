@@ -4,7 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"strings"
 	"sync"
 	"time"
 
@@ -13,9 +12,6 @@ import (
 	"github.com/2comjie/wali/logx"
 	"github.com/redis/go-redis/v9"
 )
-
-//go:embed delete_if_expired.lua
-var deleteIfExpiredScript string
 
 type Discover struct {
 	option *option
@@ -110,11 +106,10 @@ func (d *Discover) watchNotify() {
 }
 
 func (d *Discover) watchExpire() {
-	channel := "__keyevent@0__:expired"
+	channel := "__keyevent@0__:hexpired"
 	pubsub := d.rc.PSubscribe(d.ctx, channel)
 	defer pubsub.Close()
 	ch := pubsub.Channel()
-	prefix := d.option.prefix + ":expire:"
 	for {
 		select {
 		case <-d.ctx.Done():
@@ -123,13 +118,8 @@ func (d *Discover) watchExpire() {
 			if !ok {
 				return
 			}
-			if strings.HasPrefix(msg.Payload, prefix) {
-				instanceID := strings.TrimPrefix(msg.Payload, prefix)
-				d.rc.Eval(d.ctx, deleteIfExpiredScript, []string{d.aliveKey(instanceID), d.hashKey()}, instanceID)
-				d.mu.Lock()
-				delete(d.instances, instanceID)
-				d.mu.Unlock()
-				d.notifyChange()
+			if msg.Payload == d.hashKey() {
+				d.refresh()
 			}
 		}
 	}
@@ -204,11 +194,6 @@ func (d *Discover) fetchAll(ctx context.Context) (map[string]endpoint.ServiceIns
 	}
 	instances := make(map[string]endpoint.ServiceInstance, len(hash))
 	for id, value := range hash {
-		alive, err := d.rc.Exists(d.ctx, d.aliveKey(id)).Result()
-		if err != nil || alive == 0 {
-			d.rc.Eval(d.ctx, deleteIfExpiredScript, []string{d.aliveKey(id), d.hashKey()}, id)
-			continue
-		}
 		inst := endpoint.ServiceInstance{}
 		if err := json.Unmarshal([]byte(value), &inst); err != nil {
 			logx.Errorf("unmarshal service %s err %+v", id, err)
@@ -221,10 +206,6 @@ func (d *Discover) fetchAll(ctx context.Context) (map[string]endpoint.ServiceIns
 
 func (d *Discover) hashKey() string {
 	return d.option.prefix + ":hash"
-}
-
-func (d *Discover) aliveKey(instanceID string) string {
-	return d.option.prefix + ":expire:" + instanceID
 }
 
 func (d *Discover) notifyKey() string {

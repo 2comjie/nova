@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sync"
 	"time"
 
@@ -52,7 +51,6 @@ func (r *Registry) Register(serviceInstance endpoint.ServiceInstance) error {
 	defer r.rw.Unlock()
 
 	logCtx := logx.WithField("service", serviceInstance.ID)
-	aliveKey := r.aliveKey(serviceInstance.ID)
 	hashKey := r.hashKey()
 	ttlSeconds := int(r.option.ttl.Seconds())
 
@@ -64,7 +62,7 @@ func (r *Registry) Register(serviceInstance endpoint.ServiceInstance) error {
 			finalErr = err
 			return false
 		}
-		err = r.rc.Eval(r.ctx, registerScript, []string{hashKey, aliveKey}, data, serviceInstance.ID, ttlSeconds).Err()
+		err = r.rc.Eval(r.ctx, registerScript, []string{hashKey}, data, serviceInstance.ID, ttlSeconds).Err()
 		if err != nil {
 			logCtx.Errorf("eval register script err %+v", err)
 			finalErr = err
@@ -84,7 +82,7 @@ func (r *Registry) Register(serviceInstance endpoint.ServiceInstance) error {
 	if r.stopChs[serviceInstance.ID] == nil {
 		r.stopChs[serviceInstance.ID] = make(chan struct{})
 		help.SafeGo(func() {
-			r.keepAlive(r.stopChs[serviceInstance.ID], aliveKey)
+			r.keepAlive(r.stopChs[serviceInstance.ID], serviceInstance.ID)
 		})
 	}
 	logCtx.Debugf("register success")
@@ -96,12 +94,11 @@ func (r *Registry) Deregister(instanceID string) error {
 	defer r.rw.Unlock()
 
 	logCtx := logx.WithField("service", instanceID)
-	aliveKey := r.aliveKey(instanceID)
 	hashKey := r.hashKey()
 
 	var finalErr error
 	success := help.Retry(r.ctx, 3, time.Second, func() bool {
-		err := r.rc.Eval(r.ctx, deregisterScript, []string{hashKey, aliveKey}, instanceID).Err()
+		err := r.rc.Eval(r.ctx, deregisterScript, []string{hashKey}, instanceID).Err()
 		if err != nil {
 			logCtx.Errorf("eval deregister script err %+v", err)
 			finalErr = err
@@ -132,23 +129,11 @@ func (r *Registry) UpdateMetaData(instanceId string, meta map[string]string) err
 
 	logCtx := logx.WithField("service", instanceId)
 	hashKey := r.hashKey()
-	aliveKey := r.aliveKey(instanceId)
+	ttlSeconds := int(r.option.ttl.Seconds())
 
 	var updatedInst endpoint.ServiceInstance
 	var finalErr error
 	success := help.Retry(r.ctx, 3, time.Second, func() bool {
-		exists, err := r.rc.Exists(r.ctx, aliveKey).Result()
-		if err != nil {
-			logCtx.Errorf("check alive key err %+v", err)
-			finalErr = err
-			return false
-		}
-		if exists == 0 {
-			finalErr = fmt.Errorf("instance %s not found or expired", instanceId)
-			logCtx.Warnf("update meta data failed: %v", finalErr)
-			return false
-		}
-
 		data, err := r.rc.HGet(r.ctx, hashKey, instanceId).Result()
 		if err != nil {
 			logCtx.Errorf("hget err %+v", err)
@@ -182,6 +167,11 @@ func (r *Registry) UpdateMetaData(instanceId string, meta map[string]string) err
 			finalErr = err
 			return false
 		}
+		if err := r.rc.Do(r.ctx, "HEXPIRE", hashKey, ttlSeconds, "FIELDS", 1, instanceId).Err(); err != nil {
+			logCtx.Errorf("hexpire err %+v", err)
+			finalErr = err
+			return false
+		}
 		updatedInst = inst
 		finalErr = nil
 		return true
@@ -203,23 +193,11 @@ func (r *Registry) DeleteMetaData(instanceId string, keys []string) error {
 
 	logCtx := logx.WithField("service", instanceId)
 	hashKey := r.hashKey()
-	aliveKey := r.aliveKey(instanceId)
+	ttlSeconds := int(r.option.ttl.Seconds())
 
 	var updatedInst endpoint.ServiceInstance
 	var finalErr error
 	success := help.Retry(r.ctx, 3, time.Second, func() bool {
-		exists, err := r.rc.Exists(r.ctx, aliveKey).Result()
-		if err != nil {
-			logCtx.Errorf("check alive key err %+v", err)
-			finalErr = err
-			return false
-		}
-		if exists == 0 {
-			finalErr = fmt.Errorf("instance %s not found or expired", instanceId)
-			logCtx.Warnf("delete meta data failed: %v", finalErr)
-			return false
-		}
-
 		data, err := r.rc.HGet(r.ctx, hashKey, instanceId).Result()
 		if err != nil {
 			logCtx.Errorf("hget err %+v", err)
@@ -250,6 +228,11 @@ func (r *Registry) DeleteMetaData(instanceId string, keys []string) error {
 			finalErr = err
 			return false
 		}
+		if err := r.rc.Do(r.ctx, "HEXPIRE", hashKey, ttlSeconds, "FIELDS", 1, instanceId).Err(); err != nil {
+			logCtx.Errorf("hexpire err %+v", err)
+			finalErr = err
+			return false
+		}
 		updatedInst = inst
 		finalErr = nil
 		return true
@@ -275,10 +258,10 @@ func (r *Registry) Close() {
 	}
 }
 
-func (r *Registry) keepAlive(stopCh chan struct{}, aliveKey string) {
+func (r *Registry) keepAlive(stopCh chan struct{}, instanceID string) {
 	tk := time.NewTicker(r.option.tick)
 	defer tk.Stop()
-	logCtx := logx.WithField("aliveKey", aliveKey)
+	logCtx := logx.WithField("service", instanceID)
 	for {
 		select {
 		case <-stopCh:
@@ -287,9 +270,9 @@ func (r *Registry) keepAlive(stopCh chan struct{}, aliveKey string) {
 			return
 		case <-tk.C:
 			success := help.Retry(r.ctx, 3, time.Second, func() bool {
-				err := r.rc.Expire(r.ctx, aliveKey, r.option.ttl).Err()
+				err := r.rc.Do(r.ctx, "HEXPIRE", r.hashKey(), int(r.option.ttl.Seconds()), "FIELDS", 1, instanceID).Err()
 				if err != nil {
-					logCtx.Errorf("expire alive key err %+v", err)
+					logCtx.Errorf("hexpire instance field err %+v", err)
 					return false
 				}
 				return true
@@ -308,10 +291,6 @@ func (r *Registry) publishEvent(event UpdateEvent) {
 		return
 	}
 	r.rc.Publish(r.ctx, r.notifyKey(), data)
-}
-
-func (r *Registry) aliveKey(instanceID string) string {
-	return r.option.prefix + ":expire:" + instanceID
 }
 
 func (r *Registry) hashKey() string {
