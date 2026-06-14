@@ -27,12 +27,12 @@ func TestProvider_BindAndLocate(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:bind_locate"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	err := p.Bind(context.Background(),"game", "room_1", "instance_a")
+	err := p.Bind(context.Background(), "game", "room_1", "instance_a")
 	if err != nil {
 		t.Fatalf("bind failed: %v", err)
 	}
 
-	id, err := p.Locate(context.Background(),"game", "room_1")
+	id, err := p.Locate(context.Background(), "game", "room_1")
 	if err != nil {
 		t.Fatalf("locate failed: %v", err)
 	}
@@ -46,10 +46,10 @@ func TestProvider_BindUpdate(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:bind_update"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	p.Bind(context.Background(),"game", "room_1", "instance_a")
-	p.Bind(context.Background(),"game", "room_1", "instance_b")
+	p.Bind(context.Background(), "game", "room_1", "instance_a")
+	p.Bind(context.Background(), "game", "room_1", "instance_b")
 
-	id, err := p.Locate(context.Background(),"game", "room_1")
+	id, err := p.Locate(context.Background(), "game", "room_1")
 	if err != nil {
 		t.Fatalf("locate failed: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestProvider_LocateNotFound(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:locate_notfound"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	_, err := p.Locate(context.Background(),"game", "nonexistent")
+	_, err := p.Locate(context.Background(), "game", "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for nonexistent key")
 	}
@@ -74,9 +74,9 @@ func TestProvider_Unbind(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:unbind"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	p.Bind(context.Background(),"game", "room_1", "instance_a")
+	p.Bind(context.Background(), "game", "room_1", "instance_a")
 
-	id, err := p.Locate(context.Background(),"game", "room_1")
+	id, err := p.Locate(context.Background(), "game", "room_1")
 	if err != nil {
 		t.Fatalf("locate before unbind failed: %v", err)
 	}
@@ -84,9 +84,9 @@ func TestProvider_Unbind(t *testing.T) {
 		t.Fatalf("expected instance_a, got %s", id)
 	}
 
-	p.Unbind(context.Background(),"game", "room_1")
+	p.Unbind(context.Background(), "game", "room_1")
 
-	_, err = p.Locate(context.Background(),"game", "room_1")
+	_, err = p.Locate(context.Background(), "game", "room_1")
 	if err == nil {
 		t.Fatal("expected error after unbind")
 	}
@@ -97,10 +97,10 @@ func TestProvider_MultiName(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:multi_name"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	p.Bind(context.Background(),"game", "room_1", "inst_game_1")
-	p.Bind(context.Background(),"chat", "room_1", "inst_chat_1")
+	p.Bind(context.Background(), "game", "room_1", "inst_game_1")
+	p.Bind(context.Background(), "chat", "room_1", "inst_chat_1")
 
-	id, err := p.Locate(context.Background(),"game", "room_1")
+	id, err := p.Locate(context.Background(), "game", "room_1")
 	if err != nil {
 		t.Fatalf("locate game failed: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestProvider_MultiName(t *testing.T) {
 		t.Fatalf("expected inst_game_1, got %s", id)
 	}
 
-	id, err = p.Locate(context.Background(),"chat", "room_1")
+	id, err = p.Locate(context.Background(), "chat", "room_1")
 	if err != nil {
 		t.Fatalf("locate chat failed: %v", err)
 	}
@@ -122,10 +122,10 @@ func TestProvider_LocateCache(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:locate_cache"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	p.Bind(context.Background(),"game", "room_1", "instance_x")
+	p.Bind(context.Background(), "game", "room_1", "instance_x")
 
 	// first call: cache miss, HGet falls through
-	id, err := p.Locate(context.Background(),"game", "room_1")
+	id, err := p.Locate(context.Background(), "game", "room_1")
 	if err != nil {
 		t.Fatalf("locate failed: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestProvider_LocateCache(t *testing.T) {
 	}
 
 	// second call: should hit ristretto cache
-	id, err = p.Locate(context.Background(),"game", "room_1")
+	id, err = p.Locate(context.Background(), "game", "room_1")
 	if err != nil {
 		t.Fatalf("locate (cached) failed: %v", err)
 	}
