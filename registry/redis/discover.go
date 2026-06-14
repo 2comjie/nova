@@ -24,18 +24,20 @@ type Discover struct {
 	notify    chan struct{}
 }
 
-func (d *Discover) Get(ctx context.Context, instanceID string) (endpoint.ServiceInstance, error) {
+func (d *Discover) Get(ctx context.Context, instanceID string) (endpoint.ServiceInstance, bool, error) {
 	d.mu.RLock()
 	if d.instances != nil {
 		defer d.mu.RUnlock()
-		return d.instances[instanceID], nil
+		ins, ok := d.instances[instanceID]
+		return ins, ok, nil
 	}
 	d.mu.RUnlock()
 	m, err := d.fetchAll(ctx)
 	if err != nil {
-		return endpoint.ServiceInstance{}, err
+		return endpoint.ServiceInstance{}, false, err
 	}
-	return m[instanceID], nil
+	ins, ok := m[instanceID]
+	return ins, ok, nil
 }
 
 func NewDiscover(rc redis.UniversalClient, opts ...Option) *Discover {

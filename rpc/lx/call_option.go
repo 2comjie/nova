@@ -1,6 +1,8 @@
 package lx
 
-import "context"
+import (
+	"context"
+)
 
 type ctxKey struct{}
 
@@ -17,6 +19,9 @@ const (
 type CallConfig struct {
 	Mode   Mode
 	Target string
+
+	Name string
+	Key  string
 }
 
 // WithNode sets the routing strategy to target a specific node.
@@ -30,8 +35,8 @@ func WithDirect(ctx context.Context, addr string) context.Context {
 }
 
 // WithRouteKey sets the routing strategy to use key-based routing.
-func WithRouteKey(ctx context.Context, key string) context.Context {
-	return set(ctx, &CallConfig{Mode: ModeKey, Target: key})
+func WithRouteKey(ctx context.Context, name, key string) context.Context {
+	return set(ctx, &CallConfig{Mode: ModeKey, Name: name, Key: key})
 }
 
 func set(ctx context.Context, cfg *CallConfig) context.Context {

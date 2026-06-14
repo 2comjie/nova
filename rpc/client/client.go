@@ -42,6 +42,13 @@ func NewClient(discover registry.Discover, locator locator.Locator, opts ...grpc
 		nextSeq:               make(map[string]uint64),
 	}
 
+	list, err := discover.List(ctx)
+	if err != nil {
+		logx.Errorf("rpc client discover.List() failed: %v", err)
+	} else {
+		cl.updateRpcServices(list)
+	}
+
 	help.SafeGo(func() {
 		cl.watch()
 	})
@@ -66,9 +73,12 @@ func (c *Client) Node(ctx context.Context, serviceName string, instanceID string
 	if instanceID == "" {
 		return nil, ErrInvalidTarget
 	}
-	serviceInstance, err := c.discover.Get(ctx, instanceID)
+	serviceInstance, ok, err := c.discover.Get(ctx, instanceID)
 	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return nil, ErrServiceNotFound
 	}
 	if _, ok := serviceInstance.RpcServices[serviceName]; !ok {
 		return nil, ErrServiceNotFound
@@ -84,11 +94,11 @@ func (c *Client) Direct(ctx context.Context, addr string) (*grpc.ClientConn, err
 	return c.pool.Get(addr)
 }
 
-func (c *Client) Route(ctx context.Context, serviceName string, key string) (*grpc.ClientConn, error) {
+func (c *Client) Route(ctx context.Context, routeName string, key string, serviceName string) (*grpc.ClientConn, error) {
 	if key == "" {
 		return nil, ErrInvalidTarget
 	}
-	instanceId, err := c.locator.Locate(ctx, serviceName, key)
+	instanceId, err := c.locator.Locate(ctx, routeName, key)
 	if err != nil {
 		return nil, err
 	}
@@ -112,19 +122,22 @@ func (c *Client) watch() {
 			logx.Errorf("rpc client discover.Next() failed: %v", err)
 			continue
 		}
-
-		c.mu.Lock()
-		c.rpcServiceInstanceMap = c.extractRpcService(list)
-		activeAddrs := make(map[string]bool)
-		for _, instances := range c.rpcServiceInstanceMap {
-			for _, inst := range instances {
-				activeAddrs[inst.serviceInstance.RpcTarget()] = true
-			}
-		}
-		c.mu.Unlock()
-		c.pool.Prune(activeAddrs)
-		logx.Debugf("rpc client watch: %v", c.rpcServiceInstanceMap)
+		c.updateRpcServices(list)
 	}
+}
+
+func (c *Client) updateRpcServices(list map[string]endpoint.ServiceInstance) {
+	c.mu.Lock()
+	c.rpcServiceInstanceMap = c.extractRpcService(list)
+	activeAddrs := make(map[string]bool)
+	for _, instances := range c.rpcServiceInstanceMap {
+		for _, inst := range instances {
+			activeAddrs[inst.serviceInstance.RpcTarget()] = true
+		}
+	}
+	c.mu.Unlock()
+	c.pool.Prune(activeAddrs)
+	logx.Debugf("rpc client watch: %v", c.rpcServiceInstanceMap)
 }
 
 func (c *Client) pickService(serviceName string) (RpcServiceInstance, error) {

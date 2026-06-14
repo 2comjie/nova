@@ -58,6 +58,7 @@ func NewProvider(rc redis.UniversalClient, opts ...Option) *Provider {
 		stopChs: make(map[string]chan struct{}),
 		cache:   cache,
 	}
+
 	help.SafeGo(p.watchNotify)
 	return p
 }
@@ -132,13 +133,15 @@ func (p *Provider) Unbind(ctx context.Context, name string, key string) error {
 
 func (p *Provider) Locate(ctx context.Context, name string, key string) (string, error) {
 	_ = ctx
-	locKey := name + ":" + key
+	localKey := name + ":" + key
 
-	if id, ok := p.cache.Get(locKey); ok {
+	if id, ok := p.cache.Get(localKey); ok {
 		return id, nil
 	}
 
-	id, err := p.rc.HGet(p.ctx, p.hashKey(name), key).Result()
+	hashKey := p.hashKey(name)
+
+	id, err := p.rc.HGet(p.ctx, hashKey, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return "", nil
@@ -146,7 +149,7 @@ func (p *Provider) Locate(ctx context.Context, name string, key string) (string,
 		return "", err
 	}
 
-	p.cache.SetWithTTL(locKey, id, 1, p.cacheTTL())
+	p.cache.SetWithTTL(localKey, id, 1, p.cacheTTL())
 	return id, nil
 }
 
@@ -173,7 +176,7 @@ func (p *Provider) keepAlive(name string, key string, stopCh chan struct{}) {
 			return
 		case <-tk.C:
 			success := help.Retry(p.ctx, 3, time.Second, func() bool {
-				err := p.rc.Do(p.ctx, "HEXPIRE", p.hashKey(name), int(p.option.ttl.Seconds()), "FIELDS", 1, key).Err()
+				_, err := p.rc.HExpire(p.ctx, p.hashKey(name), p.option.ttl, key).Result()
 				if err != nil {
 					logCtx.Errorf("hexpire bind field err %+v", err)
 					return false

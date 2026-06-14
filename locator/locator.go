@@ -33,13 +33,13 @@ func (l *NodeLocator) Unbind(ctx context.Context, name string, key string) error
 	}
 	return l.provider.Unbind(ctx, name, key)
 }
-func (l *NodeLocator) Locate(ctx context.Context, name string, key string) (endpoint.ServiceInstance, error) {
+func (l *NodeLocator) Locate(ctx context.Context, name string, key string) (endpoint.ServiceInstance, bool, error) {
 	if name == GateName {
-		return endpoint.ServiceInstance{}, ErrNodeNotSupport
+		return endpoint.ServiceInstance{}, false, ErrNodeNotSupport
 	}
 	instanceId, err := l.provider.Locate(ctx, name, key)
 	if err != nil {
-		return endpoint.ServiceInstance{}, err
+		return endpoint.ServiceInstance{}, false, err
 	}
 	return l.discover.Get(ctx, instanceId)
 }
@@ -68,10 +68,10 @@ func (l *GateLocator) Bind(ctx context.Context, key string, instanceId string) e
 func (l *GateLocator) Unbind(ctx context.Context, key string) error {
 	return l.provider.Unbind(ctx, GateName, key)
 }
-func (l *GateLocator) Locate(ctx context.Context, key string) (endpoint.ServiceInstance, error) {
+func (l *GateLocator) Locate(ctx context.Context, key string) (endpoint.ServiceInstance, bool, error) {
 	instanceId, err := l.provider.Locate(ctx, GateName, key)
 	if err != nil {
-		return endpoint.ServiceInstance{}, err
+		return endpoint.ServiceInstance{}, false, err
 	}
 	return l.discover.Get(ctx, instanceId)
 }

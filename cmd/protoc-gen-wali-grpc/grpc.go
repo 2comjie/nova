@@ -354,7 +354,7 @@ func genClientConnMethod(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("case ", waliLXPackage.Ident("ModeNode"), ":")
 	g.P("return c.cc.Node(ctx, ", serviceNameSymbol, ", cfg.Target)")
 	g.P("case ", waliLXPackage.Ident("ModeKey"), ":")
-	g.P("return c.cc.Route(ctx, ", serviceNameSymbol, ", cfg.Target)")
+	g.P("return c.cc.Route(ctx, cfg.Name, cfg.Key, ", serviceNameSymbol, ")")
 	g.P("}")
 	g.P("}")
 	g.P("return c.cc.Service(ctx, ", serviceNameSymbol, ")")

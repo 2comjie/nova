@@ -16,6 +16,6 @@ type Registry interface {
 type Discover interface {
 	List(ctx context.Context) (map[string]endpoint.ServiceInstance, error)
 	Next(ctx context.Context) (map[string]endpoint.ServiceInstance, error)
-	Get(ctx context.Context, nstanceID string) (endpoint.ServiceInstance, error)
+	Get(ctx context.Context, instanceID string) (endpoint.ServiceInstance, bool, error)
 	Close()
 }
