@@ -31,6 +31,48 @@ func New(opts ...Option) network.Server {
 func (s *server) Addr() string     { return s.options.addr }
 func (s *server) Protocol() string { return protocol }
 
+func (s *server) Conn(id int64) (network.Conn, bool) {
+	if s.connMgr == nil {
+		return nil, false
+	}
+	return s.connMgr.Conn(id)
+}
+
+func (s *server) ConnByUID(uid string) (network.Conn, bool) {
+	if s.connMgr == nil {
+		return nil, false
+	}
+	return s.connMgr.ConnByUID(uid)
+}
+
+func (s *server) BindUID(connID int64, uid string) error {
+	if s.connMgr == nil {
+		return network.ErrConnNotFound
+	}
+	return s.connMgr.BindUID(connID, uid)
+}
+
+func (s *server) UnbindUID(connID int64) (string, error) {
+	if s.connMgr == nil {
+		return "", network.ErrConnNotFound
+	}
+	return s.connMgr.UnbindUID(connID)
+}
+
+func (s *server) VisitConns(fn func(network.Conn) bool) {
+	if s.connMgr == nil {
+		return
+	}
+	s.connMgr.Visit(fn)
+}
+
+func (s *server) Stat() int64 {
+	if s.connMgr == nil {
+		return 0
+	}
+	return s.connMgr.Stat()
+}
+
 func (s *server) Start(opts ...network.Option) error {
 	o := network.DefaultOption()
 	for _, opt := range opts {

@@ -57,6 +57,8 @@ func (c *BaseConn) Push(msg buffer.Buffer) error {
 	select {
 	case c.chWrite <- connWrite{typ: connDataPacket, msg: msg}:
 		return nil
+	case <-c.ctx.Done():
+		return ErrConnClosed
 	default:
 		return ErrWritChFull
 	}
@@ -67,8 +69,13 @@ func (c *BaseConn) UID() string      { return c.uid.Load().(string) }
 func (c *BaseConn) State() ConnState { return ConnState(c.state.Load()) }
 func (c *BaseConn) Attr() Attr       { return c.attr }
 
-func (c *BaseConn) Bind(uid string) { c.uid.Store(uid) }
-func (c *BaseConn) Unbind()         { c.uid.Store("") }
+func (c *BaseConn) Bind(uid string) {
+	_ = c.mgr.BindUID(c.id, uid)
+}
+
+func (c *BaseConn) Unbind() {
+	_, _ = c.mgr.UnbindUID(c.id)
+}
 
 func (c *BaseConn) Close(reason string, force ...bool) error {
 	logx.Debugf("conn %d close %s", c.id, reason)
@@ -132,6 +139,8 @@ func (c *BaseConn) init(mgr *BaseConnMgr, id int64, trans Transport) {
 		c.options.OnConnect(c)
 	}
 }
+
+func (c *BaseConn) setUID(uid string) { c.uid.Store(uid) }
 
 func (c *BaseConn) checkHealth() {
 	tk := time.NewTicker(c.options.HeartbeatCheckInterval)
@@ -212,6 +221,8 @@ func (c *BaseConn) read() {
 }
 
 func (c *BaseConn) write() {
+	defer close(c.done)
+
 	for {
 		select {
 		case r, ok := <-c.chWrite:
@@ -219,7 +230,6 @@ func (c *BaseConn) write() {
 				return
 			}
 			if r.typ == connCloseSig {
-				c.done <- struct{}{}
 				return
 			}
 			if c.isClosed() {
@@ -260,9 +270,8 @@ func (c *BaseConn) graceClose() error {
 
 func (c *BaseConn) doClose() error {
 	c.mgr.remove(c.id) // 从 connMgr 的 map 中移除
-	c.cancel()         // 广播取消，read/checkHealth goroutine 退出
+	c.cancel()         // 广播取消，read/checkHealth goroutine 退出，Push 不会再往 chWrite 写
 	close(c.chWrite)   // write goroutine 退出（forceClose 路径）
-	close(c.done)
 
 	err := c.trans.Close()
 	if c.options.OnDisconnect != nil {

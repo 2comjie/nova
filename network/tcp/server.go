@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"time"
 
 	"github.com/2comjie/wali/core/help"
 	"github.com/2comjie/wali/logx"
@@ -75,6 +76,48 @@ func (s *server) Protocol() string {
 	return protocol
 }
 
+func (s *server) Conn(id int64) (network.Conn, bool) {
+	if s.connMgr == nil {
+		return nil, false
+	}
+	return s.connMgr.Conn(id)
+}
+
+func (s *server) ConnByUID(uid string) (network.Conn, bool) {
+	if s.connMgr == nil {
+		return nil, false
+	}
+	return s.connMgr.ConnByUID(uid)
+}
+
+func (s *server) BindUID(connID int64, uid string) error {
+	if s.connMgr == nil {
+		return network.ErrConnNotFound
+	}
+	return s.connMgr.BindUID(connID, uid)
+}
+
+func (s *server) UnbindUID(connID int64) (string, error) {
+	if s.connMgr == nil {
+		return "", network.ErrConnNotFound
+	}
+	return s.connMgr.UnbindUID(connID)
+}
+
+func (s *server) VisitConns(fn func(network.Conn) bool) {
+	if s.connMgr == nil {
+		return
+	}
+	s.connMgr.Visit(fn)
+}
+
+func (s *server) Stat() int64 {
+	if s.connMgr == nil {
+		return 0
+	}
+	return s.connMgr.Stat()
+}
+
 func (s *server) init() error {
 	netAddr, err := net.ResolveTCPAddr("tcp", s.options.addr)
 	if err != nil {
@@ -115,6 +158,7 @@ func (s *server) serve(ready chan struct{}) {
 				}
 				logx.Warnf("tcp accept error: %v; retrying in %dns", err, tempDelay)
 				// net.Error.Timeout() 极少触发，sleep 逻辑保留但已有上界
+				time.Sleep(time.Duration(tempDelay))
 				continue
 			}
 			if !errors.Is(err, net.ErrClosed) {

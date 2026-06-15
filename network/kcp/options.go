@@ -1,8 +1,8 @@
 package kcp
 
 type options struct {
-	addr    string
-	block   interface{} // kcp-go BlockCrypt，nil 表示不加密
+	addr  string
+	block interface{} // kcp-go BlockCrypt，nil 表示不加密
 }
 
 type Option func(*options)

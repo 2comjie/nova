@@ -32,6 +32,48 @@ func New(opts ...Option) network.Server {
 func (s *server) Addr() string     { return s.options.addr }
 func (s *server) Protocol() string { return protocol }
 
+func (s *server) Conn(id int64) (network.Conn, bool) {
+	if s.connMgr == nil {
+		return nil, false
+	}
+	return s.connMgr.Conn(id)
+}
+
+func (s *server) ConnByUID(uid string) (network.Conn, bool) {
+	if s.connMgr == nil {
+		return nil, false
+	}
+	return s.connMgr.ConnByUID(uid)
+}
+
+func (s *server) BindUID(connID int64, uid string) error {
+	if s.connMgr == nil {
+		return network.ErrConnNotFound
+	}
+	return s.connMgr.BindUID(connID, uid)
+}
+
+func (s *server) UnbindUID(connID int64) (string, error) {
+	if s.connMgr == nil {
+		return "", network.ErrConnNotFound
+	}
+	return s.connMgr.UnbindUID(connID)
+}
+
+func (s *server) VisitConns(fn func(network.Conn) bool) {
+	if s.connMgr == nil {
+		return
+	}
+	s.connMgr.Visit(fn)
+}
+
+func (s *server) Stat() int64 {
+	if s.connMgr == nil {
+		return 0
+	}
+	return s.connMgr.Stat()
+}
+
 func (s *server) Start(opts ...network.Option) error {
 	o := network.DefaultOption()
 	for _, opt := range opts {
@@ -40,9 +82,11 @@ func (s *server) Start(opts ...network.Option) error {
 	s.baseOptions = o
 	s.connMgr = network.NewConnMgr(o)
 
-	ready := make(chan struct{})
+	ready := make(chan error, 1)
 	help.SafeGo(func() { s.serve(ready) })
-	<-ready
+	if err := <-ready; err != nil {
+		return err
+	}
 
 	if o.OnStart != nil {
 		o.OnStart()
@@ -65,7 +109,7 @@ func (s *server) Stop() error {
 	return err
 }
 
-func (s *server) serve(ready chan struct{}) {
+func (s *server) serve(ready chan error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc(s.options.path, s.handleWS)
 
@@ -77,22 +121,24 @@ func (s *server) serve(ready chan struct{}) {
 	ln, err := net.Listen("tcp", s.options.addr)
 	if err != nil {
 		logx.Errorf("ws listen error: %v", err)
-		close(ready)
+		ready <- err
 		return
 	}
-
-	close(ready)
 
 	if s.options.certFile != "" && s.options.keyFile != "" {
 		cert, err := tls.LoadX509KeyPair(s.options.certFile, s.options.keyFile)
 		if err != nil {
 			logx.Errorf("ws tls error: %v", err)
+			_ = ln.Close()
+			ready <- err
 			return
 		}
+		ready <- nil
 		tlsLn := tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{cert}})
 		_ = s.httpServer.Serve(tlsLn)
 		return
 	}
+	ready <- nil
 	_ = s.httpServer.Serve(ln)
 }
 

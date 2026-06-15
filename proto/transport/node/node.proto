@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package transport.node;
+
+option go_package = "github.com/2comjie/wali/pb/transport/node;pbNode";
+
+import "transport/request/request.proto";
+
+
+message HandleClientMessageRequest {
+  request.Request request = 1;
+}
+
+message HandleClientMessageResponse {
+  request.Response response = 1;
+}
+
+service NodeService {
+  rpc HandleClientMessage(HandleClientMessageRequest) returns (HandleClientMessageResponse);
+}
