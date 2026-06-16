@@ -42,7 +42,7 @@ func (p *defaultPacker) ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
 	size := p.options.byteOrder.Uint32(sizeBuff.Bytes())
 	if size == 0 || size > p.options.maxPacketSize {
 		// 直接拒绝掉
-		return nil, nil
+		return nil, ErrPacketSizeTooLong
 	}
 
 	// 读取消息体

@@ -7,4 +7,3 @@ require (
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 )
 
-replace github.com/2comjie/wali => ../..
