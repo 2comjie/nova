@@ -15,6 +15,8 @@ import (
 	"github.com/2comjie/wali/packet"
 )
 
+const graceWriteDrainTimeout = 5 * time.Second
+
 const (
 	connDataPacket int = 0
 	connCloseSig   int = 1
@@ -40,14 +42,6 @@ type BaseConn struct {
 	ctx     context.Context
 
 	lastHeartbeatTime atomic.Int64
-}
-
-func (c *BaseConn) Send(msg buffer.Buffer) error {
-	if err := c.checkState(); err != nil {
-		return err
-	}
-	_, err := msg.WriteTo(c.trans)
-	return err
 }
 
 func (c *BaseConn) Push(msg buffer.Buffer) error {
@@ -230,21 +224,51 @@ func (c *BaseConn) write() {
 				return
 			}
 			if r.typ == connCloseSig {
+				c.drainWrite()
 				return
 			}
 			if c.isClosed() {
 				return
 			}
-			err := func() error {
-				defer r.msg.Release()
-				_, err := r.msg.WriteTo(c.trans)
-				return err
-			}()
-			if err != nil && !errors.Is(err, net.ErrClosed) {
-				logx.Errorf("write packet err %v", err)
+			if !c.writeOne(r) {
+				return
 			}
 		}
 	}
+}
+
+func (c *BaseConn) drainWrite() {
+	_ = c.trans.SetWriteDeadline(time.Now().Add(graceWriteDrainTimeout))
+	defer c.trans.SetWriteDeadline(time.Time{}) // 清除 deadline
+
+	for {
+		select {
+		case r, ok := <-c.chWrite:
+			if !ok {
+				return
+			}
+			if r.typ == connCloseSig {
+				continue
+			}
+			if !c.writeOne(r) {
+				return
+			}
+		default:
+			return // 队列已排空
+		}
+	}
+}
+
+func (c *BaseConn) writeOne(r connWrite) (ok bool) {
+	defer r.msg.Release()
+	_, err := r.msg.WriteTo(c.trans)
+	if err != nil {
+		if !errors.Is(err, net.ErrClosed) {
+			logx.Errorf("write packet err %v", err)
+		}
+		return false
+	}
+	return true
 }
 
 func (c *BaseConn) forceClose() error {
@@ -261,7 +285,7 @@ func (c *BaseConn) graceClose() error {
 		return ErrConnNotOpen
 	}
 	c.chWrite <- connWrite{typ: connCloseSig}
-	<-c.done // 等 write goroutine 排空队列后回报
+	<-c.done
 	if !c.state.CompareAndSwap(int32(ConnHanged), int32(ConnClosed)) {
 		return ErrConnNotHanged
 	}

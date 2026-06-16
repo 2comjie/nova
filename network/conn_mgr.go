@@ -89,51 +89,48 @@ func (cm *BaseConnMgr) BindUID(connID int64, uid string) error {
 
 	cp := cm.partitions[connID%int64(partitionCount)]
 	cp.rw.Lock()
+	defer cp.rw.Unlock()
+
 	conn, ok := cp.connections[connID]
 	if !ok {
-		cp.rw.Unlock()
 		return ErrConnNotFound
 	}
 	if conn.State() == ConnClosed {
-		cp.rw.Unlock()
 		return ErrConnClosed
 	}
 
 	oldUID := conn.UID()
+
+	// 同 UID，检查映射是否已正确
 	if oldUID == uid {
-		// 快速路径: 同一个 UID, 检查是否已经正确映射
 		up := cm.uidParts[cm.uidHash(uid)]
 		up.rw.RLock()
 		alreadyOK := up.index[uid] == conn
 		up.rw.RUnlock()
-		cp.rw.Unlock()
 		if alreadyOK {
 			return nil
 		}
-		// 映射被覆盖了, 需要修复, 走下面的逻辑重新绑定
-	} else {
-		cp.rw.Unlock()
 	}
 
 	// 清理旧 UID 映射
 	if oldUID != "" {
-		up := cm.uidParts[cm.uidHash(oldUID)]
-		up.rw.Lock()
-		if c := up.index[oldUID]; c != nil && c.ID() == connID {
-			delete(up.index, oldUID)
+		oldUP := cm.uidParts[cm.uidHash(oldUID)]
+		oldUP.rw.Lock()
+		if c := oldUP.index[oldUID]; c != nil && c.ID() == connID {
+			delete(oldUP.index, oldUID)
 		}
-		up.rw.Unlock()
+		oldUP.rw.Unlock()
 	}
 
 	// 建立新 UID 映射
-	up := cm.uidParts[cm.uidHash(uid)]
-	up.rw.Lock()
-	if oldConn := up.index[uid]; oldConn != nil && oldConn.ID() != connID {
+	newUP := cm.uidParts[cm.uidHash(uid)]
+	newUP.rw.Lock()
+	if oldConn := newUP.index[uid]; oldConn != nil && oldConn.ID() != connID {
 		oldConn.setUID("") // 顶掉旧的连接
 	}
 	conn.setUID(uid)
-	up.index[uid] = conn
-	up.rw.Unlock()
+	newUP.index[uid] = conn
+	newUP.rw.Unlock()
 
 	return nil
 }

@@ -1,6 +1,9 @@
 package tcp
 
-import "net"
+import (
+	"net"
+	"time"
+)
 
 type tcpTransport struct {
 	conn net.Conn
@@ -24,4 +27,8 @@ func (t *tcpTransport) LocalAddr() net.Addr {
 
 func (t *tcpTransport) RemoteAddr() net.Addr {
 	return t.conn.RemoteAddr()
+}
+
+func (tr *tcpTransport) SetWriteDeadline(deadline time.Time) error {
+	return tr.conn.SetWriteDeadline(deadline)
 }

@@ -3,6 +3,7 @@ package network
 import (
 	"io"
 	"net"
+	"time"
 )
 
 type Transport interface {
@@ -11,4 +12,5 @@ type Transport interface {
 	Close() error
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
+	SetWriteDeadline(t time.Time) error
 }

@@ -26,8 +26,6 @@ type (
 		Bind(uid string)
 		// Unbind 解绑用户ID
 		Unbind()
-		// Send 发送消息（同步）
-		Send(msg buffer.Buffer) error
 		// Push 发送消息（异步）
 		Push(msg buffer.Buffer) error
 		// State 获取连接状态

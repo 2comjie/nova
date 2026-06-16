@@ -2,6 +2,7 @@ package kcp
 
 import (
 	"net"
+	"time"
 
 	kcp "github.com/xtaci/kcp-go"
 )
@@ -16,3 +17,6 @@ func (t *kcpTransport) Write(p []byte) (int, error) { return t.sess.Write(p) }
 func (t *kcpTransport) Close() error                { return t.sess.Close() }
 func (t *kcpTransport) LocalAddr() net.Addr         { return t.sess.LocalAddr() }
 func (t *kcpTransport) RemoteAddr() net.Addr        { return t.sess.RemoteAddr() }
+func (t *kcpTransport) SetWriteDeadline(deadline time.Time) error {
+	return t.sess.SetWriteDeadline(deadline)
+}

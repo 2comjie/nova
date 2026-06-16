@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"time"
 
 	"nhooyr.io/websocket"
 )
@@ -50,6 +51,9 @@ func (t *wsTransport) Close() error {
 
 func (t *wsTransport) LocalAddr() net.Addr  { return addr("ws-local") }
 func (t *wsTransport) RemoteAddr() net.Addr { return addr("ws-remote") }
+
+// ws 写操作通过 ctx 控制超时，SetWriteDeadline 为空操作
+func (t *wsTransport) SetWriteDeadline(_ time.Time) error { return nil }
 
 // ws 没有标准 net.Addr，用简单包装
 type addr string
