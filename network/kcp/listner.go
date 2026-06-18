@@ -3,11 +3,12 @@ package kcp
 import (
 	"net"
 
-	"github.com/2comjie/wali/network"
+	"github.com/2comjie/wali/network/client"
+	"github.com/2comjie/wali/network/server"
 	kcp "github.com/xtaci/kcp-go"
 )
 
-func NewListener(opts ...Option) network.Listener {
+func NewListener(opts ...Option) server.Listener {
 	options := defaultOptions()
 	for _, opt := range opts {
 		opt(options)
@@ -15,6 +16,19 @@ func NewListener(opts ...Option) network.Listener {
 	return &listener{
 		options: options,
 	}
+}
+
+func Dial(address string, opts ...Option) (client.Transport, error) {
+	options := defaultOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	sess, err := kcp.DialWithOptions(address, options.block, options.dataShards, options.parityShards)
+	if err != nil {
+		return nil, err
+	}
+	return &transport{sess: sess}, nil
 }
 
 type listener struct {
@@ -45,7 +59,7 @@ func (l *listener) Addr() net.Addr {
 	return l.ln.Addr()
 }
 
-func (l *listener) Accept() (network.Transport, error) {
+func (l *listener) Accept() (server.Transport, error) {
 	sess, err := l.ln.AcceptKCP()
 	if err != nil {
 		return nil, err

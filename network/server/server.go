@@ -1,4 +1,4 @@
-package network
+package server
 
 import (
 	"context"
@@ -26,7 +26,7 @@ type NetServer interface {
 	ConnByUid(uid string) Conn
 }
 
-func Serve(ctx context.Context, ln Listener, opts ...Option) {
+func NewNetServer(opts ...Option) NetServer {
 	options := defaultOptions()
 	for _, opt := range opts {
 		opt(options)
@@ -39,7 +39,7 @@ func Serve(ctx context.Context, ln Listener, opts ...Option) {
 		uidToConn: make(map[string]*conn),
 		nextId:    atomic.Int64{},
 	}
-	server.Serve(ctx, ln)
+	return server
 }
 
 type netServer struct {
@@ -205,24 +205,30 @@ func (s *netServer) reader(conn *conn) {
 					return false
 				}
 
-				msg := s.options.packer.ToMessage(buf)
-				if msg.MessageType() == packet.Req {
+				msg, err := s.options.packer.ToMessage(buf)
+				if err != nil {
+					s.CloseConn(conn.id, fmt.Sprintf("invalid message: %s", err))
+					return false
+				}
+				switch msg.MessageType() {
+				case packet.Req:
 					if s.options.onMessage != nil {
 						s.options.onMessage(conn, msg)
 					}
 					return true
-				}
-
-				if msg.MessageType() == packet.Ping {
+				case packet.Ping:
 					conn.lastHeartbeatTime.Store(time.Now())
 					if s.options.onHeartbeat != nil {
 						s.options.onHeartbeat(conn)
 					}
+					// 写入心跳回包
+					pong, _ := s.options.packer.PackBuffer(packet.Pong, 0, 0, nil)
+					_ = conn.Write(pong)
 					return true
+				default:
+					s.CloseConn(conn.id, fmt.Sprintf("unknown message type: %d", msg.MessageType()))
+					return false
 				}
-
-				s.CloseConn(conn.id, fmt.Sprintf("unknown message type: %d", msg.MessageType()))
-				return false
 			}()
 
 			if !ok {

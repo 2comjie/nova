@@ -4,10 +4,11 @@ import (
 	"crypto/tls"
 	"net"
 
-	"github.com/2comjie/wali/network"
+	"github.com/2comjie/wali/network/client"
+	"github.com/2comjie/wali/network/server"
 )
 
-func NewListener(opts ...Option) network.Listener {
+func NewListener(opts ...Option) server.Listener {
 	options := defaultOptions()
 	for _, opt := range opts {
 		opt(options)
@@ -17,6 +18,39 @@ func NewListener(opts ...Option) network.Listener {
 		options: options,
 	}
 	return ln
+}
+
+func Dial(address string, opts ...Option) (client.Transport, error) {
+	options := defaultOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	netAddr, err := net.ResolveTCPAddr("tcp", address)
+	if err != nil {
+		return nil, err
+	}
+
+	if options.certFile != "" && options.keyFile != "" {
+		cert, err := tls.LoadX509KeyPair(options.certFile, options.keyFile)
+		if err != nil {
+			return nil, err
+		}
+		conn, err := tls.Dial("tcp", netAddr.String(), &tls.Config{
+			Certificates:       []tls.Certificate{cert},
+			InsecureSkipVerify: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &transport{rawConn: conn}, nil
+	}
+
+	conn, err := net.DialTCP("tcp", nil, netAddr)
+	if err != nil {
+		return nil, err
+	}
+	return &transport{rawConn: conn}, nil
 }
 
 type listener struct {
@@ -60,7 +94,7 @@ func (l *listener) Addr() net.Addr {
 	return l.ln.Addr()
 }
 
-func (l *listener) Accept() (network.Transport, error) {
+func (l *listener) Accept() (server.Transport, error) {
 	conn, err := l.ln.AcceptTCP()
 	if err != nil {
 		return nil, err

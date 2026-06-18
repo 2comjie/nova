@@ -15,7 +15,7 @@ func init() {
 type Packer interface {
 	ReadBuffer(reader io.Reader) (buffer.Buffer, error)
 	PackBuffer(messageType MessageType, route int32, seq int32, data buffer.Buffer) (buffer.Buffer, error)
-	ToMessage(buff buffer.Buffer) Message
+	ToMessage(buff buffer.Buffer) (Message, error)
 }
 
 type defaultPacker struct {
@@ -84,8 +84,29 @@ func (p *defaultPacker) PackBuffer(messageType MessageType, route int32, seq int
 	return buf, nil
 }
 
-func (p *defaultPacker) ToMessage(buff buffer.Buffer) Message {
-	return Message{
-		buff: buff,
+func (p *defaultPacker) ToMessage(buff buffer.Buffer) (Message, error) {
+	data := buff.Bytes()
+
+	// 校验最小长度：head(4) + route(4) + seq(4)
+	if len(data) < headerSize {
+		buff.Release()
+		return Message{}, ErrInvalidPacket
 	}
+
+	head := p.options.byteOrder.Uint32(data[0:4])
+	msgType := MessageType(head & 0x7) // 低 3 位为消息类型
+
+	switch msgType {
+	case Ping, Pong:
+		if len(data) != headerSize {
+			buff.Release()
+			return Message{}, ErrInvalidPacket
+		}
+	case Req, Rsp, Push:
+	default:
+		buff.Release()
+		return Message{}, ErrInvalidPacket
+	}
+
+	return Message{buff: buff}, nil
 }

@@ -3,7 +3,7 @@ package tcp
 import "net"
 
 type transport struct {
-	rawConn *net.TCPConn
+	rawConn net.Conn
 }
 
 func (t *transport) Read(p []byte) (n int, err error) {
