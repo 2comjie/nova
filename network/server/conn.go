@@ -20,7 +20,7 @@ type Conn interface {
 	Set(k, v string)
 	Del(k string)
 	Range(fn func(k, v string) bool)
-	Write(buf buffer.Buffer) error // 异步写入消息
+	Write([]byte) error // 异步写入消息
 }
 
 type conn struct {
@@ -69,17 +69,21 @@ func (c *conn) Range(fn func(k, v string) bool) {
 		return fn(key.(string), value.(string))
 	})
 }
-func (c *conn) Write(buf buffer.Buffer) error {
+func (c *conn) Write(data []byte) error {
 	if c.state.Load() != ConnStateOpen {
 		return ErrConnClosed
 	}
+	buf := buffer.MallocBytes(len(data))
+	copy(buf.Bytes(), data)
 	for {
 		select {
 		case <-c.ctx.Done():
+			buf.Release()
 			return ErrConnClosed
 		case c.writeCh <- buf:
 			return nil
 		default:
+			buf.Release()
 			return ErrWriteChannelFull
 		}
 	}

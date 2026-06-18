@@ -20,8 +20,8 @@ type NetServer interface {
 	Bind(connId int64, uid string) error
 	Unbind(connId int64)
 	CloseConn(connId int64, reason string)
-	WriteToCid(connId int64, buf buffer.Buffer) error
-	WriteToUid(uid string, buf buffer.Buffer) error
+	WriteToCid(connId int64, buf []byte) error
+	WriteToUid(uid string, buf []byte) error
 	ConnById(connId int64) Conn
 	ConnByUid(uid string) Conn
 }
@@ -155,7 +155,7 @@ func (s *netServer) CloseConn(connId int64, reason string) {
 	}
 	logx.Debugf("close conn: %d, reason: %s", connId, reason)
 }
-func (s *netServer) WriteToCid(connId int64, buf buffer.Buffer) error {
+func (s *netServer) WriteToCid(connId int64, buf []byte) error {
 	s.rw.RLock()
 	conn := s.conns[connId]
 	s.rw.RUnlock()
@@ -164,7 +164,7 @@ func (s *netServer) WriteToCid(connId int64, buf buffer.Buffer) error {
 	}
 	return conn.Write(buf)
 }
-func (s *netServer) WriteToUid(uid string, buf buffer.Buffer) error {
+func (s *netServer) WriteToUid(uid string, buf []byte) error {
 	s.rw.RLock()
 	conn := s.uidToConn[uid]
 	s.rw.RUnlock()
@@ -222,7 +222,7 @@ func (s *netServer) reader(conn *conn) {
 						s.options.onHeartbeat(conn)
 					}
 					// 写入心跳回包
-					pong, _ := s.options.packer.PackBuffer(packet.Pong, 0, 0, nil)
+					pong := s.options.packer.PackBytes(packet.Pong, 0, 0, nil)
 					_ = conn.Write(pong)
 					return true
 				default:

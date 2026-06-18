@@ -14,7 +14,8 @@ func init() {
 
 type Packer interface {
 	ReadBuffer(reader io.Reader) (buffer.Buffer, error)
-	PackBuffer(messageType MessageType, route int32, seq int32, data buffer.Buffer) (buffer.Buffer, error)
+	PackBuffer(messageType MessageType, route int32, seq int32, data buffer.Buffer) buffer.Buffer
+	PackBytes(messageType MessageType, route int32, seq int32, data []byte) []byte
 	ToMessage(buff buffer.Buffer) (Message, error)
 }
 
@@ -54,7 +55,7 @@ func (p *defaultPacker) ReadBuffer(reader io.Reader) (buffer.Buffer, error) {
 	}
 	return dataBuff, nil
 }
-func (p *defaultPacker) PackBuffer(messageType MessageType, route int32, seq int32, data buffer.Buffer) (buffer.Buffer, error) {
+func (p *defaultPacker) PackBuffer(messageType MessageType, route int32, seq int32, data buffer.Buffer) buffer.Buffer {
 	dataLen := 0
 	if data != nil {
 		dataLen = data.Len()
@@ -81,7 +82,18 @@ func (p *defaultPacker) PackBuffer(messageType MessageType, route int32, seq int
 	if data != nil {
 		buf.Mount(data)
 	}
-	return buf, nil
+	return buf
+}
+
+func (p *defaultPacker) PackBytes(messageType MessageType, route int32, seq int32, data []byte) []byte {
+	total := 16 + len(data) // size(4) + head(4) + route(4) + seq(4) + data
+	buf := make([]byte, total)
+	p.options.byteOrder.PutUint32(buf[0:4], uint32(12+len(data))) // body size
+	p.options.byteOrder.PutUint32(buf[4:8], uint32(messageType))
+	p.options.byteOrder.PutUint32(buf[8:12], uint32(route))
+	p.options.byteOrder.PutUint32(buf[12:16], uint32(seq))
+	copy(buf[16:], data)
+	return buf
 }
 
 func (p *defaultPacker) ToMessage(buff buffer.Buffer) (Message, error) {

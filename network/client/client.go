@@ -78,10 +78,8 @@ func (c *client) Call(ctx context.Context, route int32, data buffer.Buffer) (pac
 
 	seq := c.nextSeq.Add(1)
 
-	buf, err := c.options.packer.PackBuffer(packet.Req, route, seq, data)
-	if err != nil {
-		return packet.Message{}, fmt.Errorf("pack buffer: %w", err)
-	}
+	buf := c.options.packer.PackBuffer(packet.Req, route, seq, data)
+
 	defer buf.Release()
 
 	ch := make(chan packet.Message, 1)
@@ -118,10 +116,7 @@ func (c *client) Send(route int32, data buffer.Buffer) error {
 		return errors.New("client closed")
 	}
 
-	buf, err := c.options.packer.PackBuffer(packet.Push, route, 0, data)
-	if err != nil {
-		return fmt.Errorf("pack buffer: %w", err)
-	}
+	buf := c.options.packer.PackBuffer(packet.Push, route, 0, data)
 	defer buf.Release()
 
 	if _, err := buf.WriteTo(c.trans); err != nil {
@@ -211,10 +206,7 @@ func (c *client) heartbeat(trans Transport) {
 		case <-c.ctx.Done():
 			return
 		case <-tk.C:
-			buf, err := c.options.packer.PackBuffer(packet.Ping, 0, 0, nil)
-			if err != nil {
-				return
-			}
+			buf := c.options.packer.PackBuffer(packet.Ping, 0, 0, nil)
 			if _, err := buf.WriteTo(trans); err != nil {
 				buf.Release()
 				return
