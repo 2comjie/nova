@@ -4,9 +4,9 @@ set -e
 cd "$(dirname "$0")"
 
 PROTO_DIR="./proto"
-OUT_DIR="../pb"
+OUT_DIR="../internal/pb"
 
-mkdir -p "./pb"
+
 
 run_protoc() {
     local output exit_code

@@ -74,7 +74,7 @@ message IsOnlineResponse{
   bool online = 1;
 }
 
-service GateService {
+service Gate {
   rpc BindUid(BindUidRequest) returns (BindUidResponse);
   rpc UnbindUid(UnbindUidRequest) returns (UnbindUidResponse);
   rpc Push(PushRequest) returns (PushMessageResponse);

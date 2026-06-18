@@ -24,6 +24,8 @@ type NetServer interface {
 	WriteToUid(uid string, buf []byte) error
 	ConnById(connId int64) Conn
 	ConnByUid(uid string) Conn
+	Range(fn func(Conn) bool)
+	ConnCount() int
 }
 
 func NewNetServer(opts ...Option) NetServer {
@@ -182,6 +184,22 @@ func (s *netServer) ConnByUid(uid string) Conn {
 	s.rw.RLock()
 	defer s.rw.RUnlock()
 	return s.uidToConn[uid]
+}
+
+func (s *netServer) Range(fn func(Conn) bool) {
+	s.rw.RLock()
+	defer s.rw.RUnlock()
+	for _, c := range s.conns {
+		if !fn(c) {
+			return
+		}
+	}
+}
+
+func (s *netServer) ConnCount() int {
+	s.rw.RLock()
+	defer s.rw.RUnlock()
+	return len(s.conns)
 }
 
 func (s *netServer) reader(conn *conn) {

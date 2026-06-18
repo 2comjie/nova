@@ -1,6 +1,0 @@
-server:
-  port: 8080
-  instance-id: ${application.name}
-
-application:
-  name: demo

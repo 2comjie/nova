@@ -916,8 +916,8 @@ const file_transport_gate_gate_proto_rawDesc = "" +
 	"\aconn_id\x18\x01 \x01(\x03R\x06connId\x12\x10\n" +
 	"\x03uid\x18\x02 \x01(\tR\x03uid\"*\n" +
 	"\x10IsOnlineResponse\x12\x16\n" +
-	"\x06online\x18\x01 \x01(\bR\x06online2\xb4\x05\n" +
-	"\vGateService\x12J\n" +
+	"\x06online\x18\x01 \x01(\bR\x06online2\xad\x05\n" +
+	"\x04Gate\x12J\n" +
 	"\aBindUid\x12\x1e.transport.gate.BindUidRequest\x1a\x1f.transport.gate.BindUidResponse\x12P\n" +
 	"\tUnbindUid\x12 .transport.gate.UnbindUidRequest\x1a!.transport.gate.UnbindUidResponse\x12H\n" +
 	"\x04Push\x12\x1b.transport.gate.PushRequest\x1a#.transport.gate.PushMessageResponse\x12P\n" +
@@ -962,24 +962,24 @@ var file_transport_gate_gate_proto_goTypes = []any{
 	(*IsOnlineResponse)(nil),    // 17: transport.gate.IsOnlineResponse
 }
 var file_transport_gate_gate_proto_depIdxs = []int32{
-	0,  // 0: transport.gate.GateService.BindUid:input_type -> transport.gate.BindUidRequest
-	2,  // 1: transport.gate.GateService.UnbindUid:input_type -> transport.gate.UnbindUidRequest
-	4,  // 2: transport.gate.GateService.Push:input_type -> transport.gate.PushRequest
-	6,  // 3: transport.gate.GateService.BroadCast:input_type -> transport.gate.BroadCastRequest
-	8,  // 4: transport.gate.GateService.MultiCast:input_type -> transport.gate.MultiCastRequest
-	10, // 5: transport.gate.GateService.Kick:input_type -> transport.gate.KickRequest
-	12, // 6: transport.gate.GateService.Stat:input_type -> transport.gate.StatRequest
-	14, // 7: transport.gate.GateService.GetIP:input_type -> transport.gate.GetIPRequest
-	16, // 8: transport.gate.GateService.IsOnline:input_type -> transport.gate.IsOnlineRequest
-	1,  // 9: transport.gate.GateService.BindUid:output_type -> transport.gate.BindUidResponse
-	3,  // 10: transport.gate.GateService.UnbindUid:output_type -> transport.gate.UnbindUidResponse
-	5,  // 11: transport.gate.GateService.Push:output_type -> transport.gate.PushMessageResponse
-	7,  // 12: transport.gate.GateService.BroadCast:output_type -> transport.gate.BroadCastResponse
-	9,  // 13: transport.gate.GateService.MultiCast:output_type -> transport.gate.MultiCastResponse
-	11, // 14: transport.gate.GateService.Kick:output_type -> transport.gate.KickResponse
-	13, // 15: transport.gate.GateService.Stat:output_type -> transport.gate.StatResponse
-	15, // 16: transport.gate.GateService.GetIP:output_type -> transport.gate.GetIPResponse
-	17, // 17: transport.gate.GateService.IsOnline:output_type -> transport.gate.IsOnlineResponse
+	0,  // 0: transport.gate.Gate.BindUid:input_type -> transport.gate.BindUidRequest
+	2,  // 1: transport.gate.Gate.UnbindUid:input_type -> transport.gate.UnbindUidRequest
+	4,  // 2: transport.gate.Gate.Push:input_type -> transport.gate.PushRequest
+	6,  // 3: transport.gate.Gate.BroadCast:input_type -> transport.gate.BroadCastRequest
+	8,  // 4: transport.gate.Gate.MultiCast:input_type -> transport.gate.MultiCastRequest
+	10, // 5: transport.gate.Gate.Kick:input_type -> transport.gate.KickRequest
+	12, // 6: transport.gate.Gate.Stat:input_type -> transport.gate.StatRequest
+	14, // 7: transport.gate.Gate.GetIP:input_type -> transport.gate.GetIPRequest
+	16, // 8: transport.gate.Gate.IsOnline:input_type -> transport.gate.IsOnlineRequest
+	1,  // 9: transport.gate.Gate.BindUid:output_type -> transport.gate.BindUidResponse
+	3,  // 10: transport.gate.Gate.UnbindUid:output_type -> transport.gate.UnbindUidResponse
+	5,  // 11: transport.gate.Gate.Push:output_type -> transport.gate.PushMessageResponse
+	7,  // 12: transport.gate.Gate.BroadCast:output_type -> transport.gate.BroadCastResponse
+	9,  // 13: transport.gate.Gate.MultiCast:output_type -> transport.gate.MultiCastResponse
+	11, // 14: transport.gate.Gate.Kick:output_type -> transport.gate.KickResponse
+	13, // 15: transport.gate.Gate.Stat:output_type -> transport.gate.StatResponse
+	15, // 16: transport.gate.Gate.GetIP:output_type -> transport.gate.GetIPResponse
+	17, // 17: transport.gate.Gate.IsOnline:output_type -> transport.gate.IsOnlineResponse
 	9,  // [9:18] is the sub-list for method output_type
 	0,  // [0:9] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name

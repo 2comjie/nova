@@ -118,8 +118,8 @@ const file_transport_node_node_proto_rawDesc = "" +
 	"\x1aHandleClientMessageRequest\x124\n" +
 	"\arequest\x18\x01 \x01(\v2\x1a.transport.request.RequestR\arequest\"V\n" +
 	"\x1bHandleClientMessageResponse\x127\n" +
-	"\bresponse\x18\x01 \x01(\v2\x1b.transport.request.ResponseR\bresponse2}\n" +
-	"\vNodeService\x12n\n" +
+	"\bresponse\x18\x01 \x01(\v2\x1b.transport.request.ResponseR\bresponse2v\n" +
+	"\x04Node\x12n\n" +
 	"\x13HandleClientMessage\x12*.transport.node.HandleClientMessageRequest\x1a+.transport.node.HandleClientMessageResponseB2Z0github.com/2comjie/wali/pb/transport/node;pbNodeb\x06proto3"
 
 var (
@@ -144,8 +144,8 @@ var file_transport_node_node_proto_goTypes = []any{
 var file_transport_node_node_proto_depIdxs = []int32{
 	2, // 0: transport.node.HandleClientMessageRequest.request:type_name -> transport.request.Request
 	3, // 1: transport.node.HandleClientMessageResponse.response:type_name -> transport.request.Response
-	0, // 2: transport.node.NodeService.HandleClientMessage:input_type -> transport.node.HandleClientMessageRequest
-	1, // 3: transport.node.NodeService.HandleClientMessage:output_type -> transport.node.HandleClientMessageResponse
+	0, // 2: transport.node.Node.HandleClientMessage:input_type -> transport.node.HandleClientMessageRequest
+	1, // 3: transport.node.Node.HandleClientMessage:output_type -> transport.node.HandleClientMessageResponse
 	3, // [3:4] is the sub-list for method output_type
 	2, // [2:3] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name

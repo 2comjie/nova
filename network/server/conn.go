@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"net"
 	"sync"
 	"time"
 
@@ -17,10 +18,12 @@ const (
 type Conn interface {
 	ID() int64
 	UID() string
+	RemoteAddr() net.Addr
 	Set(k, v string)
 	Del(k string)
 	Range(fn func(k, v string) bool)
 	Write([]byte) error // 异步写入消息
+	IsOpen() bool
 }
 
 type conn struct {
@@ -58,6 +61,9 @@ func (c *conn) ID() int64 {
 func (c *conn) UID() string {
 	return c.uid.Load()
 }
+func (c *conn) RemoteAddr() net.Addr {
+	return c.trans.RemoteAddr()
+}
 func (c *conn) Set(key string, v string) {
 	c.attr.Store(key, v)
 }
@@ -68,6 +74,9 @@ func (c *conn) Range(fn func(k, v string) bool) {
 	c.attr.Range(func(key, value any) bool {
 		return fn(key.(string), value.(string))
 	})
+}
+func (c *conn) IsOpen() bool {
+	return c.state.Load() == ConnStateOpen
 }
 func (c *conn) Write(data []byte) error {
 	if c.state.Load() != ConnStateOpen {

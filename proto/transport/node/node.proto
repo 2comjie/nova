@@ -15,6 +15,6 @@ message HandleClientMessageResponse {
   request.Response response = 1;
 }
 
-service NodeService {
+service Node {
   rpc HandleClientMessage(HandleClientMessageRequest) returns (HandleClientMessageResponse);
 }

@@ -324,8 +324,6 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	g.P("}")
 	g.P()
 
-	genAppRpcServiceRegistration(g, service, serverType)
-
 	helper.generateServerFunctions(gen, file, g, service, serverType, serviceDescVar)
 }
 
@@ -358,27 +356,6 @@ func genClientConnMethod(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("}")
 	g.P("}")
 	g.P("return c.cc.Service(ctx, ", serviceNameSymbol, ")")
-	g.P("}")
-	g.P()
-}
-
-func genAppRpcServiceRegistration(g *protogen.GeneratedFile, service *protogen.Service, serverType string) {
-	serviceNameSymbol := helper.formatServiceNameSymbol(service)
-	rpcServiceFactoryName := "New" + service.GoName + "RpcService"
-	rpcServiceRegisterName := "Register" + service.GoName + "RpcService"
-
-	g.P("func ", rpcServiceFactoryName, "(desc string) ", endpointPackage.Ident("RpcService"), " {")
-	g.P("return ", endpointPackage.Ident("RpcService"), "{")
-	g.P("Name: ", serviceNameSymbol, ",")
-	g.P("Desc: desc,")
-	g.P("}")
-	g.P("}")
-	g.P()
-
-	g.P("func ", rpcServiceRegisterName, "(app ", appPackage.Ident("App"), ", srv ", serverType, ", host string, port int, desc string) {")
-	g.P("app.RegisterRpcService(host, port, ", rpcServiceFactoryName, "(desc), func(registrar ", grpcPackage.Ident("ServiceRegistrar"), ") {")
-	g.P("Register", service.GoName, "Server(registrar, srv)")
-	g.P("})")
 	g.P("}")
 	g.P()
 }
