@@ -3,14 +3,18 @@ package network
 import (
 	"io"
 	"net"
-	"time"
 )
 
 type Transport interface {
-	io.Reader
-	io.Writer
-	Close() error
+	io.ReadWriteCloser
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
-	SetWriteDeadline(t time.Time) error
+}
+
+type Listener interface {
+	io.Closer
+	Listen(address string) error
+	Addr() net.Addr
+	Accept() (Transport, error)
+	Protocol() string
 }

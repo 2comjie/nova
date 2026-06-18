@@ -1,30 +1,23 @@
 package tcp
 
-type options struct {
-	addr     string
-	certFile string
-	keyFile  string
-}
-
 type Option func(*options)
 
-func WithAddr(addr string) Option {
-	return func(o *options) {
-		o.addr = addr
-	}
+type options struct {
+	certFile string // 证书文件
+	keyFile  string // 秘钥文件
 }
 
-func WithTLS(certFile string, keyFile string) Option {
+func WithCertFile(certFile string) Option {
 	return func(o *options) {
 		o.certFile = certFile
+	}
+}
+func WithKeyFile(keyFile string) Option {
+	return func(o *options) {
 		o.keyFile = keyFile
 	}
 }
 
-func defaultOption() *options {
-	return &options{
-		addr:     ":8000",
-		certFile: "",
-		keyFile:  "",
-	}
+func defaultOptions() *options {
+	return &options{}
 }

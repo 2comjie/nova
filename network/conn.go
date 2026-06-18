@@ -1,55 +1,86 @@
 package network
 
 import (
-	"net"
+	"context"
+	"sync"
+	"time"
 
 	"github.com/2comjie/wali/core/buffer"
+	"go.uber.org/atomic"
 )
 
 const (
-	ConnOpened ConnState = iota + 1 // 连接打开
-	ConnHanged                      // 连接挂起
-	ConnClosed                      // 连接关闭
+	ConnStateOpen  = 0
+	ConnStateClose = 1
 )
 
-type (
-	ConnState int32
+type Conn interface {
+	ID() int64
+	UID() string
+	Set(k, v string)
+	Del(k string)
+	Range(fn func(k, v string) bool)
+	Write(buf buffer.Buffer) error // 异步写入消息
+}
 
-	Conn interface {
-		// ID 获取连接ID
-		ID() int64
-		// UID 获取用户ID
-		UID() string
-		// Attr 属性接口
-		Attr() Attr
-		// Bind 绑定用户ID
-		Bind(uid string)
-		// Unbind 解绑用户ID
-		Unbind()
-		// Push 发送消息（异步）
-		Push(msg buffer.Buffer) error
-		// State 获取连接状态
-		State() ConnState
-		// Close 关闭连接
-		Close(reason string, force ...bool) error
-		// LocalIP 获取本地IP
-		LocalIP() (string, error)
-		// LocalAddr 获取本地地址
-		LocalAddr() (net.Addr, error)
-		// RemoteIP 获取远端IP
-		RemoteIP() (string, error)
-		// RemoteAddr 获取远端地址
-		RemoteAddr() (net.Addr, error)
-	}
+type conn struct {
+	id                int64
+	uid               atomic.String
+	attr              sync.Map
+	trans             Transport
+	lastHeartbeatTime atomic.Time
+	writeCh           chan buffer.Buffer
+	state             atomic.Int32
+	ctx               context.Context
+	cancel            context.CancelFunc
+}
 
-	Attr interface {
-		// Set 设置属性值
-		Set(key, value string)
-		// Get 获取属性值
-		Get(key string) (string, bool)
-		// Del 删除属性值
-		Del(key string) bool
-		// Visit 访问所有的属性值
-		Visit(fn func(key, value string) bool)
+func newConn(trans Transport, id int64, writeCh chan buffer.Buffer) *conn {
+	ctx, cancel := context.WithCancel(context.Background())
+	conn := &conn{
+		id:      id,
+		uid:     atomic.String{},
+		attr:    sync.Map{},
+		trans:   trans,
+		writeCh: writeCh,
+		state:   atomic.Int32{},
+		ctx:     ctx,
+		cancel:  cancel,
 	}
-)
+	conn.lastHeartbeatTime.Store(time.Now())
+	conn.state.Store(ConnStateOpen)
+	return conn
+}
+
+func (c *conn) ID() int64 {
+	return c.id
+}
+func (c *conn) UID() string {
+	return c.uid.Load()
+}
+func (c *conn) Set(key string, v string) {
+	c.attr.Store(key, v)
+}
+func (c *conn) Del(key string) {
+	c.attr.Delete(key)
+}
+func (c *conn) Range(fn func(k, v string) bool) {
+	c.attr.Range(func(key, value any) bool {
+		return fn(key.(string), value.(string))
+	})
+}
+func (c *conn) Write(buf buffer.Buffer) error {
+	if c.state.Load() != ConnStateOpen {
+		return ErrConnClosed
+	}
+	for {
+		select {
+		case <-c.ctx.Done():
+			return ErrConnClosed
+		case c.writeCh <- buf:
+			return nil
+		default:
+			return ErrWriteChannelFull
+		}
+	}
+}

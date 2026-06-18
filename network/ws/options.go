@@ -1,32 +1,33 @@
 package ws
 
-type options struct {
-	addr     string
-	certFile string
-	keyFile  string
-	path     string // WebSocket 升级路径，默认 "/"
-}
-
 type Option func(*options)
 
-func WithAddr(addr string) Option {
-	return func(o *options) { o.addr = addr }
+type options struct {
+	path     string // WebSocket 升级路径，默认 "/"
+	certFile string // TLS 证书文件
+	keyFile  string // TLS 秘钥文件
 }
 
-func WithTLS(certFile, keyFile string) Option {
+func WithPath(path string) Option {
+	return func(o *options) {
+		o.path = path
+	}
+}
+
+func WithCertFile(certFile string) Option {
 	return func(o *options) {
 		o.certFile = certFile
+	}
+}
+
+func WithKeyFile(keyFile string) Option {
+	return func(o *options) {
 		o.keyFile = keyFile
 	}
 }
 
-func WithPath(path string) Option {
-	return func(o *options) { o.path = path }
-}
-
-func defaultOption() *options {
+func defaultOptions() *options {
 	return &options{
-		addr: ":8000",
 		path: "/",
 	}
 }

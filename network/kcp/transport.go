@@ -2,21 +2,20 @@ package kcp
 
 import (
 	"net"
-	"time"
 
 	kcp "github.com/xtaci/kcp-go"
 )
 
-// kcpTransport 把 kcp.UDPSession 包装成 network.Transport
-type kcpTransport struct {
+type transport struct {
 	sess *kcp.UDPSession
 }
 
-func (t *kcpTransport) Read(p []byte) (int, error)  { return t.sess.Read(p) }
-func (t *kcpTransport) Write(p []byte) (int, error) { return t.sess.Write(p) }
-func (t *kcpTransport) Close() error                { return t.sess.Close() }
-func (t *kcpTransport) LocalAddr() net.Addr         { return t.sess.LocalAddr() }
-func (t *kcpTransport) RemoteAddr() net.Addr        { return t.sess.RemoteAddr() }
-func (t *kcpTransport) SetWriteDeadline(deadline time.Time) error {
-	return t.sess.SetWriteDeadline(deadline)
+func newTransport(sess *kcp.UDPSession) *transport {
+	return &transport{sess: sess}
 }
+
+func (t *transport) Read(p []byte) (n int, err error)  { return t.sess.Read(p) }
+func (t *transport) Write(p []byte) (n int, err error) { return t.sess.Write(p) }
+func (t *transport) Close() error                      { return t.sess.Close() }
+func (t *transport) LocalAddr() net.Addr               { return t.sess.LocalAddr() }
+func (t *transport) RemoteAddr() net.Addr              { return t.sess.RemoteAddr() }

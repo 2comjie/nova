@@ -3,9 +3,5 @@ go 1.25.0
 use (
 	.
 	./locator/redis
-	./network/kcp
-	./network/tcp
-	./network/ws
 	./registry/redis
-	./examples
 )

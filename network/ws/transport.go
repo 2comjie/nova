@@ -1,35 +1,34 @@
 package ws
 
 import (
-	"context"
 	"io"
 	"net"
-	"time"
 
-	"nhooyr.io/websocket"
+	"github.com/gorilla/websocket"
 )
 
-// wsTransport 把 websocket.Conn 包装成 network.Transport
-type wsTransport struct {
+// transport 将 gorilla/websocket.Conn 包装为 network.Transport
+// gorilla/websocket 是消息协议，transport 负责将其适配为流式 IO
+type transport struct {
 	conn *websocket.Conn
-	ctx  context.Context
-	r    io.Reader
+	r    io.Reader // 当前消息的未读完部分
 }
 
-func newTransport(ctx context.Context, conn *websocket.Conn) *wsTransport {
-	return &wsTransport{conn: conn, ctx: ctx}
+func newTransport(conn *websocket.Conn) *transport {
+	return &transport{conn: conn}
 }
 
-func (t *wsTransport) Read(p []byte) (int, error) {
+// Read 从当前消息中读取数据；若当前消息已读完则读取下一条消息
+func (t *transport) Read(p []byte) (n int, err error) {
 	if t.r != nil {
-		n, err := t.r.Read(p)
+		n, err = t.r.Read(p)
 		if err == io.EOF {
 			t.r = nil
-			err = nil
+			return n, nil // 消息边界，不向上层报错
 		}
 		return n, err
 	}
-	_, r, err := t.conn.Reader(t.ctx)
+	_, r, err := t.conn.NextReader()
 	if err != nil {
 		return 0, err
 	}
@@ -37,26 +36,21 @@ func (t *wsTransport) Read(p []byte) (int, error) {
 	return t.r.Read(p)
 }
 
-func (t *wsTransport) Write(p []byte) (int, error) {
-	err := t.conn.Write(t.ctx, websocket.MessageBinary, p)
+// Write 以二进制消息形式写入数据
+func (t *transport) Write(p []byte) (n int, err error) {
+	w, err := t.conn.NextWriter(websocket.BinaryMessage)
 	if err != nil {
 		return 0, err
 	}
-	return len(p), nil
+	defer w.Close()
+
+	return w.Write(p)
 }
 
-func (t *wsTransport) Close() error {
-	return t.conn.Close(websocket.StatusNormalClosure, "")
+// Close 关闭 WebSocket 连接
+func (t *transport) Close() error {
+	return t.conn.Close()
 }
 
-func (t *wsTransport) LocalAddr() net.Addr  { return addr("ws-local") }
-func (t *wsTransport) RemoteAddr() net.Addr { return addr("ws-remote") }
-
-// ws 写操作通过 ctx 控制超时，SetWriteDeadline 为空操作
-func (t *wsTransport) SetWriteDeadline(_ time.Time) error { return nil }
-
-// ws 没有标准 net.Addr，用简单包装
-type addr string
-
-func (a addr) Network() string { return "ws" }
-func (a addr) String() string  { return string(a) }
+func (t *transport) LocalAddr() net.Addr  { return t.conn.LocalAddr() }
+func (t *transport) RemoteAddr() net.Addr { return t.conn.RemoteAddr() }
