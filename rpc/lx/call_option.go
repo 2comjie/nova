@@ -6,7 +6,6 @@ import (
 
 type ctxKey struct{}
 
-// Mode represents the routing strategy.
 type Mode int
 
 const (
@@ -15,7 +14,6 @@ const (
 	ModeKey
 )
 
-// CallConfig holds the routing override for a single call.
 type CallConfig struct {
 	Mode   Mode
 	Target string
@@ -24,18 +22,15 @@ type CallConfig struct {
 	Key  string
 }
 
-// WithNode sets the routing strategy to target a specific node.
 func WithNode(ctx context.Context, nodeID string) context.Context {
 	return set(ctx, &CallConfig{Mode: ModeNode, Target: nodeID})
 }
 
-// WithDirect sets the routing strategy to connect to a specific address.
 func WithDirect(ctx context.Context, addr string) context.Context {
 	return set(ctx, &CallConfig{Mode: ModeDirect, Target: addr})
 }
 
-// WithRouteKey sets the routing strategy to use key-based routing.
-func WithRouteKey(ctx context.Context, name, key string) context.Context {
+func WithSelect(ctx context.Context, name, key string) context.Context {
 	return set(ctx, &CallConfig{Mode: ModeKey, Name: name, Key: key})
 }
 
@@ -43,7 +38,6 @@ func set(ctx context.Context, cfg *CallConfig) context.Context {
 	return context.WithValue(ctx, ctxKey{}, cfg)
 }
 
-// FromContext extracts a CallConfig from ctx. Returns nil if none set.
 func FromContext(ctx context.Context) *CallConfig {
 	cfg, _ := ctx.Value(ctxKey{}).(*CallConfig)
 	return cfg

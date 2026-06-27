@@ -8,7 +8,7 @@ import (
 
 type ConnPool struct {
 	mu    sync.RWMutex
-	conns map[string]*grpc.ClientConn
+	conns map[string]*grpc.ClientConn // addr -> conn
 	opts  []grpc.DialOption
 }
 
@@ -27,13 +27,14 @@ func (p *ConnPool) Get(addr string) (*grpc.ClientConn, error) {
 	p.mu.RLock()
 	conn := p.conns[addr]
 	p.mu.RUnlock()
+
 	if conn != nil {
 		return conn, nil
 	}
 
 	conn, err := grpc.NewClient(addr, p.opts...)
 	if err != nil {
-		return nil, err
+		return conn, nil
 	}
 
 	p.mu.Lock()
@@ -47,7 +48,6 @@ func (p *ConnPool) Get(addr string) (*grpc.ClientConn, error) {
 
 	return conn, nil
 }
-
 func (p *ConnPool) Prune(activeAddrs map[string]bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -58,17 +58,12 @@ func (p *ConnPool) Prune(activeAddrs map[string]bool) {
 		}
 	}
 }
-
-func (p *ConnPool) Close() error {
+func (p *ConnPool) Close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	var err error
 	for addr, conn := range p.conns {
-		if closeErr := conn.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
+		_ = conn.Close()
 		delete(p.conns, addr)
 	}
-	return err
 }
