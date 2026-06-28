@@ -15,6 +15,18 @@ message HandleClientMessageResponse {
   request.Response response = 1;
 }
 
+message HandleRpcRequest {
+  string method = 1;
+  string nonce = 2;
+  map<string, bytes> meta = 3;
+  bytes data = 4;
+}
+message HandleRpcResponse {
+  bytes data = 1;
+}
+
 service Node {
   rpc HandleClientMessage(HandleClientMessageRequest) returns (HandleClientMessageResponse);
+  rpc HandleRpc(HandleRpcRequest) returns (HandleRpcResponse);
 }
+

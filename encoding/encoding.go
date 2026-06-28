@@ -3,6 +3,7 @@ package encoding
 import (
 	"strings"
 
+	"github.com/2comjie/wali/encoding/gob"
 	"github.com/2comjie/wali/encoding/json"
 	"github.com/2comjie/wali/encoding/proto"
 	"github.com/2comjie/wali/encoding/xml"
@@ -13,6 +14,7 @@ func init() {
 	RegisterCodec(&json.JsonCodec{})
 	RegisterCodec(&proto.ProtoCodec{})
 	RegisterCodec(&xml.XmlCodec{})
+	RegisterCodec(&gob.GobCodec{})
 	// yaml also maps to "yml" for .yml file extension
 	registeredCodecs["yml"] = &yml.YamlCodec{}
 	registeredCodecs["yaml"] = &yml.YamlCodec{}

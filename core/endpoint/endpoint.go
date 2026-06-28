@@ -30,8 +30,8 @@ func (s ServiceInstance) RpcTarget() string {
 }
 
 type Router struct {
-	Route    int32  `json:"route"`     // 带状态路由
-	StateKey string `json:"state_key"` // 根据这个 state key 去 服务注册中心 查找对应的 状态在哪个服务上
+	Route      int32  `json:"route"`
+	StateGroup string `json:"state_group"` // node节点调用BindRoute(group, nodeId) 可以把这一组路由绑定到这个node节点上
 }
 
 type RpcService struct {

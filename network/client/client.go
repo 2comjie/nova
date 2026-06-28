@@ -57,7 +57,7 @@ type client struct {
 
 func (c *client) Handle(trans Transport) error {
 	if !c.state.CompareAndSwap(0, ConnStateOpen) {
-		return errors.New("client already connected")
+		return errors.New("lx already connected")
 	}
 	c.trans = trans
 
@@ -73,7 +73,7 @@ func (c *client) Handle(trans Transport) error {
 
 func (c *client) Call(ctx context.Context, route int32, data buffer.Buffer) (packet.Message, error) {
 	if c.state.Load() != ConnStateOpen {
-		return packet.Message{}, errors.New("client closed")
+		return packet.Message{}, errors.New("lx closed")
 	}
 
 	seq := c.nextSeq.Add(1)
@@ -102,10 +102,10 @@ func (c *client) Call(ctx context.Context, route int32, data buffer.Buffer) (pac
 	case <-ctx.Done():
 		return packet.Message{}, ctx.Err()
 	case <-c.ctx.Done():
-		return packet.Message{}, errors.New("client closed")
+		return packet.Message{}, errors.New("lx closed")
 	case msg, ok := <-ch:
 		if !ok {
-			return packet.Message{}, errors.New("client closed")
+			return packet.Message{}, errors.New("lx closed")
 		}
 		return msg, nil
 	}
@@ -113,7 +113,7 @@ func (c *client) Call(ctx context.Context, route int32, data buffer.Buffer) (pac
 
 func (c *client) Send(route int32, data buffer.Buffer) error {
 	if c.state.Load() != ConnStateOpen {
-		return errors.New("client closed")
+		return errors.New("lx closed")
 	}
 
 	buf := c.options.packer.PackBuffer(packet.Push, route, 0, data)

@@ -1,4 +1,4 @@
-package redis
+package redisRegistry
 
 import "github.com/2comjie/wali/core/endpoint"
 

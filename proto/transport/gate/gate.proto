@@ -74,6 +74,13 @@ message IsOnlineResponse{
   bool online = 1;
 }
 
+message BindRouteRequest{
+  string state_group = 1; // 绑定这个路由组在具体的节点上
+  string node_id = 2;
+}
+message BindRouteResponse{
+}
+
 service Gate {
   rpc BindUid(BindUidRequest) returns (BindUidResponse);
   rpc UnbindUid(UnbindUidRequest) returns (UnbindUidResponse);
@@ -84,4 +91,5 @@ service Gate {
   rpc Stat(StatRequest) returns (StatResponse);
   rpc GetIP(GetIPRequest) returns (GetIPResponse);
   rpc IsOnline(IsOnlineRequest) returns (IsOnlineResponse);
+  rpc BindRoute(BindRouteRequest) returns (BindRouteResponse);
 }
