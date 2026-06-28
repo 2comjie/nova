@@ -1,9 +1,10 @@
-package client
+package rpcClient
 
 import (
 	"sync"
 
 	"github.com/2comjie/wali/locator"
+	"github.com/2comjie/wali/logx"
 	"github.com/2comjie/wali/registry"
 	"github.com/2comjie/wali/rpc/internal/selector"
 	"google.golang.org/grpc"
@@ -17,6 +18,7 @@ var once sync.Once
 func Dial(discover registry.Discover, locator locator.Locator) (*grpc.ClientConn, error) {
 	once.Do(func() {
 		selector.RegisterBuilder(discover, locator)
+		logx.Infof("register rpc selector: %s", selector.Name)
 	})
 
 	return grpc.Dial("wali:///",

@@ -1,116 +1,76 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"fmt"
-	"os"
-	"strings"
-	"time"
 
 	"github.com/2comjie/wali/core/util"
 	"github.com/2comjie/wali/examples/external"
-	pb "github.com/2comjie/wali/examples/rpcdemo/pbDemo"
-	redisLoc "github.com/2comjie/wali/locator/redis"
+	"github.com/2comjie/wali/examples/rpcdemo/pbDemo"
+	"github.com/2comjie/wali/locator"
+	redisLocator "github.com/2comjie/wali/locator/redis"
+	"github.com/2comjie/wali/logx"
 	redisRegistry "github.com/2comjie/wali/registry/redis"
-	"github.com/2comjie/wali/rpc/client"
+	rpcClient "github.com/2comjie/wali/rpc/client"
 	"github.com/2comjie/wali/rpc/lx"
 )
 
 func main() {
 	rdb := external.RedisClient()
-	discover := redisRegistry.NewDiscover(rdb)
-	loc := redisLoc.NewProvider(rdb)
-
-	conn, err := client.Dial(discover, loc)
+	dis := redisRegistry.NewDiscover(rdb)
+	defer dis.Close()
+	loc := locator.NewNodeLocator(redisLocator.NewProvider(rdb))
+	defer loc.Close()
+	client, err := rpcClient.Dial(dis, loc)
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close()
+	demoClient := pbDemo.NewHayServiceClient(client)
 
-	c := pb.NewHayServiceClient(conn)
-
-	fmt.Println("demo client started. 输入格式:")
-	fmt.Println("  balance <service> <name>   - 加权轮询")
-	fmt.Println("  direct  <addr> <name>     - 直连")
-	fmt.Println("  select  <name_key> <name> - 按 key 路由")
-	fmt.Println("  node    <node_id> <name>  - 指定节点")
-	fmt.Println("  quit                     - 退出")
-	fmt.Println()
-
-	scanner := bufio.NewScanner(os.Stdin)
-	for fmt.Print("> "); scanner.Scan(); fmt.Print("> ") {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-
-		parts := strings.Fields(line)
-		if len(parts) == 0 {
-			continue
-		}
-
-		switch parts[0] {
-		case "quit":
-			fmt.Println("bye")
-			return
-
-		case "balance":
-			if len(parts) < 3 {
-				fmt.Println("用法: balance <service> <name>")
-				continue
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			ctx = lx.WithBalance(ctx, parts[1])
-			resp, err := c.SayHay(ctx, &pb.HayRequest{Name: parts[2]})
-			cancel()
-			printResult("balance", resp, err)
-
-		case "direct":
-			if len(parts) < 3 {
-				fmt.Println("用法: direct <addr> <name>")
-				continue
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			ctx = lx.WithDirect(ctx, parts[1])
-			resp, err := c.SayHay(ctx, &pb.HayRequest{Name: parts[2]})
-			cancel()
-			printResult("direct", resp, err)
-
-		case "node":
-			if len(parts) < 3 {
-				fmt.Println("用法: select <node_id> <name>")
-				continue
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			ctx = lx.WithNode(ctx, parts[1], parts[2])
-			resp, err := c.SayHay(ctx, &pb.HayRequest{Name: parts[2]})
-			cancel()
-			printResult("node", resp, err)
-
-		case "select":
-			if len(parts) < 3 {
-				fmt.Println("用法: select <name> <key>")
-				continue
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			ctx = lx.WithSelect(ctx, parts[1], parts[2])
-			resp, err := c.SayHay(ctx, &pb.HayRequest{Name: parts[2]})
-			cancel()
-			printResult("select", resp, err)
-
-		default:
-			fmt.Println("未知命令:", parts[0])
-		}
-	}
-
-	util.WaitUntilSignaled()
-}
-
-func printResult(strategy string, resp *pb.HayResponse, err error) {
+	// 1. 直连
+	directCtx := lx.WithDirect(context.Background(), "127.0.0.1:8080")
+	rsp, err := demoClient.SayHay(directCtx, &pbDemo.HayRequest{Name: "direct"})
 	if err != nil {
-		fmt.Printf("[%s] error: %v\n", strategy, err)
+		panic(err)
 	} else {
-		fmt.Printf("[%s] %s\n", strategy, resp.Message)
+		logx.Infof("direct: %s", rsp.Message)
 	}
+	// 2. 定位到具体的节点
+	nodeCtx := lx.WithNode(context.Background(), "demo-1")
+	rsp, err = demoClient.SayHay(nodeCtx, &pbDemo.HayRequest{Name: "node"})
+	if err != nil {
+		panic(err)
+	} else {
+		logx.Infof("node: %s", rsp.Message)
+	}
+	// 3. 负载均衡
+	balanceCtx := lx.WithBalance(context.Background(), "demo")
+	rsp, err = demoClient.SayHay(balanceCtx, &pbDemo.HayRequest{Name: "balance"})
+	if err != nil {
+		panic(err)
+	}
+	// 4. 节点路由
+	// 先绑定下节点 再做
+	err = loc.Bind(context.Background(), "demo", "uid-01", "demo-1")
+	if err != nil {
+		panic(err)
+	}
+	err = loc.Bind(context.Background(), "demo", "uid-02", "demo-2")
+	if err != nil {
+		panic(err)
+	}
+	selectCtx := lx.WithSelect(context.Background(), "demo", "uid-01")
+	rsp, err = demoClient.SayHay(selectCtx, &pbDemo.HayRequest{Name: "select1"})
+	if err != nil {
+		panic(err)
+	} else {
+		logx.Infof("select: %s", rsp.Message)
+	}
+	selectCtx = lx.WithSelect(context.Background(), "demo", "uid-02")
+	rsp, err = demoClient.SayHay(selectCtx, &pbDemo.HayRequest{Name: "select2"})
+	if err != nil {
+		panic(err)
+	} else {
+		logx.Infof("select: %s", rsp.Message)
+	}
+	util.WaitUntilSignaled()
 }

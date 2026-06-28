@@ -30,8 +30,8 @@ func WithBalance(ctx context.Context, serviceName string) context.Context {
 	return WithStrategy(ctx, Strategy{Mode: ModeBalance, Name: serviceName})
 }
 
-func WithNode(ctx context.Context, name, nodeKey string) context.Context {
-	return WithStrategy(ctx, Strategy{Mode: ModeNode, Name: name, Key: nodeKey})
+func WithNode(ctx context.Context, nodeKey string) context.Context {
+	return WithStrategy(ctx, Strategy{Mode: ModeNode, Key: nodeKey})
 }
 
 func WithSelect(ctx context.Context, name, key string) context.Context {
