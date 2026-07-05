@@ -15,14 +15,16 @@ import (
 
 var once sync.Once
 
-func Dial(discover registry.Discover, locator locator.Locator) (*grpc.ClientConn, error) {
+func NewClient(discover registry.Discover, locator locator.Locator, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	once.Do(func() {
 		selector.RegisterBuilder(discover, locator)
 		logx.Infof("register rpc selector: %s", selector.Name)
 	})
-
-	return grpc.Dial("wali:///",
+	options := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"`+selector.Name+`"}`),
-	)
+		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"` + selector.Name + `"}`),
+	}
+	options = append(options, opts...)
+	client, err := grpc.NewClient("wali:///", options...)
+	return client, err
 }

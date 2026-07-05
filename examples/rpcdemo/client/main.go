@@ -20,7 +20,7 @@ func main() {
 	defer dis.Close()
 	loc := locator.NewNodeLocator(redisLocator.NewProvider(rdb))
 	defer loc.Close()
-	client, err := rpcClient.Dial(dis, loc)
+	client, err := rpcClient.NewClient(dis, loc)
 	if err != nil {
 		panic(err)
 	}
