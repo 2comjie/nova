@@ -1,6 +1,6 @@
 module github.com/2comjie/wali
 
-go 1.26.4
+go 1.24.3
 
 require (
 	github.com/clbanning/mxj v1.8.4

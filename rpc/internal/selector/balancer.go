@@ -66,6 +66,8 @@ func (b *Balancer) UpdateSubConnState(conn balancer.SubConn, state balancer.SubC
 			ConnectivityState: connectivity.TransientFailure,
 			Picker:            b.picker,
 		})
+	default:
+		
 	}
 }
 

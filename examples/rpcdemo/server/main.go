@@ -36,8 +36,7 @@ func main() {
 	// 注册到 Redis
 	reg := redisRegistry.NewRegistry(external.RedisClient())
 	_ = reg.Register(endpoint.ServiceInstance{
-		ID:     insId,
-		Status: endpoint.Work,
+		ID: insId,
 		RpcServices: map[string]endpoint.RpcService{
 			"demo": {Name: "demo", Desc: "demo service"},
 		},
