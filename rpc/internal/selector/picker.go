@@ -17,14 +17,20 @@ type wrrNode struct {
 	currentWeight int
 }
 
+// serviceNodes 持有单个服务的 WRR 状态，锁粒度下沉到 service 级别。
+type serviceNodes struct {
+	mu    sync.Mutex
+	nodes []*wrrNode
+}
+
 type Picker struct {
 	cc       balancer.ClientConn
 	locator  locator.Locator
 	discover registry.Discover
 
 	mu       sync.RWMutex
-	subConns map[string]balancer.SubConn // addr → subConn
-	svcIndex map[string][]*wrrNode       // serviceName → 节点列表
+	subConns map[string]balancer.SubConn    // addr → subConn
+	svcIndex map[string]*serviceNodes       // serviceName → 节点列表
 }
 
 func newPicker(cc balancer.ClientConn, loc locator.Locator, dis registry.Discover) *Picker {
@@ -33,36 +39,27 @@ func newPicker(cc balancer.ClientConn, loc locator.Locator, dis registry.Discove
 		locator:  loc,
 		discover: dis,
 		subConns: make(map[string]balancer.SubConn),
-		svcIndex: make(map[string][]*wrrNode),
+		svcIndex: make(map[string]*serviceNodes),
 	}
 }
 
 func (p *Picker) updateIndex(instances map[string]endpoint.ServiceInstance) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	newIndex := make(map[string]*serviceNodes)
 
-	oldNodes := p.svcIndex
-	newIndex := make(map[string][]*wrrNode)
-
-	for id, instance := range instances {
+	for _, instance := range instances {
 		for _, rpcService := range instance.RpcServices {
-			var node *wrrNode
-			if oldNodes != nil {
-				for _, old := range oldNodes[rpcService.Name] {
-					if old.instance.ID == id {
-						node = old
-						node.instance = instance
-						break
-					}
-				}
+			svc := newIndex[rpcService.Name]
+			if svc == nil {
+				svc = &serviceNodes{}
+				newIndex[rpcService.Name] = svc
 			}
-			if node == nil {
-				node = &wrrNode{instance: instance}
-			}
-			newIndex[rpcService.Name] = append(newIndex[rpcService.Name], node)
+			svc.nodes = append(svc.nodes, &wrrNode{instance: instance})
 		}
 	}
+
+	p.mu.Lock()
 	p.svcIndex = newIndex
+	p.mu.Unlock()
 }
 
 func (p *Picker) Pick(info balancer.PickInfo) (balancer.PickResult, error) {
@@ -113,20 +110,25 @@ func (p *Picker) resolve(ctx context.Context, strat lx.Strategy) (string, error)
 }
 
 func (p *Picker) pickBalanced(serviceName string) (string, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.mu.RLock()
+	svc := p.svcIndex[serviceName]
+	p.mu.RUnlock()
 
-	nodes := p.svcIndex[serviceName]
-	if len(nodes) == 0 {
+	if svc == nil {
 		return "", ErrServerNotFound
 	}
+
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
 
 	var (
 		selected    *wrrNode
 		totalWeight int
 	)
-
-	for _, node := range nodes {
+	for _, node := range svc.nodes {
+		if node.instance.Status != endpoint.Working {
+			continue
+		}
 		node.currentWeight += node.instance.Weight
 		totalWeight += node.instance.Weight
 		if selected == nil || node.currentWeight > selected.currentWeight {
