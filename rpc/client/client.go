@@ -195,6 +195,9 @@ func pickWeighted(instances []*weightInstance) endpoint.ServiceInstance {
 			selected = instance
 		}
 	}
+	if selected == nil {
+		return endpoint.ServiceInstance{}
+	}
 	selected.curWeight -= totalWeight
 	return selected.ServiceInstance
 }
