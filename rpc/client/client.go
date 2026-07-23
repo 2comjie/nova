@@ -110,6 +110,32 @@ func (c *Client) Route(ctx context.Context, serviceName, key string) (*grpc.Clie
 	return c.Node(ctx, serviceName, instanceID)
 }
 
+func (c *Client) Conn(ctx context.Context) (*grpc.ClientConn, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s := lx.GetStrategy(ctx)
+	switch s.Mode {
+	case lx.ModeDirect:
+		return c.Direct(ctx, s.Addr)
+	case lx.ModeNode:
+		instance, ok, err := c.discover.Get(ctx, s.Key)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, ErrNoAnyService
+		}
+		return c.pool.Get(instance.RpcTarget())
+	case lx.ModeSelect:
+		return c.Route(ctx, s.Name, s.Key)
+	case lx.ModeBalance:
+		return c.Service(ctx, s.Name)
+	default:
+		return c.Service(ctx, s.Name)
+	}
+}
+
 func (c *Client) Close() {
 	c.cancel()
 	c.pool.Close()
