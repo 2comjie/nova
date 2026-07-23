@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -14,8 +15,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// NewListener 创建 WebSocket server.Listener
-func NewListener(opts ...Option) server.Listener {
+func NewListener(opts ...Option) netServer.Listener {
 	options := defaultOptions()
 	for _, opt := range opts {
 		opt(options)
@@ -110,7 +110,7 @@ func (l *listener) Listen(address string) error {
 	l.addr = ln.Addr()
 
 	go func() {
-		if err := l.httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
+		if err := l.httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logx.Errorf("ws serve error: %v", err)
 		}
 	}()
@@ -122,7 +122,7 @@ func (l *listener) Addr() net.Addr {
 	return l.addr
 }
 
-func (l *listener) Accept() (server.Transport, error) {
+func (l *listener) Accept() (netServer.Transport, error) {
 	select {
 	case <-l.ctx.Done():
 		return nil, net.ErrClosed

@@ -8,7 +8,7 @@ import (
 	kcp "github.com/xtaci/kcp-go"
 )
 
-func NewListener(opts ...Option) server.Listener {
+func NewListener(opts ...Option) netServer.Listener {
 	options := defaultOptions()
 	for _, opt := range opts {
 		opt(options)
@@ -59,7 +59,7 @@ func (l *listener) Addr() net.Addr {
 	return l.ln.Addr()
 }
 
-func (l *listener) Accept() (server.Transport, error) {
+func (l *listener) Accept() (netServer.Transport, error) {
 	sess, err := l.ln.AcceptKCP()
 	if err != nil {
 		return nil, err

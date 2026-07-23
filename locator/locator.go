@@ -24,6 +24,7 @@ func (l *NodeLocator) Bind(ctx context.Context, name string, key string, instanc
 	}
 	return l.provider.Bind(ctx, name, key, instanceId)
 }
+
 func (l *NodeLocator) Unbind(ctx context.Context, name string, key string) error {
 	if name == GateName {
 		return ErrNodeNotSupport
@@ -62,14 +63,14 @@ func NewNodeLocator(provider Locator) *NodeLocator {
 		provider: provider,
 	}
 }
-func (l *GateLocator) Bind(ctx context.Context, key string, instanceId string) error {
-	return l.provider.Bind(ctx, GateName, key, instanceId)
+func (l *GateLocator) Bind(ctx context.Context, uid string, instanceId string) error {
+	return l.provider.Bind(ctx, GateName, uid, instanceId)
 }
-func (l *GateLocator) Unbind(ctx context.Context, key string) error {
-	return l.provider.Unbind(ctx, GateName, key)
+func (l *GateLocator) Unbind(ctx context.Context, uid string) error {
+	return l.provider.Unbind(ctx, GateName, uid)
 }
-func (l *GateLocator) Locate(ctx context.Context, key string) (string, error) {
-	instanceId, err := l.provider.Locate(ctx, GateName, key)
+func (l *GateLocator) Locate(ctx context.Context, uid string) (string, error) {
+	instanceId, err := l.provider.Locate(ctx, GateName, uid)
 	if err != nil {
 		return "", err
 	}

@@ -4,6 +4,8 @@ import "context"
 
 type ctxKey struct{}
 
+type BalancePolicy string
+
 const (
 	ModeDirect  = "direct"
 	ModeBalance = "balance"
@@ -11,11 +13,17 @@ const (
 	ModeSelect  = "select"
 )
 
+const (
+	BalanceRoundRobin         BalancePolicy = "round_robin"
+	BalanceWeightedRoundRobin BalancePolicy = "weighted_round_robin"
+)
+
 type Strategy struct {
-	Mode string
-	Name string
-	Key  string
-	Addr string
+	Mode          string
+	Name          string
+	Key           string
+	Addr          string
+	BalancePolicy BalancePolicy
 }
 
 func WithStrategy(ctx context.Context, s Strategy) context.Context {
@@ -26,8 +34,12 @@ func WithDirect(ctx context.Context, addr string) context.Context {
 	return WithStrategy(ctx, Strategy{Mode: ModeDirect, Addr: addr})
 }
 
-func WithBalance(ctx context.Context, serviceName string) context.Context {
-	return WithStrategy(ctx, Strategy{Mode: ModeBalance, Name: serviceName})
+func WithBalance(ctx context.Context, serviceName string, policies ...BalancePolicy) context.Context {
+	policy := BalanceWeightedRoundRobin
+	if len(policies) > 0 {
+		policy = policies[0]
+	}
+	return WithStrategy(ctx, Strategy{Mode: ModeBalance, Name: serviceName, BalancePolicy: policy})
 }
 
 func WithNode(ctx context.Context, nodeKey string) context.Context {
@@ -42,7 +54,11 @@ func GetStrategy(ctx context.Context) Strategy {
 	// 默认是 负载均衡
 	strategy := ctx.Value(ctxKey{})
 	if strategy == nil {
-		return Strategy{Mode: ModeBalance}
+		return Strategy{Mode: ModeBalance, BalancePolicy: BalanceWeightedRoundRobin}
 	}
-	return strategy.(Strategy)
+	s := strategy.(Strategy)
+	if s.Mode == ModeBalance && s.BalancePolicy == "" {
+		s.BalancePolicy = BalanceWeightedRoundRobin
+	}
+	return s
 }

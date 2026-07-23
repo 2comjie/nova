@@ -8,7 +8,7 @@ import (
 	"github.com/2comjie/wali/network/server"
 )
 
-func NewListener(opts ...Option) server.Listener {
+func NewListener(opts ...Option) netServer.Listener {
 	options := defaultOptions()
 	for _, opt := range opts {
 		opt(options)
@@ -94,7 +94,7 @@ func (l *listener) Addr() net.Addr {
 	return l.ln.Addr()
 }
 
-func (l *listener) Accept() (server.Transport, error) {
+func (l *listener) Accept() (netServer.Transport, error) {
 	conn, err := l.ln.AcceptTCP()
 	if err != nil {
 		return nil, err
