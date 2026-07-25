@@ -1,58 +1,38 @@
 package packet
 
-import (
-	"encoding/binary"
+import "github.com/2comjie/wali/core/buffer"
 
-	"github.com/2comjie/wali/core/buffer"
-	"github.com/2comjie/wali/core/util"
+// Type 表示网络包类型。
+type Type uint16
+
+const (
+	Req     Type = 1
+	Rsp     Type = 2
+	Push    Type = 3
+	Ping    Type = 4
+	Pong    Type = 5
+	BindReq Type = 6
+	BindRsp Type = 7
 )
 
-var ByteOrder binary.ByteOrder = binary.BigEndian
-
-// [size(4)][head(4)][route(4)][seq(4)][data]
-// head 位域:
+// Message 是业务层可见的网络包。
 //
-//	bit 0-2  MessageType
-//	bit 3-7  扩展标志
-//	bit 8-15 保留
-//	bit 16-31 保留
-type MessageType int
-
-const (
-	Req  MessageType = 0
-	Rsp  MessageType = 1
-	Push MessageType = 2
-	Ping MessageType = 3
-	Pong MessageType = 4
-)
-
-const (
-	bitTypePos = 0
-	bitTypeLen = 3
-	headerSize = 12 // head(4) + route(4) + seq(4)
-)
-
+// 从 Codec.Read 读取的 Message 由内存池持有，处理完成后必须调用 Release。
 type Message struct {
-	buff buffer.Buffer
+	Type  Type
+	Route uint32
+	Seq   uint64
+	Body  []byte
+
+	buf *buffer.Bytes
 }
 
-func (m *Message) MessageType() MessageType {
-	head := ByteOrder.Uint32(m.buff.Bytes()[0:4])
-	return MessageType(util.GetBits(byte(head), bitTypePos, bitTypeLen))
-}
-
-func (m *Message) Route() int32 {
-	return int32(ByteOrder.Uint32(m.buff.Bytes()[4:8]))
-}
-
-func (m *Message) Seq() int32 {
-	return int32(ByteOrder.Uint32(m.buff.Bytes()[8:12]))
-}
-
-func (m *Message) Data() []byte {
-	return m.buff.Bytes()[headerSize:]
-}
-
+// Release 归还读取 Message 时使用的内存。
 func (m *Message) Release() {
-	m.buff.Release()
+	if m == nil || m.buf == nil {
+		return
+	}
+	m.buf.Release()
+	m.buf = nil
+	m.Body = nil
 }

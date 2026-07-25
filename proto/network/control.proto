@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package wali.network;
+
+option go_package = "github.com/2comjie/wali/network/protocol;protocol";
+
+enum BindCode {
+  BIND_OK = 0;
+  BIND_UNAUTHORIZED = 1;
+}
+
+message BindRequest {
+  bytes token = 1;
+}
+
+message BindResponse {
+  BindCode code = 1;
+  uint32 heartbeat_interval_milli = 2;
+}

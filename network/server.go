@@ -1,0 +1,241 @@
+package network
+
+import (
+	"context"
+	"errors"
+	"math"
+	"sync"
+	"sync/atomic"
+
+	"github.com/2comjie/wali/core/help"
+	"github.com/2comjie/wali/network/protocol"
+	"github.com/2comjie/wali/network/transport"
+	"github.com/2comjie/wali/packet"
+	"google.golang.org/protobuf/proto"
+)
+
+// Server 同时管理多个 Listener，并共享一套 Session。
+type Server struct {
+	options options
+	manager *sessionManager
+	started atomic.Bool
+	closed  atomic.Bool
+	wait    sync.WaitGroup
+}
+
+// NewServer 创建网络服务。
+func NewServer(opts ...Option) (*Server, error) {
+	options := defaultOptions()
+	for _, option := range opts {
+		option(&options)
+	}
+	if options.auther == nil {
+		return nil, ErrAutherRequired
+	}
+	if len(options.listeners) == 0 {
+		return nil, ErrListenerMissing
+	}
+
+	return &Server{
+		options: options,
+		manager: newSessionManager(options),
+	}, nil
+}
+
+// Start 启动所有 Listener 的接受循环。
+func (s *Server) Start() error {
+	if s.closed.Load() {
+		return ErrClosed
+	}
+	if !s.started.CompareAndSwap(false, true) {
+		return errors.New("network: Server已经启动")
+	}
+
+	s.manager.Start()
+	for _, listener := range s.options.listeners {
+		listener := listener
+		s.wait.Add(1)
+		help.SafeGo(func() {
+			defer s.wait.Done()
+			for {
+				conn, err := listener.Accept()
+				if err != nil {
+					return
+				}
+				if s.closed.Load() {
+					_ = conn.Close()
+					return
+				}
+				s.manager.Add(conn)
+				if err := conn.Start(s); err != nil {
+					s.manager.Remove(conn)
+					_ = conn.Close()
+				}
+			}
+		})
+	}
+	return nil
+}
+
+// HandleMessage 处理 transport 读取到的一个完整包。
+func (s *Server) HandleMessage(conn transport.Conn, message *packet.Message) {
+	session := s.manager.ByConn(conn)
+	if session == nil {
+		_ = conn.Close()
+		return
+	}
+
+	if !session.IsBound() {
+		if message.Type != packet.BindReq {
+			_ = conn.Close()
+			return
+		}
+		s.handleBind(session, message)
+		return
+	}
+
+	switch message.Type {
+	case packet.Req:
+		s.handleReq(session, message)
+	case packet.Ping:
+		s.manager.Heartbeat(session)
+		if err := conn.Write(&packet.Message{
+			Type: packet.Pong,
+			Body: message.Body,
+		}); err != nil {
+			_ = conn.Close()
+		}
+	case packet.Pong:
+		s.manager.Heartbeat(session)
+	default:
+		_ = conn.Close()
+	}
+}
+
+// HandleClose 从 SessionManager 移除已关闭连接。
+func (s *Server) HandleClose(conn transport.Conn) {
+	s.manager.Remove(conn)
+}
+
+func (s *Server) handleBind(session *Session, message *packet.Message) {
+	var request protocol.BindRequest
+	if err := proto.Unmarshal(message.Body, &request); err != nil ||
+		len(request.Token) == 0 || len(request.Token) > s.options.maxToken {
+		s.writeBindResponse(session, protocol.BindCode_BIND_UNAUTHORIZED)
+		_ = session.Conn.Close()
+		return
+	}
+
+	if err := s.manager.Bind(session, request.Token); err != nil {
+		s.writeBindResponse(session, protocol.BindCode_BIND_UNAUTHORIZED)
+		_ = session.Conn.Close()
+		return
+	}
+	if err := s.writeBindResponse(session, protocol.BindCode_BIND_OK); err != nil {
+		_ = session.Conn.Close()
+		return
+	}
+	if s.options.hooks.OnSessionBind != nil {
+		help.SafeRun(func() {
+			s.options.hooks.OnSessionBind(session)
+		})
+	}
+}
+
+func (s *Server) writeBindResponse(session *Session, code protocol.BindCode) error {
+	response := &protocol.BindResponse{Code: code}
+	if code == protocol.BindCode_BIND_OK {
+		milliseconds := s.options.heartbeat.Milliseconds()
+		if milliseconds > math.MaxUint32 {
+			milliseconds = math.MaxUint32
+		}
+		response.HeartbeatIntervalMilli = uint32(milliseconds)
+	}
+	body, holder, err := marshalControl(response)
+	if err != nil {
+		return err
+	}
+	defer holder.Release()
+	return session.Conn.Write(&packet.Message{
+		Type: packet.BindRsp,
+		Body: body,
+	})
+}
+
+func (s *Server) handleReq(session *Session, message *packet.Message) {
+	body, err := decodeBody(s.options, message)
+	if err != nil {
+		_ = session.Conn.Close()
+		return
+	}
+
+	request := &packet.Message{
+		Type:  message.Type,
+		Route: message.Route,
+		Seq:   message.Seq,
+		Body:  body,
+	}
+	if s.options.hooks.OnReq != nil {
+		help.SafeRun(func() {
+			s.options.hooks.OnReq(&ReqContext{
+				Session: session,
+				Request: request,
+				options: s.options,
+			})
+		})
+	}
+}
+
+// PushUID 向指定 uid 的当前 Session 推送消息。
+func (s *Server) PushUID(ctx context.Context, uid string, route uint32, body []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	session := s.manager.ByUID(uid)
+	if session == nil {
+		return ErrNotBound
+	}
+
+	body, err := encodeBody(s.options, packet.Push, route, 0, body)
+	if err != nil {
+		return err
+	}
+	return session.Conn.Write(&packet.Message{
+		Type:  packet.Push,
+		Route: route,
+		Body:  body,
+	})
+}
+
+// KickUID 关闭指定 uid 的当前连接。
+func (s *Server) KickUID(uid string) bool {
+	return s.manager.KickUID(uid)
+}
+
+// KickSession 按当前 Server 内的自增 Session ID 关闭连接。
+func (s *Server) KickSession(id uint64) bool {
+	return s.manager.KickSession(id)
+}
+
+// Shutdown 停止接受新连接，关闭现有 Session，并等待 Listener 退出。
+func (s *Server) Shutdown(ctx context.Context) error {
+	if !s.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+	for _, listener := range s.options.listeners {
+		_ = listener.Close()
+	}
+	s.manager.Close()
+
+	waitDone := make(chan struct{})
+	help.SafeGo(func() {
+		s.wait.Wait()
+		close(waitDone)
+	})
+	select {
+	case <-waitDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}

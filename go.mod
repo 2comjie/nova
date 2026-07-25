@@ -5,15 +5,15 @@ go 1.24.3
 require (
 	github.com/clbanning/mxj v1.8.4
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/spf13/cast v1.10.0
-	github.com/xtaci/kcp-go v5.4.20+incompatible
+	github.com/xtaci/kcp-go/v5 v5.6.72
 	go.uber.org/zap v1.28.0
 	golang.org/x/net v0.51.0
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
-	github.com/gorilla/websocket v1.5.3
 )
 
 require (
@@ -31,6 +31,7 @@ require (
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 )
 
