@@ -62,6 +62,7 @@ func TestServerClientLifecycle(t *testing.T) {
 	end := make(chan *network.Session, 1)
 	heartbeat := make(chan struct{}, 1)
 	reqBody := make(chan string, 1)
+	tellBody := make(chan string, 1)
 	server, err := network.NewServer(
 		network.WithListener(listener),
 		network.WithAuther(network.AuthFunc(func(token []byte) (string, error) {
@@ -93,6 +94,13 @@ func TestServerClientLifecycle(t *testing.T) {
 				if ctx.Request.Route == 10 {
 					reqBody <- string(ctx.Request.Body)
 					_ = ctx.Write(append([]byte("rsp:"), ctx.Request.Body...))
+				}
+				if ctx.Request.Route == 12 {
+					if ctx.NeedReply || ctx.Request.Seq != 0 {
+						tellBody <- "seq-not-zero"
+						return
+					}
+					tellBody <- string(ctx.Request.Body)
 				}
 			},
 		}),
@@ -148,10 +156,11 @@ func TestServerClientLifecycle(t *testing.T) {
 		t.Fatalf("OnReq收到的不是解密解压后的Body: %q", body)
 	}
 
-	noResponseCtx, noResponseCancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
-	defer noResponseCancel()
-	if _, err := client.Call(noResponseCtx, 12, []byte("no-response")); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("OnReq未Write时不应返回Rsp: %v", err)
+	if err := client.Tell(ctx, 12, []byte("tell")); err != nil {
+		t.Fatal(err)
+	}
+	if body := waitValue(t, ctx, tellBody); body != "tell" {
+		t.Fatalf("Tell错误: %q", body)
 	}
 
 	if err := server.PushUID(ctx, "user-1", 11, []byte("notice")); err != nil {

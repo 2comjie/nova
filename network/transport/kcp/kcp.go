@@ -1,4 +1,4 @@
-package kcp
+package netKcp
 
 import (
 	"context"

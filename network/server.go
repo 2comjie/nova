@@ -53,7 +53,6 @@ func (s *Server) Start() error {
 
 	s.manager.Start()
 	for _, listener := range s.options.listeners {
-		listener := listener
 		s.wait.Add(1)
 		help.SafeGo(func() {
 			defer s.wait.Done()
@@ -178,9 +177,10 @@ func (s *Server) handleReq(session *Session, message *packet.Message) {
 	if s.options.hooks.OnReq != nil {
 		help.SafeRun(func() {
 			s.options.hooks.OnReq(&ReqContext{
-				Session: session,
-				Request: request,
-				options: s.options,
+				Session:   session,
+				Request:   request,
+				NeedReply: request.Seq != 0,
+				options:   s.options,
 			})
 		})
 	}

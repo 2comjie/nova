@@ -117,7 +117,11 @@ func (c *Codec) Validate(message *Message) error {
 	}
 
 	switch message.Type {
-	case Req, Rsp:
+	case Req:
+		if message.Route == 0 {
+			return ErrRoute
+		}
+	case Rsp:
 		if message.Route == 0 {
 			return ErrRoute
 		}

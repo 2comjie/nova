@@ -57,6 +57,7 @@ func TestCodecAllTypes(t *testing.T) {
 	codec := NewCodec(DefaultMaxFrame)
 	messages := []*Message{
 		{Type: Req, Route: 1, Seq: 1, Body: []byte("req")},
+		{Type: Req, Route: 2, Body: []byte("tell")},
 		{Type: Rsp, Route: 1, Seq: 1, Body: []byte("rsp")},
 		{Type: Push, Route: 2, Body: []byte("push")},
 		{Type: Ping, Body: make([]byte, PingBodySize)},

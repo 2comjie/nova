@@ -1,4 +1,4 @@
-package tcp
+package netTcp
 
 import (
 	"context"

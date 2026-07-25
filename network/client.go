@@ -236,6 +236,33 @@ func (c *Client) Call(ctx context.Context, route uint32, body []byte) ([]byte, e
 	}
 }
 
+// Tell 发送 Seq 为零的 Req，明确通知服务端不需要返回 Rsp。
+func (c *Client) Tell(ctx context.Context, route uint32, body []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !c.bound.Load() {
+		return ErrNotBound
+	}
+
+	body, err := encodeBody(c.options, packet.Req, route, 0, body)
+	if err != nil {
+		return err
+	}
+
+	c.mutex.Lock()
+	conn := c.conn
+	c.mutex.Unlock()
+	if conn == nil {
+		return ErrClosed
+	}
+	return conn.Write(&packet.Message{
+		Type:  packet.Req,
+		Route: route,
+		Body:  body,
+	})
+}
+
 func (c *Client) removePending(seq uint64, call *pendingCall) {
 	c.mutex.Lock()
 	if c.pending[seq] == call {
