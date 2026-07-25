@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/2comjie/wali/core/endpoint"
@@ -43,7 +44,7 @@ func TestPickServiceWeightedRoundRobin(t *testing.T) {
 	c := newTestClient(t)
 	counts := make(map[string]int)
 	for range 40 {
-		instance, err := c.pickService("game", lx.BalanceWeightedRoundRobin)
+		instance, err := c.pickService(context.Background(), "game", lx.BalanceWeightedRoundRobin)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -59,7 +60,7 @@ func TestPickServiceRoundRobin(t *testing.T) {
 	c := newTestClient(t)
 	counts := make(map[string]int)
 	for range 10 {
-		instance, err := c.pickService("game", lx.BalanceRoundRobin)
+		instance, err := c.pickService(context.Background(), "game", lx.BalanceRoundRobin)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,7 +83,46 @@ func TestRouteUsesLocatorInstance(t *testing.T) {
 	}
 }
 
-func newTestClient(t *testing.T) *Client {
+type fixedBalancer struct {
+	instanceID string
+}
+
+func (b *fixedBalancer) Pick(
+	_ context.Context,
+	_ string,
+	instances []endpoint.ServiceInstance,
+) (endpoint.ServiceInstance, error) {
+	for _, instance := range instances {
+		if instance.ID == b.instanceID {
+			return instance, nil
+		}
+	}
+	return endpoint.ServiceInstance{}, errors.New("instance not found")
+}
+
+func TestCustomBalancer(t *testing.T) {
+	const policy lx.BalancePolicy = "fixed"
+	c := newTestClient(t, WithBalancer(policy, &fixedBalancer{instanceID: "node-2"}))
+
+	ctx := lx.WithBalance(context.Background(), "game", policy)
+	conn, err := c.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := conn.Target(); got != "127.0.0.1:9002" {
+		t.Fatalf("custom balancer target = %q, want 127.0.0.1:9002", got)
+	}
+}
+
+func TestUnknownBalancer(t *testing.T) {
+	c := newTestClient(t)
+	_, err := c.pickService(context.Background(), "game", "unknown")
+	if !errors.Is(err, ErrInvalidBalancePolicy) {
+		t.Fatalf("pick error = %v, want %v", err, ErrInvalidBalancePolicy)
+	}
+}
+
+func newTestClient(t *testing.T, opts ...Option) *Client {
 	t.Helper()
 	discover := &fakeDiscover{instances: map[string]endpoint.ServiceInstance{
 		"node-1": {
@@ -94,7 +134,7 @@ func newTestClient(t *testing.T) *Client {
 			RpcHost: "127.0.0.1", RpcPort: 9002, Status: endpoint.Working,
 		},
 	}}
-	c := NewClient(discover, &fakeLocator{instanceID: "node-2"})
+	c := NewClient(discover, &fakeLocator{instanceID: "node-2"}, opts...)
 	t.Cleanup(c.Close)
 	return c
 }

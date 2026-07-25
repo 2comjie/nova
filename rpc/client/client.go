@@ -15,35 +15,35 @@ import (
 )
 
 type Client struct {
-	discover registry.Discover
-	locator  locator.Locator
-	pool     *ConnPool
+	discover  registry.Discover
+	locator   locator.Locator
+	pool      *ConnPool
+	balancers map[lx.BalancePolicy]Balancer
 
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	serviceMap  map[string][]*weightInstance
-	nextSeq     map[string]uint64
+	serviceMap  map[string][]endpoint.ServiceInstance
 	serviceAddr map[string]struct{}
 }
 
-type weightInstance struct {
-	endpoint.ServiceInstance
-	curWeight int
-}
+func NewClient(discover registry.Discover, locator locator.Locator, opts ...Option) *Client {
+	options := defaultOptions()
+	for _, opt := range opts {
+		opt(&options)
+	}
 
-func NewClient(discover registry.Discover, locator locator.Locator, opts ...grpc.DialOption) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Client{
 		discover:    discover,
 		locator:     locator,
-		pool:        NewConnPool(opts...),
+		pool:        NewConnPool(options.dialOptions...),
+		balancers:   options.balancers,
 		ctx:         ctx,
 		cancel:      cancel,
-		serviceMap:  make(map[string][]*weightInstance),
-		nextSeq:     make(map[string]uint64),
+		serviceMap:  make(map[string][]endpoint.ServiceInstance),
 		serviceAddr: make(map[string]struct{}),
 	}
 
@@ -65,7 +65,7 @@ func (c *Client) Service(ctx context.Context, serviceName string) (*grpc.ClientC
 	}
 
 	policy := lx.GetStrategy(ctx).BalancePolicy
-	instance, err := c.pickService(serviceName, policy)
+	instance, err := c.pickService(ctx, serviceName, policy)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (c *Client) watch() {
 }
 
 func (c *Client) update(instances map[string]endpoint.ServiceInstance) {
-	serviceMap := make(map[string][]*weightInstance)
+	serviceMap := make(map[string][]endpoint.ServiceInstance)
 	activeAddr := make(map[string]struct{})
 	for _, instance := range instances {
 		if instance.Status != endpoint.Working || instance.ServiceName == "" {
@@ -165,10 +165,7 @@ func (c *Client) update(instances map[string]endpoint.ServiceInstance) {
 		if instance.RpcHost == "" || instance.RpcPort <= 0 {
 			continue
 		}
-		serviceMap[instance.ServiceName] = append(
-			serviceMap[instance.ServiceName],
-			&weightInstance{ServiceInstance: instance},
-		)
+		serviceMap[instance.ServiceName] = append(serviceMap[instance.ServiceName], instance)
 		activeAddr[instance.RpcTarget()] = struct{}{}
 	}
 
@@ -186,44 +183,21 @@ func (c *Client) update(instances map[string]endpoint.ServiceInstance) {
 	c.pool.Remove(staleAddr)
 }
 
-func (c *Client) pickService(serviceName string, policy lx.BalancePolicy) (endpoint.ServiceInstance, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	instances := c.serviceMap[serviceName]
+func (c *Client) pickService(
+	ctx context.Context,
+	serviceName string,
+	policy lx.BalancePolicy,
+) (endpoint.ServiceInstance, error) {
+	c.mu.RLock()
+	instances := append([]endpoint.ServiceInstance(nil), c.serviceMap[serviceName]...)
+	c.mu.RUnlock()
 	if len(instances) == 0 {
 		return endpoint.ServiceInstance{}, ErrNoAnyService
 	}
 
-	switch policy {
-	case lx.BalanceRoundRobin:
-		seq := c.nextSeq[serviceName]
-		c.nextSeq[serviceName] = seq + 1
-		return instances[seq%uint64(len(instances))].ServiceInstance, nil
-	case lx.BalanceWeightedRoundRobin:
-		return pickWeighted(instances), nil
-	default:
+	balancer := c.balancers[policy]
+	if balancer == nil {
 		return endpoint.ServiceInstance{}, ErrInvalidBalancePolicy
 	}
-}
-
-func pickWeighted(instances []*weightInstance) endpoint.ServiceInstance {
-	var selected *weightInstance
-	totalWeight := 0
-	for _, instance := range instances {
-		weight := instance.Weight
-		if weight <= 0 {
-			weight = 1
-		}
-		instance.curWeight += weight
-		totalWeight += weight
-		if selected == nil || instance.curWeight > selected.curWeight {
-			selected = instance
-		}
-	}
-	if selected == nil {
-		return endpoint.ServiceInstance{}
-	}
-	selected.curWeight -= totalWeight
-	return selected.ServiceInstance
+	return balancer.Pick(ctx, serviceName, instances)
 }
