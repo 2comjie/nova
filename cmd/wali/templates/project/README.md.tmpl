@@ -20,8 +20,9 @@ Gate 路由生成到 `configs/gate/routes_gen.yaml`。该文件由 Wali 管理�
 - `api/server/<node>` 保存服务器内部 gRPC 协议。
 
 `wali add node` 会同时创建 Node 的内部 RPC proto 和注册入口。修改 proto 后执行
-`make proto`，生成的 RPC Client 会使用 Wali 的负载均衡与定向路由能力。
-`internal/rpcclient` 聚合全部强类型 RPC Client，一个进程只创建一个实例。
+`make proto`，Go 生成物写入 `internal/pb`，不会与 `api` 下的 proto 源文件混放。
+每个服务的强类型 RPC Client 作为进程级全局变量放在 `internal/rpcclient`，
+并使用 Wali 的共享连接池、负载均衡与定向路由能力。
 
 本地开发 Wali 时，把新项目加入同一个 `go.work`；使用发布版本时，通过
 `wali new --wali-version=<version>` 固定框架版本。

@@ -9,6 +9,9 @@ api/server/<name>/<name>.proto
 internal/<name>/rpc.go
 ```
 
-执行 `make proto` 后，生成的 Client 接收 Wali `rpc/client.Client`，并通过
-`rpc/lx` 上下文选择负载均衡、指定节点或状态定位路由。所有强类型 Client
-统一挂在 `internal/rpcclient.Client`，共用一个底层连接池和服务发现订阅。
+执行 `make proto` 后，Go 代码生成到 `internal/pb/<name>`，不会与可分发的 proto
+源文件混放。生成的 Client 接收 Wali `rpc/client.Client`，并通过 `rpc/lx`
+上下文选择负载均衡、指定节点或状态定位路由。
+
+每个服务的强类型 Client 作为进程级全局变量保存在 `internal/rpcclient`，例如
+`rpcclient.PlayerClient`、`rpcclient.RoomClient`。它们共用一个底层连接池和服务发现订阅。

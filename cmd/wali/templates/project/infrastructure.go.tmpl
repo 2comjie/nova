@@ -18,7 +18,7 @@ type Infrastructure struct {
 	Registry  registry.Registry
 	Discover  registry.Discover
 	Locator   locator.Locator
-	RPCClient *projectrpc.Client
+	RPCClient *walirpc.Client
 }
 
 // NewInfrastructure 创建Redis Registry、Discover、Locator和RPC Client。
@@ -30,12 +30,13 @@ func NewInfrastructure() *Infrastructure {
 	discoverProvider := redisRegistry.NewDiscover(redisClient)
 	locatorProvider := redisLocator.NewProvider(redisClient)
 	baseRPCClient := walirpc.NewClient(discoverProvider, locatorProvider)
+	projectrpc.Init(baseRPCClient)
 	return &Infrastructure{
 		Redis:     redisClient,
 		Registry:  registryProvider,
 		Discover:  discoverProvider,
 		Locator:   locatorProvider,
-		RPCClient: projectrpc.New(baseRPCClient),
+		RPCClient: baseRPCClient,
 	}
 }
 
@@ -45,6 +46,6 @@ func (i *Infrastructure) DeployOptions() []deploy.Option {
 		deploy.WithRegistry(i.Registry),
 		deploy.WithDiscover(i.Discover),
 		deploy.WithLocator(i.Locator),
-		deploy.WithRPCClient(i.RPCClient.Base),
+		deploy.WithRPCClient(i.RPCClient),
 	}
 }

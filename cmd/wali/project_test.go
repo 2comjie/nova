@@ -75,7 +75,7 @@ func TestProjectGenerateNodeAndRoutes(t *testing.T) {
 	)
 	assertFileContains(t,
 		filepath.Join(root, "api/server/chat/chat.proto"),
-		"go_package = \"github.com/example/game/api/server/chat;chatpb\";",
+		"go_package = \"github.com/example/game/internal/pb/chat;chatpb\";",
 	)
 	assertFileContains(t,
 		filepath.Join(root, "internal/chat/rpc.go"),
@@ -100,6 +100,10 @@ func TestProjectGenerateNodeAndRoutes(t *testing.T) {
 	assertFileContains(t,
 		filepath.Join(root, "internal/rpcclient/client_gen.go"),
 		"RoomClient = roompb.NewRoomClient(base)",
+	)
+	assertFileContains(t,
+		filepath.Join(root, "internal/rpcclient/client_gen.go"),
+		"initOnce.Do(func()",
 	)
 	assertFileNotContains(t,
 		filepath.Join(root, "internal/rpcclient/client_gen.go"),

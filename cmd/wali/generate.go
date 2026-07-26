@@ -148,43 +148,42 @@ func generateRPCClient(root string, project Project) error {
 	file.WriteString(
 		"\twalirpc \"github.com/2comjie/wali/rpc/client\"\n",
 	)
+	file.WriteString("\t\"sync\"\n")
 	for _, node := range nodes {
 		_, _ = fmt.Fprintf(
 			&file,
 			"\t%spb %q\n",
 			node.Name,
-			project.Module+"/api/server/"+node.Name,
+			project.Module+"/internal/pb/"+node.Name,
 		)
 	}
 	file.WriteString(")\n\n")
-	file.WriteString("// Client 聚合当前进程使用的全部内部RPC Client。\n")
-	file.WriteString("// 所有强类型Client共用Base中的连接池和服务发现订阅。\n")
-	file.WriteString("type Client struct {\n")
-	file.WriteString("\tBase *walirpc.Client\n")
+	file.WriteString("var initOnce sync.Once\n\n")
 	for _, node := range nodes {
 		_, _ = fmt.Fprintf(
 			&file,
-			"\t%s %spb.%sClient\n",
+			"// %sClient 是%s服务的进程级RPC Client。\n"+
+				"var %sClient %spb.%sClient\n\n",
+			goIdentifier(node.Name),
+			node.Name,
 			goIdentifier(node.Name),
 			node.Name,
 			goIdentifier(node.Name),
 		)
 	}
-	file.WriteString("}\n\n")
-	file.WriteString("// New 创建进程级内部RPC Client聚合对象。\n")
-	file.WriteString("func New(base *walirpc.Client) *Client {\n")
-	file.WriteString("\treturn &Client{\n")
-	file.WriteString("\t\tBase: base,\n")
+	file.WriteString("// Init 使用共用的底层连接池初始化各服务的全局RPC Client。\n")
+	file.WriteString("func Init(base *walirpc.Client) {\n")
+	file.WriteString("\tinitOnce.Do(func() {\n")
 	for _, node := range nodes {
 		_, _ = fmt.Fprintf(
 			&file,
-			"\t\t%s: %spb.New%sClient(base),\n",
+			"\t\t%sClient = %spb.New%sClient(base)\n",
 			goIdentifier(node.Name),
 			node.Name,
 			goIdentifier(node.Name),
 		)
 	}
-	file.WriteString("\t}\n")
+	file.WriteString("\t})\n")
 	file.WriteString("}\n")
 
 	formatted, err := format.Source(file.Bytes())
