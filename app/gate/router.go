@@ -21,7 +21,6 @@ const (
 )
 
 var (
-	ErrInvalidContext       = errors.New("gate: Context无效")
 	ErrInvalidRoute         = errors.New("gate: route必须大于0")
 	ErrRouteRegistered      = errors.New("gate: route已经注册")
 	ErrRouteIDRegistered    = errors.New("gate: Route ID已经注册")
@@ -33,7 +32,6 @@ var (
 	ErrFilterNotFound       = errors.New("gate: FilterFactory不存在")
 	ErrRouterFrozen         = errors.New("gate: Router已经冻结")
 	ErrRouterNotFrozen      = errors.New("gate: Router尚未冻结")
-	ErrForwardMissing       = errors.New("gate: Forward Handler不能为空")
 	ErrInvalidFilterName    = errors.New("gate: Filter名称不能为空")
 	ErrInvalidRouteID       = errors.New("gate: Route ID不能为空")
 	ErrRouteWithoutMatchers = errors.New("gate: Route没有配置数字route")
@@ -51,6 +49,7 @@ type FilterConfig struct {
 type Target struct {
 	Mode    RouteMode        `json:"mode" yaml:"mode"`
 	Service string           `json:"service" yaml:"service"`
+	Binding string           `json:"binding" yaml:"binding"`
 	Balance lx.BalancePolicy `json:"balance" yaml:"balance"`
 	NodeID  string           `json:"node_id" yaml:"node_id"`
 }
@@ -89,9 +88,6 @@ func NewRouter() *Router {
 
 // RegisterFilter 注册配置中可以使用的 FilterFactory。
 func (r *Router) RegisterFilter(name string, factory FilterFactory) error {
-	if r == nil {
-		return ErrInvalidContext
-	}
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return ErrInvalidFilterName
@@ -105,9 +101,6 @@ func (r *Router) RegisterFilter(name string, factory FilterFactory) error {
 	if r.frozen {
 		return ErrRouterFrozen
 	}
-	if r.factories == nil {
-		r.factories = make(map[string]FilterFactory)
-	}
 	if _, exists := r.factories[name]; exists {
 		return fmt.Errorf("%w: %s", ErrFilterRegistered, name)
 	}
@@ -117,10 +110,6 @@ func (r *Router) RegisterFilter(name string, factory FilterFactory) error {
 
 // Use 添加所有 Route 共用的 Filter 配置。
 func (r *Router) Use(filters ...FilterConfig) error {
-	if r == nil {
-		return ErrInvalidContext
-	}
-
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	if r.frozen {
@@ -134,10 +123,6 @@ func (r *Router) Use(filters ...FilterConfig) error {
 
 // Add 添加 Route 配置。
 func (r *Router) Add(routes ...Route) error {
-	if r == nil {
-		return ErrInvalidContext
-	}
-
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	if r.frozen {
@@ -151,10 +136,6 @@ func (r *Router) Add(routes ...Route) error {
 
 // Freeze 校验配置并编译 Filter Chain。
 func (r *Router) Freeze() error {
-	if r == nil {
-		return ErrInvalidContext
-	}
-
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	if r.frozen {
@@ -192,9 +173,6 @@ func (r *Router) Freeze() error {
 		filters = append(filters, routeFilters...)
 
 		handler := Handler(func(ctx *Context) error {
-			if ctx.forward == nil {
-				return ErrForwardMissing
-			}
 			return ctx.forward(ctx)
 		})
 		for index := len(filters) - 1; index >= 0; index-- {
@@ -231,9 +209,6 @@ func (r *Router) Freeze() error {
 
 // Dispatch 查找 Route 并执行编译后的 Filter Chain。
 func (r *Router) Dispatch(ctx *Context) error {
-	if r == nil || ctx == nil {
-		return ErrInvalidContext
-	}
 	table := r.table.Load()
 	if table == nil {
 		return ErrRouterNotFrozen
@@ -282,7 +257,7 @@ func validateTarget(target *Target) error {
 			target.Balance = lx.BalanceWeightedRoundRobin
 		}
 	case RouteModeSelect:
-		if target.Service == "" {
+		if target.Service == "" || target.Binding == "" {
 			return ErrInvalidTarget
 		}
 	case RouteModeNode:

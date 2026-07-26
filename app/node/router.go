@@ -17,7 +17,6 @@ var (
 	ErrRouterFrozen    = errors.New("node: Router已经冻结")
 	ErrRouterNotFrozen = errors.New("node: Router尚未冻结")
 	ErrRouteNotFound   = errors.New("node: route不存在")
-	ErrInvalidContext  = errors.New("node: Context无效")
 )
 
 // Handler 处理一个 Node 请求。
@@ -52,10 +51,6 @@ func NewRouter() *Router {
 
 // Use 添加所有路由共用的 Middleware。
 func (r *Router) Use(middlewares ...Middleware) error {
-	if r == nil {
-		return ErrInvalidContext
-	}
-
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	if r.frozen {
@@ -83,10 +78,6 @@ func (r *Router) Group() *RouteGroup {
 // Freeze 完成 Middleware 调用链并冻结 Router。
 // Freeze 成功后可以被重复调用。
 func (r *Router) Freeze() (err error) {
-	if r == nil {
-		return ErrInvalidContext
-	}
-
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	if r.frozen {
@@ -114,9 +105,6 @@ func (r *Router) Freeze() (err error) {
 
 // Dispatch 查找并执行当前请求的 Handler。
 func (r *Router) Dispatch(ctx *Context) error {
-	if r == nil || ctx == nil || ctx.Request == nil {
-		return ErrInvalidContext
-	}
 	table := r.table.Load()
 	if table == nil {
 		return ErrRouterNotFrozen
@@ -132,9 +120,6 @@ func (r *Router) Dispatch(ctx *Context) error {
 }
 
 func (r *Router) add(route uint32, handler Handler, group *RouteGroup) error {
-	if r == nil {
-		return ErrInvalidContext
-	}
 	if route == 0 {
 		return ErrInvalidRoute
 	}
@@ -146,9 +131,6 @@ func (r *Router) add(route uint32, handler Handler, group *RouteGroup) error {
 	defer r.mutex.Unlock()
 	if r.frozen {
 		return ErrRouterFrozen
-	}
-	if r.routes == nil {
-		r.routes = make(map[uint32]routeEntry)
 	}
 	if _, exists := r.routes[route]; exists {
 		return fmt.Errorf("%w: %d", ErrRouteRegistered, route)
@@ -183,9 +165,6 @@ type RouteGroup struct {
 
 // Use 添加当前组后续注册路由使用的 Middleware。
 func (g *RouteGroup) Use(middlewares ...Middleware) error {
-	if g == nil || g.router == nil {
-		return ErrInvalidContext
-	}
 	for _, middleware := range middlewares {
 		if middleware == nil {
 			return ErrNilMiddleware
@@ -203,8 +182,5 @@ func (g *RouteGroup) Use(middlewares ...Middleware) error {
 
 // Handle 使用当前组的 Middleware 注册路由。
 func (g *RouteGroup) Handle(route uint32, handler Handler) error {
-	if g == nil || g.router == nil {
-		return ErrInvalidContext
-	}
 	return g.router.add(route, handler, g)
 }

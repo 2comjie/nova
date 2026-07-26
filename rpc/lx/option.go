@@ -20,7 +20,8 @@ const (
 
 type Strategy struct {
 	Mode          string
-	Name          string
+	Service       string
+	Binding       string
 	Key           string
 	Addr          string
 	BalancePolicy BalancePolicy
@@ -39,15 +40,29 @@ func WithBalance(ctx context.Context, serviceName string, policies ...BalancePol
 	if len(policies) > 0 {
 		policy = policies[0]
 	}
-	return WithStrategy(ctx, Strategy{Mode: ModeBalance, Name: serviceName, BalancePolicy: policy})
+	return WithStrategy(ctx, Strategy{
+		Mode:          ModeBalance,
+		Service:       serviceName,
+		BalancePolicy: policy,
+	})
 }
 
 func WithNode(ctx context.Context, nodeKey string) context.Context {
 	return WithStrategy(ctx, Strategy{Mode: ModeNode, Key: nodeKey})
 }
 
-func WithSelect(ctx context.Context, name, key string) context.Context {
-	return WithStrategy(ctx, Strategy{Mode: ModeSelect, Name: name, Key: key})
+func WithSelect(
+	ctx context.Context,
+	serviceName string,
+	binding string,
+	key string,
+) context.Context {
+	return WithStrategy(ctx, Strategy{
+		Mode:    ModeSelect,
+		Service: serviceName,
+		Binding: binding,
+		Key:     key,
+	})
 }
 
 func GetStrategy(ctx context.Context) Strategy {

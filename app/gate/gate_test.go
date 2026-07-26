@@ -47,7 +47,11 @@ func TestGateCallTellPushKick(t *testing.T) {
 		Route{
 			ID:     "tell",
 			Routes: []uint32{11},
-			Target: Target{Mode: RouteModeSelect, Service: "player"},
+			Target: Target{
+				Mode:    RouteModeSelect,
+				Service: "player",
+				Binding: "lobby",
+			},
 		},
 	); err != nil {
 		t.Fatal(err)
@@ -164,7 +168,7 @@ func TestGateCallTellPushKick(t *testing.T) {
 		t.Fatalf("Node Call请求错误: %+v", callRequest)
 	}
 	if callStrategy.Mode != lx.ModeBalance ||
-		callStrategy.Name != "player" ||
+		callStrategy.Service != "player" ||
 		callStrategy.BalancePolicy != lx.BalanceWeightedRoundRobin {
 		t.Fatalf("Call路由策略错误: %+v", callStrategy)
 	}
@@ -180,7 +184,8 @@ func TestGateCallTellPushKick(t *testing.T) {
 		t.Fatalf("Node Tell请求错误: %+v", tellRequest)
 	}
 	if tellStrategy.Mode != lx.ModeSelect ||
-		tellStrategy.Name != "player" ||
+		tellStrategy.Service != "player" ||
+		tellStrategy.Binding != "lobby" ||
 		tellStrategy.Key != "user-1" {
 		t.Fatalf("Tell路由策略错误: %+v", tellStrategy)
 	}

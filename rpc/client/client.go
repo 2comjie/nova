@@ -96,14 +96,19 @@ func (c *Client) Direct(ctx context.Context, addr string) (*grpc.ClientConn, err
 	return c.pool.Get(addr)
 }
 
-func (c *Client) Route(ctx context.Context, serviceName, key string) (*grpc.ClientConn, error) {
-	if serviceName == "" || key == "" {
+func (c *Client) Route(
+	ctx context.Context,
+	serviceName string,
+	binding string,
+	key string,
+) (*grpc.ClientConn, error) {
+	if serviceName == "" || binding == "" || key == "" {
 		return nil, ErrInvalidTarget
 	}
 	if c.locator == nil {
 		return nil, ErrLocatorUnavailable
 	}
-	instanceID, err := c.locator.Locate(ctx, serviceName, key)
+	instanceID, err := c.locator.Locate(ctx, binding, key)
 	if err != nil {
 		return nil, err
 	}
@@ -128,11 +133,11 @@ func (c *Client) Conn(ctx context.Context) (*grpc.ClientConn, error) {
 		}
 		return c.pool.Get(instance.RpcTarget())
 	case lx.ModeSelect:
-		return c.Route(ctx, s.Name, s.Key)
+		return c.Route(ctx, s.Service, s.Binding, s.Key)
 	case lx.ModeBalance:
-		return c.Service(ctx, s.Name)
+		return c.Service(ctx, s.Service)
 	default:
-		return c.Service(ctx, s.Name)
+		return c.Service(ctx, s.Service)
 	}
 }
 

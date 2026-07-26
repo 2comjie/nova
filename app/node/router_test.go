@@ -134,9 +134,6 @@ func TestRouterDispatchErrors(t *testing.T) {
 	if err := router.Freeze(); err != nil {
 		t.Fatal(err)
 	}
-	if !errors.Is(router.Dispatch(nil), ErrInvalidContext) {
-		t.Fatal("nil Context没有被拒绝")
-	}
 	if !errors.Is(router.Dispatch(&Context{Request: &Request{Route: 1}}), ErrRouteNotFound) {
 		t.Fatal("未注册route没有返回错误")
 	}

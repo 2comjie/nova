@@ -34,7 +34,6 @@ var (
 	ErrClosed              = errors.New("gate: Gate已经关闭")
 	ErrHandlerPanic        = errors.New("gate: Filter或Forward发生panic")
 	ErrInvalidNodeSource   = errors.New("gate: Node来源信息无效")
-	ErrInvalidNodeReply    = errors.New("gate: Node返回值无效")
 )
 
 // ErrorHandler 处理路由、Filter、Node RPC和客户端写回错误。
@@ -172,7 +171,7 @@ func New(config Config) (*Gate, error) {
 
 // Start 注册Gate实例并启动客户端网络服务。
 func (g *Gate) Start() error {
-	if g == nil || g.closed.Load() {
+	if g.closed.Load() {
 		return ErrClosed
 	}
 	if !g.started.CompareAndSwap(false, true) {
@@ -207,7 +206,7 @@ func (g *Gate) Start() error {
 
 // Shutdown 停止服务并注销Gate实例。
 func (g *Gate) Shutdown(ctx context.Context) error {
-	if g == nil || !g.closed.CompareAndSwap(false, true) {
+	if !g.closed.CompareAndSwap(false, true) {
 		return nil
 	}
 	g.cancel()
@@ -241,14 +240,15 @@ func (g *Gate) Shutdown(ctx context.Context) error {
 func (g *Gate) onReq(request *network.ReqContext) {
 	message := request.Request
 	ctx := &Context{
-		Context:   g.ctx,
-		App:       g.proxy,
-		Session:   request.Session,
-		Route:     message.Route,
-		Seq:       message.Seq,
-		Body:      message.Body,
-		needReply: request.NeedReply,
-		forward:   g.forward,
+		Context:    g.ctx,
+		App:        g.proxy,
+		Session:    request.Session,
+		Route:      message.Route,
+		Seq:        message.Seq,
+		Body:       message.Body,
+		BindingKey: request.Session.UID(),
+		needReply:  request.NeedReply,
+		forward:    g.forward,
 	}
 
 	var err error
@@ -285,7 +285,7 @@ func (g *Gate) forward(ctx *Context) error {
 	case RouteModeBalance:
 		rpcCtx = lx.WithBalance(rpcCtx, target.Service, target.Balance)
 	case RouteModeSelect:
-		rpcCtx = lx.WithSelect(rpcCtx, target.Service, ctx.Session.UID())
+		rpcCtx = lx.WithSelect(rpcCtx, target.Service, target.Binding, ctx.BindingKey)
 	case RouteModeNode:
 		rpcCtx = lx.WithNode(rpcCtx, target.NodeID)
 	}
@@ -305,9 +305,6 @@ func (g *Gate) forward(ctx *Context) error {
 	response, err := g.nodeClient.Call(rpcCtx, request)
 	if err != nil {
 		return err
-	}
-	if response == nil {
-		return ErrInvalidNodeReply
 	}
 	if response.NodeServiceName == "" || response.NodeInstanceId == "" {
 		return ErrInvalidNodeSource
@@ -354,10 +351,6 @@ func (g *Gate) onSessionEnd(session *network.Session) {
 }
 
 func defaultErrorHandler(ctx *Context, err error) {
-	if ctx == nil {
-		logx.Errorf("gate: 请求处理失败: %v", err)
-		return
-	}
 	logx.Errorf(
 		"gate: 请求处理失败 uid=%s route=%d routeID=%s targetService=%s targetNode=%s err=%v",
 		ctx.Session.UID(),

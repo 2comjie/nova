@@ -25,6 +25,7 @@ type Context struct {
 	RouteID string
 	Target  Target
 
+	BindingKey      string
 	NodeServiceName string
 	NodeInstanceID  string
 
@@ -36,14 +37,11 @@ type Context struct {
 
 // NeedReply 表示客户端是否通过Call请求响应。
 func (c *Context) NeedReply() bool {
-	return c != nil && c.needReply
+	return c.needReply
 }
 
 // Reply 设置返回给客户端的数据，Tell请求和重复响应会被拒绝。
 func (c *Context) Reply(body []byte) error {
-	if c == nil {
-		return ErrInvalidContext
-	}
 	if !c.needReply {
 		return ErrReplyNotAllowed
 	}

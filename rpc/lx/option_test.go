@@ -12,7 +12,18 @@ func TestBalancePolicy(t *testing.T) {
 
 	ctx := WithBalance(context.Background(), "game", BalanceRoundRobin)
 	strategy := GetStrategy(ctx)
-	if strategy.Name != "game" || strategy.BalancePolicy != BalanceRoundRobin {
+	if strategy.Service != "game" || strategy.BalancePolicy != BalanceRoundRobin {
+		t.Fatalf("strategy = %+v", strategy)
+	}
+}
+
+func TestSelectSeparatesServiceAndBinding(t *testing.T) {
+	ctx := WithSelect(context.Background(), "lobby", "team", "team-1")
+	strategy := GetStrategy(ctx)
+	if strategy.Mode != ModeSelect ||
+		strategy.Service != "lobby" ||
+		strategy.Binding != "team" ||
+		strategy.Key != "team-1" {
 		t.Fatalf("strategy = %+v", strategy)
 	}
 }

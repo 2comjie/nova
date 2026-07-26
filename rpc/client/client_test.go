@@ -31,11 +31,13 @@ func (f *fakeDiscover) Close() {}
 
 type fakeLocator struct {
 	instanceID string
+	binding    string
 }
 
 func (f *fakeLocator) Bind(context.Context, string, string, string) error   { return nil }
 func (f *fakeLocator) Unbind(context.Context, string, string, string) error { return nil }
-func (f *fakeLocator) Locate(context.Context, string, string) (string, error) {
+func (f *fakeLocator) Locate(_ context.Context, binding string, _ string) (string, error) {
+	f.binding = binding
 	return f.instanceID, nil
 }
 func (f *fakeLocator) Close() {}
@@ -74,12 +76,15 @@ func TestPickServiceRoundRobin(t *testing.T) {
 
 func TestRouteUsesLocatorInstance(t *testing.T) {
 	c := newTestClient(t)
-	conn, err := c.Route(context.Background(), "game", "user-1")
+	conn, err := c.Route(context.Background(), "game", "team", "user-1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := conn.Target(); got != "127.0.0.1:9002" {
 		t.Fatalf("Route target = %q, want %q", got, "127.0.0.1:9002")
+	}
+	if c.locator.(*fakeLocator).binding != "team" {
+		t.Fatalf("Locator binding = %q, want team", c.locator.(*fakeLocator).binding)
 	}
 }
 
