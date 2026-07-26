@@ -1,8 +1,8 @@
 package main
 
 import (
-	"go/parser"
-	"go/token"
+	"bytes"
+	"go/format"
 	"os"
 	"path/filepath"
 	"strings"
@@ -163,7 +163,7 @@ func TestProjectGenerateNodeAndRoutes(t *testing.T) {
 		t.Fatal("生成新Route时覆盖了用户Handler")
 	}
 
-	assertGeneratedGoParses(t, root)
+	assertGeneratedGoFormatted(t, root)
 }
 
 func TestAddRouteRejectsDuplicateAndUnknownNode(t *testing.T) {
@@ -220,7 +220,7 @@ func assertFileNotContains(t *testing.T, path string, unexpected string) {
 	}
 }
 
-func assertGeneratedGoParses(t *testing.T, root string) {
+func assertGeneratedGoFormatted(t *testing.T, root string) {
 	t.Helper()
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
@@ -229,8 +229,17 @@ func assertGeneratedGoParses(t *testing.T, root string) {
 		if entry.IsDir() || filepath.Ext(path) != ".go" {
 			return nil
 		}
-		if _, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.AllErrors); err != nil {
-			t.Errorf("parse generated Go file %s: %v", path, err)
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		formatted, err := format.Source(body)
+		if err != nil {
+			t.Errorf("format generated Go file %s: %v", path, err)
+			return nil
+		}
+		if !bytes.Equal(body, formatted) {
+			t.Errorf("generated Go file is not formatted: %s", path)
 		}
 		return nil
 	})

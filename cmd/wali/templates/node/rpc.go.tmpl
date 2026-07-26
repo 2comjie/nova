@@ -1,8 +1,9 @@
 package {{.Node.Name}}
 
 import (
-	{{.Node.Name}}pb "{{.Project.Module}}/internal/pb/{{.Node.Name}}"
 	"google.golang.org/grpc"
+
+	{{.Node.Name}}pb "{{.Project.Module}}/internal/pb/{{.Node.Name}}"
 )
 
 // RPCServer 实现 {{.Node.Name}} Node 对其他服务器开放的内部RPC。
