@@ -60,9 +60,12 @@ type Node struct {
 	components  []app.Component
 	proxy       *Proxy
 
+	ctx               context.Context
+	cancel            context.CancelFunc
 	started           atomic.Bool
 	closed            atomic.Bool
 	startedComponents atomic.Int64
+	serverWait        sync.WaitGroup
 	wait              sync.WaitGroup
 }
 
@@ -98,6 +101,7 @@ func New(config Config) (*Node, error) {
 		return nil, err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	node := &Node{
 		instance:    config.Instance,
 		router:      config.Router,
@@ -108,6 +112,8 @@ func New(config Config) (*Node, error) {
 		rpcServer:   config.RPCServer,
 		rpcListener: config.RPCListener,
 		components:  append([]app.Component(nil), config.Components...),
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 	node.proxy = &Proxy{app: node}
 	pbNode.RegisterNodeServer(config.RPCServer, node)
@@ -128,6 +134,7 @@ func (n *Node) Start() error {
 		if err := component.Start(); err != nil {
 			var errs []error
 			errs = append(errs, fmt.Errorf("node: 启动组件失败 name=%s: %w", component.Name(), err))
+			n.cancel()
 			for index := int(n.startedComponents.Load()) - 1; index >= 0; index-- {
 				startedComponent := n.components[index]
 				logx.Infof("node: 正在回滚组件 name=%s", startedComponent.Name())
@@ -139,6 +146,7 @@ func (n *Node) Start() error {
 					))
 				}
 			}
+			n.Wait()
 			n.closed.Store(true)
 			return errors.Join(errs...)
 		}
@@ -148,6 +156,7 @@ func (n *Node) Start() error {
 	if err := n.registry.Register(n.instance); err != nil {
 		var errs []error
 		errs = append(errs, err)
+		n.cancel()
 		for index := int(n.startedComponents.Load()) - 1; index >= 0; index-- {
 			component := n.components[index]
 			logx.Infof("node: 正在回滚组件 name=%s", component.Name())
@@ -159,13 +168,14 @@ func (n *Node) Start() error {
 				))
 			}
 		}
+		n.Wait()
 		n.closed.Store(true)
 		return errors.Join(errs...)
 	}
 
-	n.wait.Add(1)
+	n.serverWait.Add(1)
 	help.SafeGo(func() {
-		defer n.wait.Done()
+		defer n.serverWait.Done()
 		if err := n.rpcServer.Serve(n.rpcListener); err != nil && !n.closed.Load() {
 			logx.Errorf("node: gRPC服务退出: %v", err)
 		}
@@ -198,7 +208,8 @@ func (n *Node) Shutdown(ctx context.Context) error {
 		<-rpcDone
 		errs = append(errs, ctx.Err())
 	}
-	n.wait.Wait()
+	n.serverWait.Wait()
+	n.cancel()
 
 	for index := int(n.startedComponents.Load()) - 1; index >= 0; index-- {
 		component := n.components[index]
@@ -209,5 +220,37 @@ func (n *Node) Shutdown(ctx context.Context) error {
 		}
 		logx.Infof("node: 组件关闭完成 name=%s", component.Name())
 	}
+
+	waitDone := make(chan struct{})
+	help.SafeGo(func() {
+		defer close(waitDone)
+		n.Wait()
+	})
+	select {
+	case <-waitDone:
+	case <-ctx.Done():
+		errs = append(errs, ctx.Err())
+	}
 	return errors.Join(errs...)
+}
+
+// AddWait 注册一个需要在Node关闭时等待的后台任务。
+// 必须在启动后台协程前调用，并且不能在Shutdown开始后调用。
+func (n *Node) AddWait() {
+	n.wait.Add(1)
+}
+
+// DoneWait 标记一个后台任务已经退出。
+func (n *Node) DoneWait() {
+	n.wait.Done()
+}
+
+// Wait 等待Node管理的全部后台任务退出。
+func (n *Node) Wait() {
+	n.wait.Wait()
+}
+
+// Done 在Node停止后台任务时关闭。
+func (n *Node) Done() <-chan struct{} {
+	return n.ctx.Done()
 }

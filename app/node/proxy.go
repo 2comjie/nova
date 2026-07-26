@@ -22,6 +22,26 @@ type Proxy struct {
 	app *Node
 }
 
+// AddWait 注册一个需要在Node关闭时等待的后台任务。
+func (p *Proxy) AddWait() {
+	p.app.AddWait()
+}
+
+// DoneWait 标记一个后台任务已经退出。
+func (p *Proxy) DoneWait() {
+	p.app.DoneWait()
+}
+
+// Wait 等待Node管理的全部后台任务退出。
+func (p *Proxy) Wait() {
+	p.app.Wait()
+}
+
+// Done 在Node停止后台任务时关闭。
+func (p *Proxy) Done() <-chan struct{} {
+	return p.app.Done()
+}
+
 // Push 向指定UID所在的Gate推送消息。
 func (p *Proxy) Push(ctx context.Context, uid string, route uint32, body []byte) error {
 	if err := ctx.Err(); err != nil {

@@ -75,6 +75,7 @@ type Gate struct {
 	sessions       sync.Map
 	started        atomic.Bool
 	closed         atomic.Bool
+	serverWait     sync.WaitGroup
 	wait           sync.WaitGroup
 }
 
@@ -177,9 +178,9 @@ func (g *Gate) Start() error {
 	if !g.started.CompareAndSwap(false, true) {
 		return ErrStarted
 	}
-	g.wait.Add(1)
+	g.serverWait.Add(1)
 	help.SafeGo(func() {
-		defer g.wait.Done()
+		defer g.serverWait.Done()
 		if err := g.rpcServer.Serve(g.rpcListener); err != nil && !g.closed.Load() {
 			logx.Errorf("gate: gRPC服务退出: %v", err)
 		}
@@ -188,7 +189,8 @@ func (g *Gate) Start() error {
 		g.cancel()
 		_ = g.server.Shutdown(context.Background())
 		g.rpcServer.Stop()
-		g.wait.Wait()
+		g.serverWait.Wait()
+		g.Wait()
 		g.closed.Store(true)
 		return err
 	}
@@ -197,7 +199,8 @@ func (g *Gate) Start() error {
 		g.cancel()
 		_ = g.server.Shutdown(context.Background())
 		g.rpcServer.Stop()
-		g.wait.Wait()
+		g.serverWait.Wait()
+		g.Wait()
 		g.closed.Store(true)
 		return err
 	}
@@ -209,7 +212,6 @@ func (g *Gate) Shutdown(ctx context.Context) error {
 	if !g.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-	g.cancel()
 
 	var errs []error
 	if g.started.Load() {
@@ -233,8 +235,41 @@ func (g *Gate) Shutdown(ctx context.Context) error {
 		<-rpcDone
 		errs = append(errs, ctx.Err())
 	}
-	g.wait.Wait()
+	g.serverWait.Wait()
+	g.cancel()
+
+	waitDone := make(chan struct{})
+	help.SafeGo(func() {
+		defer close(waitDone)
+		g.Wait()
+	})
+	select {
+	case <-waitDone:
+	case <-ctx.Done():
+		errs = append(errs, ctx.Err())
+	}
 	return errors.Join(errs...)
+}
+
+// AddWait 注册一个需要在Gate关闭时等待的后台任务。
+// 必须在启动后台协程前调用，并且不能在Shutdown开始后调用。
+func (g *Gate) AddWait() {
+	g.wait.Add(1)
+}
+
+// DoneWait 标记一个后台任务已经退出。
+func (g *Gate) DoneWait() {
+	g.wait.Done()
+}
+
+// Wait 等待Gate管理的全部后台任务退出。
+func (g *Gate) Wait() {
+	g.wait.Wait()
+}
+
+// Done 在Gate停止后台任务时关闭。
+func (g *Gate) Done() <-chan struct{} {
+	return g.ctx.Done()
 }
 
 func (g *Gate) onReq(request *network.ReqContext) {
