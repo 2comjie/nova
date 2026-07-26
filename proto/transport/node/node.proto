@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package wali.transport.node;
+
+option go_package = "github.com/2comjie/wali/internal/pb/transport/node;node";
+
+
+import "google/protobuf/empty.proto";
+
+message Request {
+  string uid = 1;
+  uint32 route = 2;
+  bytes body = 3;
+  string gate_service_name = 4;
+  string gate_instance_id = 5;
+}
+
+message Response {
+  bool replied = 1; // 是否有写rsp 为true时才给客户端写值。
+  bytes body = 2; // 返回值。
+  string node_service_name = 3;
+  string node_instance_id = 4;
+}
+
+service Node {
+  rpc Call(Request) returns (Response); // 执行业务请求 业务层决定是否给客户端写返回值。
+  rpc Tell(Request) returns (google.protobuf.Empty); // 执行业务请求 不给客户端写返回值。
+}
+

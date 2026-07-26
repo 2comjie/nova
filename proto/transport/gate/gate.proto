@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package wali.transport.gate;
+
+option go_package = "github.com/2comjie/wali/internal/pb/transport/gate;gate";
+
+import "google/protobuf/empty.proto";
+
+message PushRequest{
+  string uid = 1;
+  uint32 route = 2;
+  bytes body = 3;
+  string node_service_name = 4;
+  string node_instance_id = 5;
+}
+
+message KickRequest {
+  string uid = 1;
+  string node_service_name = 2;
+  string node_instance_id = 3;
+}
+
+service Gate {
+  rpc Push(PushRequest) returns (google.protobuf.Empty);
+  rpc Kick(KickRequest) returns (google.protobuf.Empty);
+}
