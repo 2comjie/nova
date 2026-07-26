@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/2comjie/wali/core/endpoint"
+	"github.com/2comjie/wali/core/help"
 	pbGate "github.com/2comjie/wali/internal/pb/transport/gate"
 	pbNode "github.com/2comjie/wali/internal/pb/transport/node"
 	"github.com/2comjie/wali/locator"
@@ -130,6 +131,13 @@ func TestGateCallTellPushKick(t *testing.T) {
 	if err := g.Start(); err != nil {
 		t.Fatal(err)
 	}
+	persisted := make(chan struct{})
+	g.proxy.AddWait()
+	help.SafeGo(func() {
+		defer g.proxy.DoneWait()
+		<-g.proxy.Done()
+		close(persisted)
+	})
 	t.Cleanup(func() {
 		_ = g.Shutdown(context.Background())
 	})
@@ -246,6 +254,14 @@ func TestGateCallTellPushKick(t *testing.T) {
 			hookHeartbeat.Load(),
 			hookReq.Load(),
 		)
+	}
+	if err := g.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-persisted:
+	default:
+		t.Fatal("Gate Shutdown没有等待后台持久化任务")
 	}
 }
 

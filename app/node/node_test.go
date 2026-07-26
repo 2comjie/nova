@@ -11,6 +11,7 @@ import (
 
 	"github.com/2comjie/wali/app"
 	"github.com/2comjie/wali/core/endpoint"
+	"github.com/2comjie/wali/core/help"
 	pbNode "github.com/2comjie/wali/internal/pb/transport/node"
 	"github.com/2comjie/wali/locator"
 	"github.com/2comjie/wali/rpc/lx"
@@ -37,6 +38,7 @@ func TestNodeRPC(t *testing.T) {
 	router := NewRouter()
 	callHandled := make(chan error, 1)
 	tellHandled := make(chan error, 1)
+	persisted := make(chan struct{})
 
 	if err := router.Handle(10, func(ctx *Context) {
 		if ctx.App.Instance().ID != "lobby-1" ||
@@ -56,6 +58,12 @@ func TestNodeRPC(t *testing.T) {
 			callHandled <- err
 			return
 		}
+		ctx.App.AddWait()
+		help.SafeGo(func() {
+			defer ctx.App.DoneWait()
+			<-ctx.App.Done()
+			close(persisted)
+		})
 		callHandled <- ctx.Reply([]byte("response"))
 	}); err != nil {
 		t.Fatal(err)
@@ -187,6 +195,11 @@ func TestNodeRPC(t *testing.T) {
 	if err := nodeApp.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	select {
+	case <-persisted:
+	default:
+		t.Fatal("Node Shutdown没有等待后台持久化任务")
+	}
 	if serviceRegistry.deregistered != "lobby-1" {
 		t.Fatalf("Registry注销实例=%q, want lobby-1", serviceRegistry.deregistered)
 	}
@@ -204,7 +217,10 @@ func TestNodeComponentStartRollback(t *testing.T) {
 	var mutex sync.Mutex
 	var calls []string
 	startErr := errors.New("start failed")
+	ctx, cancel := context.WithCancel(context.Background())
 	nodeApp := &Node{
+		ctx:    ctx,
+		cancel: cancel,
 		components: []app.Component{
 			&nodeTestComponent{name: "first", mutex: &mutex, calls: &calls},
 			&nodeTestComponent{name: "second", mutex: &mutex, calls: &calls, startErr: startErr},
