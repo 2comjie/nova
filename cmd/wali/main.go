@@ -10,6 +10,8 @@ import (
 
 var errUsage = errors.New("wali: 命令参数错误")
 
+const defaultWaliVersion = "v0.1.0"
+
 func main() {
 	if err := run(os.Args[1:], os.Stdout); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
@@ -44,7 +46,11 @@ func runNew(args []string, output io.Writer) error {
 	flags := flag.NewFlagSet("new", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	directory := flags.String("dir", "", "项目目录")
-	waliVersion := flags.String("wali-version", "v0.0.0", "Wali模块版本")
+	waliVersion := flags.String(
+		"wali-version",
+		defaultWaliVersion,
+		"Wali模块版本",
+	)
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}

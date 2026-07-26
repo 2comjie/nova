@@ -50,18 +50,16 @@ go install github.com/2comjie/wali/cmd/wali@latest
 
 ```bash
 wali new github.com/example/game \
-  --dir=../game \
-  --wali-version=v0.0.0
+  --dir=../game
 ```
 
 参数说明：
 
 - 第一个参数是新项目的 Go Module 名称。
 - `--dir` 指定生成目录，目录必须不存在或为空。
-- `--wali-version` 写入新项目 `go.mod`，正式项目应传入已经发布的 Wali 版本。
+- `--wali-version` 写入新项目 `go.mod`，默认是当前发布版本 `v0.1.0`。
 
-当前开发版本还没有正式版本号。在本地联调时，可以保留 `v0.0.0`，并把生成项目加入
-Wali 的 Workspace：
+如需测试尚未发布的本地 Wali 代码，可以把生成项目加入 Wali 的 Workspace：
 
 ```bash
 go work use ../game

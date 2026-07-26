@@ -9,12 +9,27 @@ import (
 	"testing"
 )
 
+func TestRunNewUsesDefaultWaliVersion(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "game")
+	var output strings.Builder
+	if err := runNew([]string{
+		"github.com/example/game",
+		"--dir=" + root,
+	}, &output); err != nil {
+		t.Fatalf("runNew() error = %v", err)
+	}
+	assertFileContains(t,
+		filepath.Join(root, "go.mod"),
+		"github.com/2comjie/wali v0.1.0",
+	)
+}
+
 func TestProjectGenerateNodeAndRoutes(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "game")
 	createdRoot, err := newProject(
 		"github.com/example/game",
 		root,
-		"v0.0.0",
+		"v0.1.0",
 	)
 	if err != nil {
 		t.Fatalf("newProject() error = %v", err)
@@ -22,6 +37,22 @@ func TestProjectGenerateNodeAndRoutes(t *testing.T) {
 	if createdRoot != root {
 		t.Fatalf("newProject() root = %q, want %q", createdRoot, root)
 	}
+	assertFileContains(t,
+		filepath.Join(root, "go.mod"),
+		"github.com/2comjie/wali v0.1.0",
+	)
+	assertFileContains(t,
+		filepath.Join(root, "go.mod"),
+		"github.com/2comjie/wali/locator/redis v0.1.0",
+	)
+	assertFileContains(t,
+		filepath.Join(root, "go.mod"),
+		"github.com/2comjie/wali/registry/redis v0.1.0",
+	)
+	assertFileContains(t,
+		filepath.Join(root, "go.mod"),
+		"github.com/redis/go-redis/v9 v9.21.0",
+	)
 
 	scriptPath := filepath.Join(root, "proto_gen.sh")
 	scriptInfo, err := os.Stat(scriptPath)
@@ -107,7 +138,7 @@ func TestProjectGenerateNodeAndRoutes(t *testing.T) {
 
 func TestAddRouteRejectsDuplicateAndUnknownNode(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "game")
-	if _, err := newProject("github.com/example/game", root, "v0.0.0"); err != nil {
+	if _, err := newProject("github.com/example/game", root, "v0.1.0"); err != nil {
 		t.Fatalf("newProject() error = %v", err)
 	}
 	if err := addNode(root, "chat"); err != nil {
