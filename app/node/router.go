@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-
-	"github.com/2comjie/wali/core/help"
 )
 
 var (
@@ -113,9 +111,7 @@ func (r *Router) Dispatch(ctx *Context) error {
 	if !ok {
 		return fmt.Errorf("%w: %d", ErrRouteNotFound, ctx.Request.Route)
 	}
-	help.SafeRun(func() {
-		handler(ctx)
-	})
+	handler(ctx)
 	return nil
 }
 
