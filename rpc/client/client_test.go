@@ -33,8 +33,8 @@ type fakeLocator struct {
 	instanceID string
 }
 
-func (f *fakeLocator) Bind(context.Context, string, string, string) error { return nil }
-func (f *fakeLocator) Unbind(context.Context, string, string) error       { return nil }
+func (f *fakeLocator) Bind(context.Context, string, string, string) error   { return nil }
+func (f *fakeLocator) Unbind(context.Context, string, string, string) error { return nil }
 func (f *fakeLocator) Locate(context.Context, string, string) (string, error) {
 	return f.instanceID, nil
 }

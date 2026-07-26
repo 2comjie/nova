@@ -1,7 +1,12 @@
 local hashKey = KEYS[1]
 local nameSetKey = KEYS[2]
 local bindKey = ARGV[1]
-local name = ARGV[2]
+local instanceID = ARGV[2]
+local name = ARGV[3]
+
+if redis.call("HGET", hashKey, bindKey) ~= instanceID then
+    return 0
+end
 
 redis.call("HDEL", hashKey, bindKey)
 

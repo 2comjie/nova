@@ -104,15 +104,15 @@ func (p *Provider) Bind(ctx context.Context, name string, key string, instanceID
 	return nil
 }
 
-func (p *Provider) Unbind(ctx context.Context, name string, key string) error {
+func (p *Provider) Unbind(ctx context.Context, name string, key string, instanceID string) error {
 	_ = ctx
 	p.rw.Lock()
 	defer p.rw.Unlock()
 
-	logCtx := logx.WithField("name", name).WithField("key", key)
+	logCtx := logx.WithField("name", name).WithField("key", key).WithField("instanceID", instanceID)
 	hashKey := p.hashKey(name)
 
-	err := p.rc.Eval(p.ctx, unbindScript, []string{hashKey, p.nameSetKey()}, key, name).Err()
+	err := p.rc.Eval(p.ctx, unbindScript, []string{hashKey, p.nameSetKey()}, key, instanceID, name).Err()
 	if err != nil {
 		logCtx.Errorf("eval unbind script err %+v", err)
 		return err

@@ -10,7 +10,7 @@ const GateName = "gate"
 
 type Locator interface {
 	Bind(ctx context.Context, name string, key string, instanceId string) error
-	Unbind(ctx context.Context, name string, key string) error
+	Unbind(ctx context.Context, name string, key string, instanceId string) error
 	Locate(ctx context.Context, name string, key string) (string, error)
 	Close()
 }
@@ -25,11 +25,11 @@ func (l *NodeLocator) Bind(ctx context.Context, name string, key string, instanc
 	return l.provider.Bind(ctx, name, key, instanceId)
 }
 
-func (l *NodeLocator) Unbind(ctx context.Context, name string, key string) error {
+func (l *NodeLocator) Unbind(ctx context.Context, name string, key string, instanceId string) error {
 	if name == GateName {
 		return ErrNodeNotSupport
 	}
-	return l.provider.Unbind(ctx, name, key)
+	return l.provider.Unbind(ctx, name, key, instanceId)
 }
 func (l *NodeLocator) Locate(ctx context.Context, name string, key string) (string, error) {
 	if name == GateName {
@@ -66,8 +66,8 @@ func NewNodeLocator(provider Locator) *NodeLocator {
 func (l *GateLocator) Bind(ctx context.Context, uid string, instanceId string) error {
 	return l.provider.Bind(ctx, GateName, uid, instanceId)
 }
-func (l *GateLocator) Unbind(ctx context.Context, uid string) error {
-	return l.provider.Unbind(ctx, GateName, uid)
+func (l *GateLocator) Unbind(ctx context.Context, uid string, instanceId string) error {
+	return l.provider.Unbind(ctx, GateName, uid, instanceId)
 }
 func (l *GateLocator) Locate(ctx context.Context, uid string) (string, error) {
 	instanceId, err := l.provider.Locate(ctx, GateName, uid)

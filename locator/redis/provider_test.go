@@ -84,11 +84,35 @@ func TestProvider_Unbind(t *testing.T) {
 		t.Fatalf("expected instance_a, got %s", id)
 	}
 
-	p.Unbind(context.Background(), "game", "room_1")
+	p.Unbind(context.Background(), "game", "room_1", "instance_a")
 
 	_, err = p.Locate(context.Background(), "game", "room_1")
 	if err == nil {
 		t.Fatal("expected error after unbind")
+	}
+}
+
+func TestProvider_UnbindDoesNotDeleteNewBinding(t *testing.T) {
+	rc := testClient(t)
+	p := NewProvider(rc, WithPrefix("test:unbind_new"), WithTTL(time.Second*10), WithTick(time.Second*3))
+	defer p.Close()
+
+	if err := p.Bind(context.Background(), "game", "room_1", "instance_a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Bind(context.Background(), "game", "room_1", "instance_b"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Unbind(context.Background(), "game", "room_1", "instance_a"); err != nil {
+		t.Fatal(err)
+	}
+
+	id, err := p.Locate(context.Background(), "game", "room_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "instance_b" {
+		t.Fatalf("instance=%q, want instance_b", id)
 	}
 }
 
