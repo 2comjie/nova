@@ -5,7 +5,6 @@ import (
 	"errors"
 	"maps"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/2comjie/wali/locator"
 	"github.com/2comjie/wali/registry"
 	rpcclient "github.com/2comjie/wali/rpc/client"
+	"github.com/spf13/cast"
 	"google.golang.org/grpc"
 )
 
@@ -142,8 +142,8 @@ func rpcEndpoint(listener net.Listener, configuredHost string) (string, int, err
 	if err != nil {
 		return "", 0, ErrRPCAddress
 	}
-	port, err := strconv.Atoi(portText)
-	if err != nil || port <= 0 {
+	port := cast.ToInt(portText)
+	if port <= 0 {
 		return "", 0, ErrRPCAddress
 	}
 	if configuredHost != "" {
