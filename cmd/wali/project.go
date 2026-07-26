@@ -166,7 +166,6 @@ func addNode(root string, name string) error {
 				"api",
 				"server",
 				name,
-				"v1",
 				name+".proto",
 			),
 		},

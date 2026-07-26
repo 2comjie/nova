@@ -66,13 +66,20 @@ func TestProjectGenerateNodeAndRoutes(t *testing.T) {
 	if err := addNode(root, "chat"); err != nil {
 		t.Fatalf("addNode() error = %v", err)
 	}
+	if err := addNode(root, "room"); err != nil {
+		t.Fatalf("addNode(room) error = %v", err)
+	}
 	assertFileContains(t,
-		filepath.Join(root, "api/server/chat/v1/chat.proto"),
-		"service Chat",
+		filepath.Join(root, "api/server/chat/chat.proto"),
+		"package game.server.chat;",
+	)
+	assertFileContains(t,
+		filepath.Join(root, "api/server/chat/chat.proto"),
+		"go_package = \"github.com/example/game/api/server/chat;chatpb\";",
 	)
 	assertFileContains(t,
 		filepath.Join(root, "internal/chat/rpc.go"),
-		"RegisterChatServer",
+		"chatpb.RegisterChatServer",
 	)
 	assertFileContains(t,
 		filepath.Join(root, "cmd/chat/main.go"),
@@ -80,15 +87,34 @@ func TestProjectGenerateNodeAndRoutes(t *testing.T) {
 	)
 	assertFileContains(t,
 		filepath.Join(root, "internal/rpcclient/client_gen.go"),
-		"Chat chatv1.ChatClient",
+		"ChatClient chatpb.ChatClient",
 	)
 	assertFileContains(t,
 		filepath.Join(root, "internal/rpcclient/client_gen.go"),
-		"Chat: chatv1.NewChatClient(base)",
+		"RoomClient roompb.RoomClient",
+	)
+	assertFileContains(t,
+		filepath.Join(root, "internal/rpcclient/client_gen.go"),
+		"ChatClient = chatpb.NewChatClient(base)",
+	)
+	assertFileContains(t,
+		filepath.Join(root, "internal/rpcclient/client_gen.go"),
+		"RoomClient = roompb.NewRoomClient(base)",
+	)
+	assertFileNotContains(t,
+		filepath.Join(root, "internal/rpcclient/client_gen.go"),
+		"type Client struct",
+	)
+	if _, err := os.Stat(filepath.Join(root, "api/server/chat/v1")); !os.IsNotExist(err) {
+		t.Fatalf("不应生成api/server/chat/v1目录, stat error = %v", err)
+	}
+	assertFileContains(t,
+		filepath.Join(root, "internal/bootstrap/infrastructure.go"),
+		"RPCClient *walirpc.Client",
 	)
 	assertFileContains(t,
 		filepath.Join(root, "internal/bootstrap/infrastructure.go"),
-		"RPCClient *projectrpc.Client",
+		"projectrpc.Init(baseRPCClient)",
 	)
 
 	if err := addRoute(root, RouteSpec{
@@ -176,6 +202,17 @@ func assertFileContains(t *testing.T, path string, expected string) {
 	}
 	if !strings.Contains(string(body), expected) {
 		t.Fatalf("%s does not contain %q\n%s", path, expected, body)
+	}
+}
+
+func assertFileNotContains(t *testing.T, path string, unexpected string) {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s error = %v", path, err)
+	}
+	if strings.Contains(string(body), unexpected) {
+		t.Fatalf("%s unexpectedly contains %q\n%s", path, unexpected, body)
 	}
 }
 

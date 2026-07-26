@@ -151,9 +151,9 @@ func generateRPCClient(root string, project Project) error {
 	for _, node := range nodes {
 		_, _ = fmt.Fprintf(
 			&file,
-			"\t%sv1 %q\n",
+			"\t%spb %q\n",
 			node.Name,
-			project.Module+"/api/server/"+node.Name+"/v1",
+			project.Module+"/api/server/"+node.Name,
 		)
 	}
 	file.WriteString(")\n\n")
@@ -164,7 +164,7 @@ func generateRPCClient(root string, project Project) error {
 	for _, node := range nodes {
 		_, _ = fmt.Fprintf(
 			&file,
-			"\t%s %sv1.%sClient\n",
+			"\t%s %spb.%sClient\n",
 			goIdentifier(node.Name),
 			node.Name,
 			goIdentifier(node.Name),
@@ -178,7 +178,7 @@ func generateRPCClient(root string, project Project) error {
 	for _, node := range nodes {
 		_, _ = fmt.Fprintf(
 			&file,
-			"\t\t%s: %sv1.New%sClient(base),\n",
+			"\t\t%s: %spb.New%sClient(base),\n",
 			goIdentifier(node.Name),
 			node.Name,
 			goIdentifier(node.Name),
