@@ -7,7 +7,7 @@ server:
 
 # deploy.Gate 会自动读取这两个配置项。
 gate:
-  filters: []
+  filters: [ ]
   routes:
     - id: "lobby"
       routes:
