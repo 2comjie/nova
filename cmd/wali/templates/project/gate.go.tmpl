@@ -1,0 +1,44 @@
+package main
+
+import (
+	"github.com/2comjie/wali/config"
+	"github.com/2comjie/wali/config/file"
+	"github.com/2comjie/wali/deploy"
+	"github.com/2comjie/wali/flag"
+	"github.com/2comjie/wali/locator"
+	"github.com/2comjie/wali/network"
+	nettcp "github.com/2comjie/wali/network/transport/tcp"
+	"{{.Module}}/internal/bootstrap"
+	"{{.Module}}/internal/gateway"
+)
+
+func main() {
+	infrastructure := bootstrap.NewInfrastructure()
+	defer infrastructure.Redis.Close()
+
+	listener, err := nettcp.Listen(flag.String("listen", "127.0.0.1:8000"))
+	if err != nil {
+		panic(err)
+	}
+	configCenter := config.New(config.WithSource(file.NewSource(
+		flag.String("config", "./configs/gate"),
+	)))
+
+	options := infrastructure.DeployOptions()
+	options = append(options,
+		deploy.WithServiceName(flag.String("service", locator.GateName)),
+		deploy.WithInstanceID(flag.String("id", "gate-1")),
+		deploy.WithConfig(configCenter),
+		deploy.WithNetworkOptions(
+			network.WithListener(listener),
+			network.WithAuther(network.AuthFunc(gateway.Authenticate)),
+		),
+	)
+	gate, err := deploy.Gate(options...)
+	if err != nil {
+		panic(err)
+	}
+	if err := gate.Run(); err != nil {
+		panic(err)
+	}
+}

@@ -1,0 +1,41 @@
+package bootstrap
+
+import (
+	"github.com/2comjie/wali/deploy"
+	"github.com/2comjie/wali/flag"
+	"github.com/2comjie/wali/locator"
+	redisLocator "github.com/2comjie/wali/locator/redis"
+	"github.com/2comjie/wali/registry"
+	redisRegistry "github.com/2comjie/wali/registry/redis"
+	"github.com/redis/go-redis/v9"
+)
+
+// Infrastructure 是所有App共用的基础设施。
+type Infrastructure struct {
+	Redis    redis.UniversalClient
+	Registry registry.Registry
+	Discover registry.Discover
+	Locator  locator.Locator
+}
+
+// NewInfrastructure 创建Redis Registry、Discover和Locator。
+func NewInfrastructure() *Infrastructure {
+	redisClient := redis.NewUniversalClient(&redis.UniversalOptions{
+		Addrs: []string{flag.String("redis", "127.0.0.1:6379")},
+	})
+	return &Infrastructure{
+		Redis:    redisClient,
+		Registry: redisRegistry.NewRegistry(redisClient),
+		Discover: redisRegistry.NewDiscover(redisClient),
+		Locator:  redisLocator.NewProvider(redisClient),
+	}
+}
+
+// DeployOptions 返回Gate和Node共用的部署参数。
+func (i *Infrastructure) DeployOptions() []deploy.Option {
+	return []deploy.Option{
+		deploy.WithRegistry(i.Registry),
+		deploy.WithDiscover(i.Discover),
+		deploy.WithLocator(i.Locator),
+	}
+}

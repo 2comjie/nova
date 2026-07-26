@@ -30,6 +30,7 @@ type options struct {
 	rpcHost          string
 	rpcListener      net.Listener
 	rpcServer        *grpc.Server
+	rpcClient        *rpcclient.Client
 	rpcServerOptions []grpc.ServerOption
 	rpcClientOptions []rpcclient.Option
 
@@ -129,6 +130,14 @@ func WithRPCListener(listener net.Listener) Option {
 func WithRPCServer(server *grpc.Server) Option {
 	return func(options *options) {
 		options.rpcServer = server
+	}
+}
+
+// WithRPCClient 使用已经创建的Node间RPC Client。
+// Client交给deploy管理，Shutdown后会被关闭。
+func WithRPCClient(client *rpcclient.Client) Option {
+	return func(options *options) {
+		options.rpcClient = client
 	}
 }
 

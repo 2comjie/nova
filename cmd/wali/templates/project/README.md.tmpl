@@ -1,0 +1,17 @@
+# {{.Module}}
+
+使用 Wali 构建的分布式游戏服务器。
+
+## 开始
+
+```bash
+go mod tidy
+wali add node chat
+wali add route chat.send --route=1001 --node=chat --call
+```
+
+Gate 路由生成到 `configs/gate/routes_gen.yaml`。该文件由 Wali 管理，不要手动修改。
+自定义 Gate 配置写入 `configs/gate/base.yaml`。
+
+本地开发 Wali 时，把新项目加入同一个 `go.work`；使用发布版本时，通过
+`wali new --wali-version=<version>` 固定框架版本。

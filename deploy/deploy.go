@@ -115,7 +115,14 @@ func buildResources(options options) (*resources, endpoint.ServiceInstance, *grp
 	if rpcServer == nil {
 		rpcServer = grpc.NewServer(options.rpcServerOptions...)
 	}
-	client := rpcclient.NewClient(options.discover, options.locator, options.rpcClientOptions...)
+	client := options.rpcClient
+	if client == nil {
+		client = rpcclient.NewClient(
+			options.discover,
+			options.locator,
+			options.rpcClientOptions...,
+		)
+	}
 	resource := &resources{
 		config:          options.config,
 		registry:        options.registry,

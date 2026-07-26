@@ -1,0 +1,10 @@
+.PHONY: init run-gate test
+
+init:
+	go mod tidy
+
+run-gate:
+	go run ./cmd/gate
+
+test:
+	go test ./...
