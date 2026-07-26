@@ -163,9 +163,11 @@ func rpcEndpoint(listener net.Listener, configuredHost string) (string, int, err
 }
 
 func defaultOptions() options {
-	configCenter := config.New()
+	var configCenter config.Config
 	if path := waliflag.String("config"); path != "" {
 		configCenter = config.New(config.WithSource(file.NewSource(path)))
+	} else {
+		configCenter = config.New()
 	}
 	return options{
 		serviceName: waliflag.String("service"),
