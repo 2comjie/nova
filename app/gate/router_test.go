@@ -79,9 +79,7 @@ func TestRouterFilterCanStopForward(t *testing.T) {
 	router := NewRouter()
 	if err := router.RegisterFilter("stop", func(map[string]string) (Filter, error) {
 		return func(ctx *Context, next Handler) error {
-			ctx.Replied = true
-			ctx.ResponseBody = []byte("maintenance")
-			return nil
+			return ctx.Reply([]byte("maintenance"))
 		}, nil
 	}); err != nil {
 		t.Fatal(err)
@@ -110,8 +108,8 @@ func TestRouterFilterCanStopForward(t *testing.T) {
 	if forwarded {
 		t.Fatal("被Filter终止的请求仍然执行了Forward")
 	}
-	if !ctx.Replied || string(ctx.ResponseBody) != "maintenance" {
-		t.Fatalf("响应结果不正确: replied=%v body=%q", ctx.Replied, ctx.ResponseBody)
+	if !ctx.replied || string(ctx.responseBody) != "maintenance" {
+		t.Fatalf("响应结果不正确: replied=%v body=%q", ctx.replied, ctx.responseBody)
 	}
 }
 
@@ -272,5 +270,5 @@ func TestRouterDispatchErrors(t *testing.T) {
 }
 
 func testContext(route uint32) *Context {
-	return &Context{Route: route}
+	return &Context{Route: route, needReply: true}
 }

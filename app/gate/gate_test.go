@@ -28,6 +28,9 @@ func TestGateCallTellPushKick(t *testing.T) {
 	router := NewRouter()
 	if err := router.RegisterFilter("rewrite", func(map[string]string) (Filter, error) {
 		return func(ctx *Context, next Handler) error {
+			if ctx.App == nil || ctx.App.Instance().ID != "gate-1" {
+				return errors.New("Gate Context没有正确设置App Proxy")
+			}
 			ctx.Route = 110
 			return next(ctx)
 		}, nil

@@ -62,6 +62,7 @@ type Gate struct {
 	instance     endpoint.ServiceInstance
 	router       *Router
 	server       *network.Server
+	proxy        *Proxy
 	nodeClient   pbNode.NodeClient
 	locator      *locator.GateLocator
 	registry     registry.Registry
@@ -158,6 +159,7 @@ func New(config Config) (*Gate, error) {
 		return nil, err
 	}
 	g.server = server
+	g.proxy = &Proxy{app: g}
 
 	if err := g.router.Freeze(); err != nil {
 		cancel()
@@ -240,6 +242,7 @@ func (g *Gate) onReq(request *network.ReqContext) {
 	message := request.Request
 	ctx := &Context{
 		Context:   g.ctx,
+		App:       g.proxy,
 		Session:   request.Session,
 		Route:     message.Route,
 		Seq:       message.Seq,
@@ -257,8 +260,8 @@ func (g *Gate) onReq(request *network.ReqContext) {
 	if !completed {
 		err = ErrHandlerPanic
 	}
-	if err == nil && request.NeedReply && ctx.Replied {
-		err = request.Write(ctx.ResponseBody)
+	if err == nil && request.NeedReply && ctx.replied {
+		err = request.Write(ctx.responseBody)
 	}
 	if err != nil {
 		help.SafeRun(func() {
@@ -309,10 +312,11 @@ func (g *Gate) forward(ctx *Context) error {
 	if response.NodeServiceName == "" || response.NodeInstanceId == "" {
 		return ErrInvalidNodeSource
 	}
-	ctx.Replied = response.Replied
-	ctx.ResponseBody = response.Body
 	ctx.NodeServiceName = response.NodeServiceName
 	ctx.NodeInstanceID = response.NodeInstanceId
+	if response.Replied {
+		return ctx.Reply(response.Body)
+	}
 	return nil
 }
 
