@@ -1,0 +1,19 @@
+gate:
+  filters: []
+  routes:
+    - id: "chat"
+      routes:
+        - 1001
+      target:
+        mode: "balance"
+        service: "chat"
+        balance: "weighted_round_robin"
+
+    - id: "player"
+      routes:
+        - 2001
+        - 2002
+      target:
+        mode: "balance"
+        service: "player"
+        balance: "weighted_round_robin"
