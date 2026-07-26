@@ -1,0 +1,19 @@
+name: "Wali Game Server"
+age: 1
+
+server:
+  rpc_host: "127.0.0.1"
+  rpc_port: 9001
+
+# deploy.Gate 会自动读取这两个配置项。
+gate:
+  filters: []
+  routes:
+    - id: "lobby"
+      routes:
+        - 1001
+        - 1002
+      target:
+        mode: "balance"
+        service: "lobby"
+        balance: "weighted_round_robin"
