@@ -1,0 +1,17 @@
+package {{.Node.Name}}
+
+import (
+	{{.Node.Name}}v1 "{{.Project.Module}}/api/server/{{.Node.Name}}/v1"
+	"google.golang.org/grpc"
+)
+
+// RPCServer 实现 {{.Node.Name}} Node 对其他服务器开放的内部RPC。
+// 新增RPC方法后直接在这个类型上实现，生成器不会覆盖本文件。
+type RPCServer struct {
+	{{.Node.Name}}v1.Unimplemented{{.Service}}Server
+}
+
+// RegisterRPC 注册当前Node的业务RPC。
+func RegisterRPC(registrar grpc.ServiceRegistrar) {
+	{{.Node.Name}}v1.Register{{.Service}}Server(registrar, &RPCServer{})
+}

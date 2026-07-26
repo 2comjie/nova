@@ -1,7 +1,14 @@
-.PHONY: init run-gate test
+.PHONY: init tools proto run-gate test
 
-init:
+init: proto
 	go mod tidy
+
+tools:
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	go install github.com/2comjie/wali/cmd/protoc-gen-go-grpc-locator@latest
+
+proto:
+	./proto_gen.sh
 
 run-gate:
 	go run ./cmd/gate

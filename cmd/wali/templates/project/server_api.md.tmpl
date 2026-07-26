@@ -1,0 +1,14 @@
+# 服务器内部 RPC
+
+这里保存 Gate、Node 和其他服务器组件之间的内部 gRPC 协议。
+
+`wali add node <name>` 会创建：
+
+```text
+api/server/<name>/v1/<name>.proto
+internal/<name>/rpc.go
+```
+
+执行 `make proto` 后，生成的 Client 接收 Wali `rpc/client.Client`，并通过
+`rpc/lx` 上下文选择负载均衡、指定节点或状态定位路由。所有强类型 Client
+统一挂在 `internal/rpcclient.Client`，共用一个底层连接池和服务发现订阅。

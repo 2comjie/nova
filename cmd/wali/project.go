@@ -115,6 +115,9 @@ func newProject(moduleName string, directory string, waliVersion string) (string
 			return "", err
 		}
 	}
+	if err := generateRPCClient(root, project); err != nil {
+		return "", err
+	}
 	if err := generateRoutes(root, project, RouteManifest{}); err != nil {
 		return "", err
 	}
@@ -172,6 +175,9 @@ func addNode(root string, name string) error {
 		if err := renderIfMissing(root, file, data); err != nil {
 			return err
 		}
+	}
+	if err := generateRPCClient(root, project); err != nil {
+		return err
 	}
 
 	manifest, err := loadRoutes(root, project)
