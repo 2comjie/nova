@@ -9,7 +9,6 @@ require (
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/spf13/cast v1.10.0
 	github.com/xtaci/kcp-go/v5 v5.6.72
-	go.uber.org/zap v1.28.0
 	golang.org/x/net v0.51.0
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.11
@@ -22,12 +21,9 @@ require (
 	github.com/klauspost/reedsolomon v1.14.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
-	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
-	github.com/templexxx/xor v0.0.0-20191217153810-f85b25db303b // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/xtaci/lossyconn v1.0.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
