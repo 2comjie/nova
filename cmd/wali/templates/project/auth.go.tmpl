@@ -1,9 +1,0 @@
-package gateway
-
-import "errors"
-
-// Authenticate 校验客户端token并返回UID。
-// 接入正式认证系统前保持拒绝，禁止把token直接当作UID用于生产环境。
-func Authenticate([]byte) (string, error) {
-	return "", errors.New("请实现客户端token认证")
-}
