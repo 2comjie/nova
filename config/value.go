@@ -12,8 +12,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var _ Value = (*atomicValue)(nil)
-
 type Value interface {
 	Bool() (bool, error)
 	Int() (int64, error)
@@ -28,7 +26,7 @@ type Value interface {
 }
 
 type atomicValue struct {
-	atomic.Value
+	value atomic.Pointer[valueBox]
 }
 
 type valueBox struct {
@@ -36,154 +34,155 @@ type valueBox struct {
 }
 
 func (v *atomicValue) Load() any {
-	box := v.Value.Load()
+	box := v.value.Load()
 	if box == nil {
 		return nil
 	}
-	return box.(*valueBox).value
+	return box.value
 }
 
-func (v *atomicValue) Store(val any) {
-	v.Value.Store(&valueBox{value: val})
-}
-
-func (v *atomicValue) typeAssertError() error {
-	return fmt.Errorf("type assert to %v failed", reflect.TypeOf(v.Load()))
+func (v *atomicValue) Store(value any) {
+	v.value.Store(&valueBox{value: value})
 }
 
 func (v *atomicValue) Bool() (bool, error) {
-	switch val := v.Load().(type) {
+	switch value := v.Load().(type) {
 	case bool:
-		return val, nil
+		return value, nil
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
-		return strconv.ParseBool(fmt.Sprint(val))
+		return strconv.ParseBool(fmt.Sprint(value))
 	case string:
-		return strconv.ParseBool(val)
+		return strconv.ParseBool(value)
+	default:
+		return false, v.typeError()
 	}
-	return false, v.typeAssertError()
 }
 
 func (v *atomicValue) Int() (int64, error) {
-	switch val := v.Load().(type) {
+	switch value := v.Load().(type) {
 	case int:
-		return int64(val), nil
+		return int64(value), nil
 	case int8:
-		return int64(val), nil
+		return int64(value), nil
 	case int16:
-		return int64(val), nil
+		return int64(value), nil
 	case int32:
-		return int64(val), nil
+		return int64(value), nil
 	case int64:
-		return val, nil
+		return value, nil
 	case uint:
-		return int64(val), nil
+		return int64(value), nil
 	case uint8:
-		return int64(val), nil
+		return int64(value), nil
 	case uint16:
-		return int64(val), nil
+		return int64(value), nil
 	case uint32:
-		return int64(val), nil
+		return int64(value), nil
 	case uint64:
-		return int64(val), nil
+		return int64(value), nil
 	case float32:
-		return int64(val), nil
+		return int64(value), nil
 	case float64:
-		return int64(val), nil
+		return int64(value), nil
 	case string:
-		return strconv.ParseInt(val, 10, 64)
+		return strconv.ParseInt(value, 10, 64)
+	default:
+		return 0, v.typeError()
 	}
-	return 0, v.typeAssertError()
 }
 
 func (v *atomicValue) Float() (float64, error) {
-	switch val := v.Load().(type) {
+	switch value := v.Load().(type) {
 	case int:
-		return float64(val), nil
+		return float64(value), nil
 	case int8:
-		return float64(val), nil
+		return float64(value), nil
 	case int16:
-		return float64(val), nil
+		return float64(value), nil
 	case int32:
-		return float64(val), nil
+		return float64(value), nil
 	case int64:
-		return float64(val), nil
+		return float64(value), nil
 	case uint:
-		return float64(val), nil
+		return float64(value), nil
 	case uint8:
-		return float64(val), nil
+		return float64(value), nil
 	case uint16:
-		return float64(val), nil
+		return float64(value), nil
 	case uint32:
-		return float64(val), nil
+		return float64(value), nil
 	case uint64:
-		return float64(val), nil
+		return float64(value), nil
 	case float32:
-		return float64(val), nil
+		return float64(value), nil
 	case float64:
-		return val, nil
+		return value, nil
 	case string:
-		return strconv.ParseFloat(val, 64)
+		return strconv.ParseFloat(value, 64)
+	default:
+		return 0, v.typeError()
 	}
-	return 0.0, v.typeAssertError()
 }
 
 func (v *atomicValue) String() (string, error) {
-	switch val := v.Load().(type) {
+	switch value := v.Load().(type) {
 	case string:
-		return val, nil
+		return value, nil
 	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
-		return fmt.Sprint(val), nil
+		return fmt.Sprint(value), nil
 	case []byte:
-		return string(val), nil
+		return string(value), nil
 	case fmt.Stringer:
-		return val.String(), nil
+		return value.String(), nil
+	default:
+		return "", v.typeError()
 	}
-	return "", v.typeAssertError()
 }
 
 func (v *atomicValue) Duration() (time.Duration, error) {
-	val, err := v.Int()
-	if err != nil {
-		return 0, err
-	}
-	return time.Duration(val), nil
+	value, err := v.Int()
+	return time.Duration(value), err
 }
 
 func (v *atomicValue) Slice() ([]Value, error) {
-	vals, ok := v.Load().([]any)
+	items, ok := v.Load().([]any)
 	if !ok {
-		return nil, v.typeAssertError()
+		return nil, v.typeError()
 	}
-	slices := make([]Value, 0, len(vals))
-	for _, val := range vals {
-		a := new(atomicValue)
-		a.Store(val)
-		slices = append(slices, a)
+	values := make([]Value, len(items))
+	for i, item := range items {
+		value := &atomicValue{}
+		value.Store(clone(item))
+		values[i] = value
 	}
-	return slices, nil
+	return values, nil
 }
 
 func (v *atomicValue) Map() (map[string]Value, error) {
-	vals, ok := v.Load().(map[string]any)
+	object, ok := v.Load().(map[string]any)
 	if !ok {
-		return nil, v.typeAssertError()
+		return nil, v.typeError()
 	}
-	m := make(map[string]Value, len(vals))
-	for key, val := range vals {
-		a := new(atomicValue)
-		a.Store(val)
-		m[key] = a
+	values := make(map[string]Value, len(object))
+	for key, item := range object {
+		value := &atomicValue{}
+		value.Store(clone(item))
+		values[key] = value
 	}
-	return m, nil
+	return values, nil
 }
 
-func (v *atomicValue) Scan(obj any) error {
+func (v *atomicValue) Scan(target any) error {
 	data, err := json.Marshal(v.Load())
 	if err != nil {
 		return err
 	}
-	if pb, ok := obj.(proto.Message); ok {
-		return protojson.UnmarshalOptions{DiscardUnknown: true}.Unmarshal(data, pb)
+	if message, ok := target.(proto.Message); ok {
+		return protojson.UnmarshalOptions{DiscardUnknown: true}.Unmarshal(data, message)
 	}
-	return json.Unmarshal(data, obj)
+	return json.Unmarshal(data, target)
+}
+
+func (v *atomicValue) typeError() error {
+	return fmt.Errorf("config: cannot convert %v", reflect.TypeOf(v.Load()))
 }

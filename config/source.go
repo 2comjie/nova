@@ -4,12 +4,18 @@ import "errors"
 
 var ErrWatchUnsupported = errors.New("config: watch unsupported")
 
+type Document struct {
+	Path   string
+	Format string
+	Data   []byte
+}
+
 type Source interface {
-	Load() ([]*KeyValue, error)
+	Load() ([]Document, error)
 	Watch() (Watcher, error)
 }
 
 type Watcher interface {
-	Next() ([]*KeyValue, error)
+	Next() error
 	Stop()
 }

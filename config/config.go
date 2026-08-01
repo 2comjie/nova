@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"sync"
+	"sync/atomic"
 
 	"github.com/2comjie/wali/core/help"
 	"github.com/2comjie/wali/logx"
@@ -14,49 +16,59 @@ import (
 )
 
 var (
-	_           Config = (*config)(nil)
-	ErrNotFound        = errors.New("config: key not found")
-	ErrClosed          = errors.New("config: closed")
+	ErrNotFound = errors.New("config: key not found")
+	ErrClosed   = errors.New("config: closed")
 )
 
 type Observer func(string, Value)
 
 type Config interface {
 	Load() error
-	Scan(v any) error
-	Value(key string) Value
-	Watch(key string, o Observer) error
+	Scan(any) error
+	Value(string) Value
+	Watch(string, Observer) error
 	Close() error
+}
+
+type snapshot struct {
+	root map[string]any
 }
 
 type observerState struct {
 	snapshot any
-	fn       Observer
+	observer Observer
 }
 
 type config struct {
+	sources []Source
+	current atomic.Pointer[snapshot]
+
 	lifecycleMu sync.Mutex
 	loaded      bool
 	closed      bool
+	watchers    []Watcher
 
-	sources   []Source
-	reader    *Reader
-	opts      options
-	cache     sync.Map // string → Value
-	observers sync.Map // string → *observerState
-	watchers  []Watcher
+	reloadMu sync.Mutex
+
+	valuesMu sync.Mutex
+	values   map[string]*atomicValue
+
+	observersMu sync.Mutex
+	observers   map[string]*observerState
 }
 
 func New(opts ...Option) Config {
-	o := defaultOptions()
-	for _, opt := range opts {
-		opt(&o)
+	var settings options
+	for _, option := range opts {
+		option(&settings)
 	}
-	return &config{
-		sources: o.sources,
-		reader:  newReader(o),
-		opts:    o,
+	center := &config{
+		sources:   append([]Source(nil), settings.sources...),
+		values:    make(map[string]*atomicValue),
+		observers: make(map[string]*observerState),
 	}
+	center.current.Store(&snapshot{root: make(map[string]any)})
+	return center
 }
 
 func (c *config) Load() error {
@@ -68,83 +80,80 @@ func (c *config) Load() error {
 	if c.loaded {
 		return nil
 	}
-	if err := c.reload(); err != nil {
+	if err := c.reload(false); err != nil {
 		return err
 	}
 
 	watchers := make([]Watcher, 0, len(c.sources))
-	for _, src := range c.sources {
-		w, err := src.Watch()
+	for index, source := range c.sources {
+		watcher, err := source.Watch()
 		if errors.Is(err, ErrWatchUnsupported) {
 			continue
 		}
 		if err != nil {
-			for _, watcher := range watchers {
-				watcher.Stop()
+			for _, created := range watchers {
+				created.Stop()
 			}
-			logx.Errorf("config: watch source: %v", err)
-			return err
+			return fmt.Errorf("config: watch source %d: %w", index, err)
 		}
-		watchers = append(watchers, w)
+		if watcher == nil {
+			for _, created := range watchers {
+				created.Stop()
+			}
+			return fmt.Errorf("config: watch source %d returned nil watcher", index)
+		}
+		watchers = append(watchers, watcher)
 	}
+
 	c.watchers = watchers
 	c.loaded = true
 	for _, watcher := range watchers {
-		w := watcher
+		current := watcher
 		help.SafeGo(func() {
-			c.watchLoop(w)
+			c.watchLoop(current)
 		})
 	}
 	return nil
 }
 
-func (c *config) reload() error {
-	var kvs []*KeyValue
-	for _, src := range c.sources {
-		next, err := src.Load()
-		if err != nil {
-			return err
-		}
-		kvs = append(kvs, next...)
-	}
-	if err := c.reader.Load(kvs...); err != nil {
-		return err
-	}
-	c.syncCachedValues()
-	return nil
-}
-
-func (c *config) Scan(v any) error {
-	data, err := c.reader.Source()
+func (c *config) Scan(target any) error {
+	data, err := json.Marshal(c.current.Load().root)
 	if err != nil {
 		return err
 	}
-	return unmarshalJSON(data, v)
+	return unmarshalJSON(data, target)
 }
 
 func (c *config) Value(key string) Value {
-	if v, ok := c.cache.Load(key); ok {
-		return v.(Value)
+	c.valuesMu.Lock()
+	defer c.valuesMu.Unlock()
+	if value, exists := c.values[key]; exists {
+		return value
 	}
-	val, ok := c.reader.Value(key)
-	if !ok {
+	current, exists := readTree(c.current.Load().root, key)
+	if !exists {
 		return nil
 	}
-	av := &atomicValue{}
-	av.Store(clone(val))
-	c.cache.Store(key, av)
-	return av
+	value := &atomicValue{}
+	value.Store(clone(current))
+	c.values[key] = value
+	return value
 }
 
-func (c *config) Watch(key string, o Observer) error {
-	val, ok := c.reader.Value(key)
-	if !ok || val == nil {
+func (c *config) Watch(key string, observer Observer) error {
+	if observer == nil {
+		return errors.New("config: observer is nil")
+	}
+	current, exists := readTree(c.current.Load().root, key)
+	if !exists {
 		return ErrNotFound
 	}
-	c.observers.Store(key, &observerState{
-		snapshot: clone(val),
-		fn:       o,
-	})
+	c.observersMu.Lock()
+	c.observers[key] = &observerState{
+		snapshot: clone(current),
+		observer: observer,
+	}
+	c.observersMu.Unlock()
 	return nil
 }
 
@@ -159,98 +168,132 @@ func (c *config) Close() error {
 	c.watchers = nil
 	c.lifecycleMu.Unlock()
 
-	for _, w := range watchers {
-		w.Stop()
+	for _, watcher := range watchers {
+		watcher.Stop()
 	}
 	return nil
 }
 
-func (c *config) watchLoop(w Watcher) {
+func (c *config) reload(notify bool) error {
+	c.reloadMu.Lock()
+	defer c.reloadMu.Unlock()
+	root, err := buildTree(c.sources)
+	if err != nil {
+		return err
+	}
+	c.current.Store(&snapshot{root: root})
+	c.syncValues(root)
+	if notify {
+		c.notifyObservers(root)
+	}
+	return nil
+}
+
+func (c *config) watchLoop(watcher Watcher) {
 	for {
-		_, err := w.Next()
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
+		if err := watcher.Next(); err != nil {
+			if errors.Is(err, context.Canceled) || c.isClosed() {
 				return
 			}
-			logx.Errorf("config: watch next: %v", err)
+			logx.Errorf("config: watch source: %v", err)
 			continue
 		}
-		if err := c.reload(); err != nil {
+		if c.isClosed() {
+			return
+		}
+		if err := c.reload(true); err != nil {
 			logx.Errorf("config: reload source: %v", err)
-			continue
 		}
-		c.notifyObservers()
 	}
 }
 
-func (c *config) syncCachedValues() {
-	c.cache.Range(func(key, value any) bool {
-		k := key.(string)
-		v := value.(Value)
-		current, ok := c.reader.Value(k)
-		if !ok {
-			v.Store(nil)
-			return true
-		}
-		v.Store(clone(current))
-		return true
-	})
+func (c *config) isClosed() bool {
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	return c.closed
 }
 
-func (c *config) notifyObservers() {
-	c.observers.Range(func(key, value any) bool {
-		k := key.(string)
-		s := value.(*observerState)
+func (c *config) syncValues(root map[string]any) {
+	c.valuesMu.Lock()
+	defer c.valuesMu.Unlock()
+	for key, value := range c.values {
+		current, exists := readTree(root, key)
+		if !exists {
+			value.Store(nil)
+			continue
+		}
+		value.Store(clone(current))
+	}
+}
 
-		current, ok := c.reader.Value(k)
-		if !ok {
+func (c *config) notifyObservers(root map[string]any) {
+	type notification struct {
+		key      string
+		value    Value
+		observer Observer
+	}
+
+	c.observersMu.Lock()
+	notifications := make([]notification, 0, len(c.observers))
+	for key, state := range c.observers {
+		current, exists := readTree(root, key)
+		if !exists {
 			current = nil
 		}
-		if reflect.DeepEqual(s.snapshot, current) {
-			return true
+		if reflect.DeepEqual(state.snapshot, current) {
+			continue
 		}
-		s.snapshot = clone(current)
-		nv := &atomicValue{}
-		nv.Store(clone(current))
-		help.SafeGo(func() {
-			s.fn(k, nv)
+		state.snapshot = clone(current)
+		value := &atomicValue{}
+		value.Store(clone(current))
+		notifications = append(notifications, notification{
+			key:      key,
+			value:    value,
+			observer: state.observer,
 		})
-		return true
-	})
+	}
+	c.observersMu.Unlock()
+
+	for _, event := range notifications {
+		current := event
+		help.SafeGo(func() {
+			current.observer(current.key, current.value)
+		})
+	}
 }
 
-func Get[T any](c Config, key string) (T, error) {
+func Get[T any](center Config, key string) (T, error) {
 	var zero T
-	v := c.Value(key)
-	if v == nil || v.Load() == nil {
+	value := center.Value(key)
+	if value == nil || value.Load() == nil {
 		return zero, ErrNotFound
 	}
 	switch any(zero).(type) {
 	case bool:
-		b, err := v.Bool()
-		return any(b).(T), err
-	case int64:
-		i, err := v.Int()
-		return any(i).(T), err
+		result, err := value.Bool()
+		return any(result).(T), err
 	case int:
-		i, err := v.Int()
-		return any(int(i)).(T), err
+		result, err := value.Int()
+		return any(int(result)).(T), err
+	case int64:
+		result, err := value.Int()
+		return any(result).(T), err
 	case float64:
-		f, err := v.Float()
-		return any(f).(T), err
+		result, err := value.Float()
+		return any(result).(T), err
 	case string:
-		s, err := v.String()
-		return any(s).(T), err
+		result, err := value.String()
+		return any(result).(T), err
 	}
-	if err := v.Scan(&zero); err != nil {
+	if err := value.Scan(&zero); err != nil {
 		return zero, err
 	}
 	return zero, nil
 }
 
-func unmarshalJSON(data []byte, v any) error {
-	if m, ok := v.(proto.Message); ok {
-		return protojson.UnmarshalOptions{DiscardUnknown: true}.Unmarshal(data, m)
+func unmarshalJSON(data []byte, target any) error {
+	if message, ok := target.(proto.Message); ok {
+		return protojson.UnmarshalOptions{DiscardUnknown: true}.Unmarshal(data, message)
 	}
-	return json.Unmarshal(data, v)
+	return json.Unmarshal(data, target)
 }
