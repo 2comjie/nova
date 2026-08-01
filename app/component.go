@@ -10,14 +10,15 @@ type Component interface {
 
 type CommonComponent struct {
 	MName     string
-	MStart    func()
+	MStart    func() error
 	MShutdown func(context.Context) error
 }
 
-func (c *CommonComponent) Start() {
+func (c *CommonComponent) Start() error {
 	if c.MStart != nil {
-		c.MStart()
+		return c.MStart()
 	}
+	return nil
 }
 func (c *CommonComponent) Name() string {
 	return c.MName
