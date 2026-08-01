@@ -2,6 +2,10 @@ package node
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -243,6 +247,12 @@ func (n *Node) Wait() {
 
 func (n *Node) Done() <-chan struct{} {
 	return n.ctx.Done()
+}
+
+func (n *Node) RandString() string {
+	digest := hmac.New(sha256.New, []byte(n.instance.ID))
+	_, _ = digest.Write([]byte(rand.Text()))
+	return hex.EncodeToString(digest.Sum(nil)[:16])
 }
 
 func (n *Node) UpdateMetadata(metadata map[string]string) error {
