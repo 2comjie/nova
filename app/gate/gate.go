@@ -26,6 +26,7 @@ var (
 	ErrInstanceRequired    = errors.New("gate: 必须提供Gate ServiceInstance")
 	ErrRouterRequired      = errors.New("gate: 必须提供Router")
 	ErrNodeClientRequired  = errors.New("gate: 必须提供NodeClient")
+	ErrGateClientRequired  = errors.New("gate: 必须提供GateClient")
 	ErrLocatorRequired     = errors.New("gate: 必须提供GateLocator")
 	ErrRegistryRequired    = errors.New("gate: 必须提供Registry")
 	ErrRPCServerRequired   = errors.New("gate: 必须提供gRPC Server")
@@ -42,6 +43,7 @@ type Config struct {
 	Instance       endpoint.ServiceInstance
 	Router         *Router
 	NodeClient     pbNode.NodeClient
+	GateClient     pbGate.GateClient
 	Locator        *locator.GateLocator
 	Registry       registry.Registry
 	RPCServer      *grpc.Server
@@ -60,6 +62,7 @@ type Gate struct {
 	server       *network.Server
 	proxy        *Proxy
 	nodeClient   pbNode.NodeClient
+	gateClient   pbGate.GateClient
 	locator      *locator.GateLocator
 	registry     registry.Registry
 	errorHandler ErrorHandler
@@ -86,6 +89,9 @@ func New(config Config) (*Gate, error) {
 	if config.NodeClient == nil {
 		return nil, ErrNodeClientRequired
 	}
+	if config.GateClient == nil {
+		return nil, ErrGateClientRequired
+	}
 	if config.Locator == nil {
 		return nil, ErrLocatorRequired
 	}
@@ -107,6 +113,7 @@ func New(config Config) (*Gate, error) {
 		instance:       config.Instance,
 		router:         config.Router,
 		nodeClient:     config.NodeClient,
+		gateClient:     config.GateClient,
 		locator:        config.Locator,
 		registry:       config.Registry,
 		errorHandler:   config.ErrorHandler,
@@ -123,13 +130,14 @@ func New(config Config) (*Gate, error) {
 	options := append([]network.Option(nil), config.NetworkOptions...)
 	options = append(options, network.WithHooks(network.Hooks{
 		OnSessionStart: config.Hooks.OnSessionStart,
-		OnSessionBind: func(session *network.Session) {
-			g.onSessionBind(session)
-			if config.Hooks.OnSessionBind != nil {
-				help.SafeRun(func() {
-					config.Hooks.OnSessionBind(session)
-				})
+		OnSessionBind: func(session *network.Session) error {
+			if err := g.onSessionBind(session); err != nil {
+				return err
 			}
+			if config.Hooks.OnSessionBind != nil {
+				return config.Hooks.OnSessionBind(session)
+			}
+			return nil
 		},
 		OnSessionEnd: func(session *network.Session) {
 			g.onSessionEnd(session)
@@ -366,23 +374,52 @@ func (g *Gate) forward(ctx *Context) error {
 	return nil
 }
 
-func (g *Gate) onSessionBind(session *network.Session) {
+func (g *Gate) onSessionBind(session *network.Session) error {
 	uid := session.UID()
 	if uid == "" {
-		_ = session.Conn.Close()
-		return
+		return network.ErrUnauthorized
 	}
 	g.sessions.Store(uid, session.ID)
 
-	ctx, cancel := context.WithTimeout(context.Background(), g.locatorTimeout)
-	err := g.locator.Bind(ctx, uid, g.instance.ID)
-	cancel()
-	if err == nil {
-		return
+	current := locator.GateBinding{
+		InstanceID: g.instance.ID,
+		SessionID:  session.ID,
 	}
-	g.sessions.CompareAndDelete(uid, session.ID)
-	logx.Errorf("gate: 绑定UID定位失败 uid=%s instance=%s err=%v", uid, g.instance.ID, err)
-	_ = session.Conn.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), g.locatorTimeout)
+	previous, err := g.locator.Bind(ctx, uid, current)
+	cancel()
+	if err != nil {
+		logx.Errorf("gate: 绑定UID定位失败 uid=%s instance=%s err=%v", uid, g.instance.ID, err)
+		return err
+	}
+	if previous.InstanceID == "" || previous.InstanceID == current.InstanceID {
+		return nil
+	}
+
+	ctx, cancel = context.WithTimeout(context.Background(), g.locatorTimeout)
+	_, kickErr := g.gateClient.Kick(lx.WithNode(ctx, previous.InstanceID), &pbGate.KickRequest{
+		Uid:             uid,
+		NodeServiceName: g.instance.ServiceName,
+		NodeInstanceId:  g.instance.ID,
+		SessionId:       previous.SessionID,
+	})
+	cancel()
+	if kickErr == nil {
+		return nil
+	}
+	logx.Errorf("gate: 踢出旧Gate Session失败 uid=%s instance=%s session=%d err=%v", uid, previous.InstanceID, previous.SessionID, kickErr)
+
+	ctx, cancel = context.WithTimeout(context.Background(), g.locatorTimeout)
+	restored, restoreErr := g.locator.Restore(ctx, uid, current, previous)
+	cancel()
+	if restoreErr != nil {
+		logx.Errorf("gate: 恢复UID旧定位失败 uid=%s current=%s previous=%s err=%v", uid, current.InstanceID, previous.InstanceID, restoreErr)
+		return errors.Join(kickErr, restoreErr)
+	}
+	if !restored {
+		logx.Warnf("gate: UID定位已被更新，忽略旧定位恢复 uid=%s current=%s previous=%s", uid, current.InstanceID, previous.InstanceID)
+	}
+	return kickErr
 }
 
 func (g *Gate) onSessionEnd(session *network.Session) {
@@ -392,7 +429,10 @@ func (g *Gate) onSessionEnd(session *network.Session) {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), g.locatorTimeout)
-	err := g.locator.Unbind(ctx, uid, g.instance.ID)
+	err := g.locator.Unbind(ctx, uid, locator.GateBinding{
+		InstanceID: g.instance.ID,
+		SessionID:  session.ID,
+	})
 	cancel()
 	if err != nil {
 		logx.Errorf("gate: 解绑UID定位失败 uid=%s instance=%s err=%v", uid, g.instance.ID, err)

@@ -103,6 +103,7 @@ type KickRequest struct {
 	Uid             string                 `protobuf:"bytes,1,opt,name=uid,proto3" json:"uid,omitempty"`
 	NodeServiceName string                 `protobuf:"bytes,2,opt,name=node_service_name,json=nodeServiceName,proto3" json:"node_service_name,omitempty"`
 	NodeInstanceId  string                 `protobuf:"bytes,3,opt,name=node_instance_id,json=nodeInstanceId,proto3" json:"node_instance_id,omitempty"`
+	SessionId       uint64                 `protobuf:"varint,4,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -158,6 +159,13 @@ func (x *KickRequest) GetNodeInstanceId() string {
 	return ""
 }
 
+func (x *KickRequest) GetSessionId() uint64 {
+	if x != nil {
+		return x.SessionId
+	}
+	return 0
+}
+
 var File_transport_gate_gate_proto protoreflect.FileDescriptor
 
 const file_transport_gate_gate_proto_rawDesc = "" +
@@ -168,11 +176,13 @@ const file_transport_gate_gate_proto_rawDesc = "" +
 	"\x05route\x18\x02 \x01(\rR\x05route\x12\x12\n" +
 	"\x04body\x18\x03 \x01(\fR\x04body\x12*\n" +
 	"\x11node_service_name\x18\x04 \x01(\tR\x0fnodeServiceName\x12(\n" +
-	"\x10node_instance_id\x18\x05 \x01(\tR\x0enodeInstanceId\"u\n" +
+	"\x10node_instance_id\x18\x05 \x01(\tR\x0enodeInstanceId\"\x94\x01\n" +
 	"\vKickRequest\x12\x10\n" +
 	"\x03uid\x18\x01 \x01(\tR\x03uid\x12*\n" +
 	"\x11node_service_name\x18\x02 \x01(\tR\x0fnodeServiceName\x12(\n" +
-	"\x10node_instance_id\x18\x03 \x01(\tR\x0enodeInstanceId2\x8a\x01\n" +
+	"\x10node_instance_id\x18\x03 \x01(\tR\x0enodeInstanceId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x04 \x01(\x04R\tsessionId2\x8a\x01\n" +
 	"\x04Gate\x12@\n" +
 	"\x04Push\x12 .wali.transport.gate.PushRequest\x1a\x16.google.protobuf.Empty\x12@\n" +
 	"\x04Kick\x12 .wali.transport.gate.KickRequest\x1a\x16.google.protobuf.EmptyB9Z7github.com/2comjie/wali/internal/pb/transport/gate;gateb\x06proto3"

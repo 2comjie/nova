@@ -36,7 +36,6 @@ type options struct {
 	header      http.Header
 }
 
-// Option 配置 WebSocket Listener 或 Dialer。
 type Option func(*options)
 
 func defaultOptions() options {
@@ -47,7 +46,6 @@ func defaultOptions() options {
 	}
 }
 
-// WithPath 设置 WebSocket 服务路径。
 func WithPath(path string) Option {
 	return func(options *options) {
 		if path != "" {
@@ -56,7 +54,6 @@ func WithPath(path string) Option {
 	}
 }
 
-// WithTLS 启用 TLS，并强制最低 TLS 1.3。
 func WithTLS(config *tls.Config) Option {
 	return func(options *options) {
 		if config == nil {
@@ -69,14 +66,12 @@ func WithTLS(config *tls.Config) Option {
 	}
 }
 
-// WithCodec 设置包编解码器。
 func WithCodec(codec *packet.Codec) Option {
 	return func(options *options) {
 		options.codec = codec
 	}
 }
 
-// WithWriteQueue 设置每个连接的写队列长度。
 func WithWriteQueue(size int) Option {
 	return func(options *options) {
 		if size > 0 {
@@ -85,7 +80,6 @@ func WithWriteQueue(size int) Option {
 	}
 }
 
-// WithWriteTimeout 设置单次底层写入超时。
 func WithWriteTimeout(timeout time.Duration) Option {
 	return func(options *options) {
 		if timeout > 0 {
@@ -94,14 +88,12 @@ func WithWriteTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithOriginCheck 设置浏览器 Origin 校验函数。
 func WithOriginCheck(check func(*http.Request) bool) Option {
 	return func(options *options) {
 		options.originCheck = check
 	}
 }
 
-// WithHeader 设置客户端握手请求头。
 func WithHeader(header http.Header) Option {
 	return func(options *options) {
 		options.header = header.Clone()
@@ -120,7 +112,6 @@ type listener struct {
 	serverMu  sync.Mutex
 }
 
-// Listen 监听 WebSocket 地址。
 func Listen(address string, opts ...Option) (transport.Listener, error) {
 	raw, err := net.Listen("tcp", address)
 	if err != nil {
@@ -129,7 +120,6 @@ func Listen(address string, opts ...Option) (transport.Listener, error) {
 	return NewListener(raw, opts...), nil
 }
 
-// NewListener 将已有 net.Listener 接入 WebSocket。
 func NewListener(raw net.Listener, opts ...Option) transport.Listener {
 	options := defaultOptions()
 	for _, option := range opts {
@@ -243,7 +233,6 @@ type dialer struct {
 	options options
 }
 
-// NewDialer 创建 WebSocket 客户端拨号器。
 func NewDialer(address string, opts ...Option) transport.Dialer {
 	options := defaultOptions()
 	for _, option := range opts {

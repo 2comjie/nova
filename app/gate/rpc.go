@@ -33,6 +33,10 @@ func (g *Gate) Kick(ctx context.Context, request *pbGate.KickRequest) (*emptypb.
 		request.NodeServiceName == "" || request.NodeInstanceId == "" {
 		return nil, status.Error(codes.InvalidArgument, "gate: Kick参数无效")
 	}
-	g.server.KickUID(request.Uid)
+	if request.SessionId != 0 {
+		g.server.KickUIDSession(request.Uid, request.SessionId)
+	} else {
+		g.server.KickUID(request.Uid)
+	}
 	return &emptypb.Empty{}, nil
 }

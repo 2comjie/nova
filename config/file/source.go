@@ -13,7 +13,6 @@ type source struct {
 	path string
 }
 
-// NewSource 创建本地文件或目录配置源。目录会被递归读取，文件路径相对于该目录建树。
 func NewSource(sourcePath string) config.Source {
 	return &source{path: sourcePath}
 }

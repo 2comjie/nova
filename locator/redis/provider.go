@@ -15,11 +15,14 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+//go:embed unbind.lua
+var unbindScript string
+
 //go:embed bind.lua
 var bindScript string
 
-//go:embed unbind.lua
-var unbindScript string
+//go:embed restore.lua
+var restoreScript string
 
 type Provider struct {
 	rc     redis.UniversalClient
@@ -63,85 +66,102 @@ func NewProvider(rc redis.UniversalClient, opts ...Option) *Provider {
 	return p
 }
 
-func (p *Provider) Bind(ctx context.Context, name string, key string, instanceID string) error {
-	_ = ctx
+func (p *Provider) Bind(ctx context.Context, name string, key string, value string) (string, error) {
 	p.rw.Lock()
 	defer p.rw.Unlock()
 
-	logCtx := logx.WithField("name", name).WithField("key", key).WithField("instanceID", instanceID)
-	hashKey := p.hashKey(name)
-	ttlSeconds := int(p.option.ttl.Seconds())
-
-	var finalErr error
-	success := help.Retry(p.ctx, 3, time.Second, func() bool {
-		err := p.rc.Eval(p.ctx, bindScript, []string{hashKey, p.nameSetKey()}, key, instanceID, ttlSeconds, name).Err()
-		if err != nil {
-			logCtx.Errorf("eval bind script err %+v", err)
-			finalErr = err
-			return false
-		}
-		finalErr = nil
-		return true
-	})
-
-	if !success {
-		logCtx.Errorf("bind failed")
-		return finalErr
+	logCtx := logx.WithField("name", name).WithField("key", key)
+	previous, err := p.rc.Eval(
+		ctx,
+		bindScript,
+		[]string{p.hashKey(name), p.nameSetKey()},
+		key,
+		value,
+		int(p.option.ttl.Seconds()),
+		name,
+	).Text()
+	if err != nil {
+		logCtx.Errorf("eval swap script err %+v", err)
+		return "", err
 	}
 
 	p.cache.Del(name + ":" + key)
 	p.publishEvent("bind", name, key)
-
-	stopKey := name + ":" + key
-	if p.stopChs[stopKey] == nil {
-		p.stopChs[stopKey] = make(chan struct{})
-		help.SafeGo(func() {
-			p.keepAlive(name, key, p.stopChs[stopKey])
-		})
-	}
-
-	logCtx.Debugf("bind success")
-	return nil
+	p.startKeepAliveLocked(name, key)
+	logCtx.Debugf("swap bind success")
+	return previous, nil
 }
 
-func (p *Provider) Unbind(ctx context.Context, name string, key string, instanceID string) error {
-	_ = ctx
+func (p *Provider) Restore(
+	ctx context.Context,
+	name string,
+	key string,
+	current string,
+	previous string,
+) (bool, error) {
 	p.rw.Lock()
 	defer p.rw.Unlock()
 
-	logCtx := logx.WithField("name", name).WithField("key", key).WithField("instanceID", instanceID)
-	hashKey := p.hashKey(name)
+	logCtx := logx.WithField("name", name).WithField("key", key)
+	result, err := p.rc.Eval(
+		ctx,
+		restoreScript,
+		[]string{p.hashKey(name), p.nameSetKey()},
+		key,
+		current,
+		previous,
+		int(p.option.ttl.Seconds()),
+		name,
+	).Int()
+	if err != nil {
+		logCtx.Errorf("eval restore script err %+v", err)
+		return false, err
+	}
+	if result == 0 {
+		return false, nil
+	}
 
-	err := p.rc.Eval(p.ctx, unbindScript, []string{hashKey, p.nameSetKey()}, key, instanceID, name).Err()
+	p.cache.Del(name + ":" + key)
+	p.publishEvent("bind", name, key)
+	p.stopKeepAliveLocked(name, key)
+	logCtx.Debugf("restore bind success")
+	return true, nil
+}
+
+func (p *Provider) Unbind(ctx context.Context, name string, key string, instanceID string) error {
+	p.rw.Lock()
+	defer p.rw.Unlock()
+
+	logCtx := logx.WithField("name", name).WithField("key", key)
+	result, err := p.rc.Eval(
+		ctx,
+		unbindScript,
+		[]string{p.hashKey(name), p.nameSetKey()},
+		key,
+		instanceID,
+		name,
+	).Int()
 	if err != nil {
 		logCtx.Errorf("eval unbind script err %+v", err)
 		return err
 	}
 
-	p.cache.Del(name + ":" + key)
-	p.publishEvent("unbind", name, key)
-
-	stopKey := name + ":" + key
-	if ch, ok := p.stopChs[stopKey]; ok {
-		close(ch)
-		delete(p.stopChs, stopKey)
+	p.stopKeepAliveLocked(name, key)
+	if result != 0 {
+		p.cache.Del(name + ":" + key)
+		p.publishEvent("unbind", name, key)
 	}
-
 	logCtx.Debugf("unbind success")
 	return nil
 }
 
 func (p *Provider) Locate(ctx context.Context, name string, key string) (string, error) {
-	_ = ctx
 	localKey := name + ":" + key
-
 	if id, ok := p.cache.Get(localKey); ok {
 		return id, nil
 	}
 
-	hashKey := p.hashKey(name)
-
-	id, err := p.rc.HGet(p.ctx, hashKey, key).Result()
+	id, err := p.rc.HGet(ctx, p.hashKey(name), key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return "", nil
@@ -162,6 +182,26 @@ func (p *Provider) Close() {
 		delete(p.stopChs, key)
 	}
 	p.cache.Close()
+}
+
+func (p *Provider) startKeepAliveLocked(name string, key string) {
+	stopKey := name + ":" + key
+	if p.stopChs[stopKey] != nil {
+		return
+	}
+	stopCh := make(chan struct{})
+	p.stopChs[stopKey] = stopCh
+	help.SafeGo(func() {
+		p.keepAlive(name, key, stopCh)
+	})
+}
+
+func (p *Provider) stopKeepAliveLocked(name string, key string) {
+	stopKey := name + ":" + key
+	if ch, ok := p.stopChs[stopKey]; ok {
+		close(ch)
+		delete(p.stopChs, stopKey)
+	}
 }
 
 func (p *Provider) keepAlive(name string, key string, stopCh chan struct{}) {

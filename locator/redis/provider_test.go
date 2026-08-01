@@ -2,6 +2,7 @@ package redisLocator
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func TestProvider_BindAndLocate(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:bind_locate"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	err := p.Bind(context.Background(), "game", "room_1", "instance_a")
+	_, err := p.Bind(context.Background(), "game", "room_1", "instance_a")
 	if err != nil {
 		t.Fatalf("bind failed: %v", err)
 	}
@@ -46,8 +47,8 @@ func TestProvider_BindUpdate(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:bind_update"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	p.Bind(context.Background(), "game", "room_1", "instance_a")
-	p.Bind(context.Background(), "game", "room_1", "instance_b")
+	_, _ = p.Bind(context.Background(), "game", "room_1", "instance_a")
+	_, _ = p.Bind(context.Background(), "game", "room_1", "instance_b")
 
 	id, err := p.Locate(context.Background(), "game", "room_1")
 	if err != nil {
@@ -63,9 +64,12 @@ func TestProvider_LocateNotFound(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:locate_notfound"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	_, err := p.Locate(context.Background(), "game", "nonexistent")
-	if err == nil {
-		t.Fatal("expected error for nonexistent key")
+	id, err := p.Locate(context.Background(), "game", "nonexistent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "" {
+		t.Fatalf("instance=%q, want empty", id)
 	}
 }
 
@@ -74,7 +78,7 @@ func TestProvider_Unbind(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:unbind"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	p.Bind(context.Background(), "game", "room_1", "instance_a")
+	_, _ = p.Bind(context.Background(), "game", "room_1", "instance_a")
 
 	id, err := p.Locate(context.Background(), "game", "room_1")
 	if err != nil {
@@ -86,9 +90,58 @@ func TestProvider_Unbind(t *testing.T) {
 
 	p.Unbind(context.Background(), "game", "room_1", "instance_a")
 
-	_, err = p.Locate(context.Background(), "game", "room_1")
-	if err == nil {
-		t.Fatal("expected error after unbind")
+	id, err = p.Locate(context.Background(), "game", "room_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "" {
+		t.Fatalf("instance=%q, want empty", id)
+	}
+}
+
+func TestProvider_BindAndRestore(t *testing.T) {
+	rc := testClient(t)
+	p := NewProvider(rc, WithPrefix(fmt.Sprintf("test:swap_restore:%d", time.Now().UnixNano())), WithTTL(10*time.Second), WithTick(3*time.Second))
+	defer p.Close()
+
+	previous, err := p.Bind(context.Background(), "gate", "user_1", "gate_a:1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if previous != "" {
+		t.Fatalf("previous=%q, want empty", previous)
+	}
+
+	previous, err = p.Bind(context.Background(), "gate", "user_1", "gate_b:2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if previous != "gate_a:1" {
+		t.Fatalf("previous=%q, want gate_a:1", previous)
+	}
+
+	restored, err := p.Restore(context.Background(), "gate", "user_1", "gate_b:2", "gate_a:1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !restored {
+		t.Fatal("restore should succeed")
+	}
+
+	id, err := p.Locate(context.Background(), "gate", "user_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "gate_a:1" {
+		t.Fatalf("instance=%q, want gate_a:1", id)
+	}
+
+	restored, err = p.Restore(context.Background(), "gate", "user_1", "gate_b:2", "gate_c:3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored {
+		t.Fatal("stale restore should fail")
 	}
 }
 
@@ -97,10 +150,10 @@ func TestProvider_UnbindDoesNotDeleteNewBinding(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:unbind_new"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	if err := p.Bind(context.Background(), "game", "room_1", "instance_a"); err != nil {
+	if _, err := p.Bind(context.Background(), "game", "room_1", "instance_a"); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.Bind(context.Background(), "game", "room_1", "instance_b"); err != nil {
+	if _, err := p.Bind(context.Background(), "game", "room_1", "instance_b"); err != nil {
 		t.Fatal(err)
 	}
 	if err := p.Unbind(context.Background(), "game", "room_1", "instance_a"); err != nil {
@@ -121,8 +174,8 @@ func TestProvider_MultiName(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:multi_name"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	p.Bind(context.Background(), "game", "room_1", "inst_game_1")
-	p.Bind(context.Background(), "chat", "room_1", "inst_chat_1")
+	_, _ = p.Bind(context.Background(), "game", "room_1", "inst_game_1")
+	_, _ = p.Bind(context.Background(), "chat", "room_1", "inst_chat_1")
 
 	id, err := p.Locate(context.Background(), "game", "room_1")
 	if err != nil {
@@ -146,7 +199,7 @@ func TestProvider_LocateCache(t *testing.T) {
 	p := NewProvider(rc, WithPrefix("test:locate_cache"), WithTTL(time.Second*10), WithTick(time.Second*3))
 	defer p.Close()
 
-	p.Bind(context.Background(), "game", "room_1", "instance_x")
+	_, _ = p.Bind(context.Background(), "game", "room_1", "instance_x")
 
 	// first call: cache miss, HGet falls through
 	id, err := p.Locate(context.Background(), "game", "room_1")

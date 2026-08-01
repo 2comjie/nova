@@ -31,7 +31,6 @@ type options struct {
 	mtu         int
 }
 
-// Option 配置 KCP Listener 或 Dialer。
 type Option func(*options)
 
 func defaultOptions() options {
@@ -48,14 +47,12 @@ func defaultOptions() options {
 	}
 }
 
-// WithBlockCrypt 设置 KCP UDP 层的 BlockCrypt。
 func WithBlockCrypt(block kcpgo.BlockCrypt) Option {
 	return func(options *options) {
 		options.block = block
 	}
 }
 
-// WithFEC 设置 KCP 前向纠错分片数量。
 func WithFEC(dataShards, parityShards int) Option {
 	return func(options *options) {
 		options.dataShards = dataShards
@@ -63,7 +60,6 @@ func WithFEC(dataShards, parityShards int) Option {
 	}
 }
 
-// WithTLS 启用 TLS，并强制最低 TLS 1.3。
 func WithTLS(config *tls.Config) Option {
 	return func(options *options) {
 		if config == nil {
@@ -76,28 +72,24 @@ func WithTLS(config *tls.Config) Option {
 	}
 }
 
-// WithCodec 设置包编解码器。
 func WithCodec(codec *packet.Codec) Option {
 	return func(options *options) {
 		options.codec = codec
 	}
 }
 
-// WithWriteQueue 设置每个连接的写队列长度。
 func WithWriteQueue(size int) Option {
 	return func(options *options) {
 		options.writeQueue = size
 	}
 }
 
-// WithWriteTimeout 设置单次底层写入超时。
 func WithWriteTimeout(timeout time.Duration) Option {
 	return func(options *options) {
 		options.writeWait = timeout
 	}
 }
 
-// WithNoDelay 设置 KCP 快速模式参数。
 func WithNoDelay(noDelay, interval, resend, noCongest int) Option {
 	return func(options *options) {
 		options.noDelay = noDelay
@@ -107,7 +99,6 @@ func WithNoDelay(noDelay, interval, resend, noCongest int) Option {
 	}
 }
 
-// WithWindowSize 设置 KCP 收发窗口。
 func WithWindowSize(sendWindow, readWindow int) Option {
 	return func(options *options) {
 		options.sendWindow = sendWindow
@@ -115,7 +106,6 @@ func WithWindowSize(sendWindow, readWindow int) Option {
 	}
 }
 
-// WithMTU 设置 KCP MTU。
 func WithMTU(mtu int) Option {
 	return func(options *options) {
 		options.mtu = mtu
@@ -127,7 +117,6 @@ type listener struct {
 	options options
 }
 
-// Listen 监听 KCP 地址。
 func Listen(address string, opts ...Option) (transport.Listener, error) {
 	options := defaultOptions()
 	for _, option := range opts {
@@ -178,7 +167,6 @@ type dialer struct {
 	options options
 }
 
-// NewDialer 创建 KCP 客户端拨号器。
 func NewDialer(address string, opts ...Option) transport.Dialer {
 	options := defaultOptions()
 	for _, option := range opts {

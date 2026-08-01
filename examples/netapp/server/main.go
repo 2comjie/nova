@@ -35,8 +35,9 @@ func main() {
 			OnSessionEnd: func(session *network.Session) {
 				logx.Infof("session end: %d", session.ID)
 			},
-			OnSessionBind: func(session *network.Session) {
+			OnSessionBind: func(session *network.Session) error {
 				logx.Infof("session bind: %d %s", session.ID, session.UID())
+				return nil
 			},
 			OnHeartbeat: func(session *network.Session) {
 				logx.Infof("session heartbeat: %d %s", session.ID, session.UID())

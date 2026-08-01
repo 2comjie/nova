@@ -209,6 +209,17 @@ func (m *sessionManager) KickSession(id uint64) bool {
 	return true
 }
 
+func (m *sessionManager) KickUIDSession(uid string, id uint64) bool {
+	m.mutex.RLock()
+	session := m.byID[id]
+	m.mutex.RUnlock()
+	if session == nil || session.UID() != uid {
+		return false
+	}
+	_ = session.Conn.Close()
+	return true
+}
+
 func (m *sessionManager) Close() {
 	m.stopOnce.Do(func() {
 		close(m.stop)

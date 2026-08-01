@@ -24,7 +24,6 @@ type writeRequest struct {
 	size    int64
 }
 
-// Conn 实现 TCP、KCP 共用的流式连接读写循环。
 type Conn struct {
 	conn         net.Conn
 	codec        *packet.Codec
@@ -41,7 +40,6 @@ type Conn struct {
 	queuedBytes  atomic.Int64
 }
 
-// New 创建一个流式连接。
 func New(conn net.Conn, codec *packet.Codec, kind transport.Type, secure bool, writeQueue int, writeWait time.Duration) *Conn {
 	if codec == nil {
 		codec = packet.NewCodec(packet.DefaultMaxFrame)
@@ -63,7 +61,6 @@ func New(conn net.Conn, codec *packet.Codec, kind transport.Type, secure bool, w
 	}
 }
 
-// Start 启动唯一的读协程和写协程。
 func (c *Conn) Start(handler transport.Handler) error {
 	if handler == nil {
 		return errors.New("network: 连接Handler不能为空")
@@ -96,7 +93,6 @@ func (c *Conn) Start(handler transport.Handler) error {
 	return startErr
 }
 
-// Write 将完整网络包放入单写协程，并等待本次写入完成。
 func (c *Conn) Write(message *packet.Message) error {
 	if message == nil {
 		return packet.ErrType
@@ -178,7 +174,6 @@ func (c *Conn) writeLoop() {
 	}
 }
 
-// Close 幂等关闭连接，并且只通知一次 Handler。
 func (c *Conn) Close() error {
 	var closeErr error
 	c.closeOnce.Do(func() {

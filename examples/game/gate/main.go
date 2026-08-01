@@ -46,8 +46,9 @@ func main() {
 			})),
 		),
 		deploy.WithGateHooks(network.Hooks{
-			OnSessionBind: func(session *network.Session) {
+			OnSessionBind: func(session *network.Session) error {
 				logx.Infof("玩家连接 uid=%s session=%d", session.UID(), session.ID)
+				return nil
 			},
 			OnSessionEnd: func(session *network.Session) {
 				logx.Infof("玩家断开 uid=%s session=%d", session.UID(), session.ID)

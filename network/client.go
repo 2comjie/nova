@@ -16,7 +16,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// PushHandler 处理服务端 Push。body 只在回调执行期间有效。
 type PushHandler func(context.Context, []byte)
 
 type callResult struct {
@@ -34,7 +33,6 @@ type bindResult struct {
 	err      error
 }
 
-// Client 实现 Bind、Call、Push 和心跳。
 type Client struct {
 	options options
 
@@ -56,7 +54,6 @@ type Client struct {
 	heartbeatRun sync.Once
 }
 
-// NewClient 创建网络客户端。
 func NewClient(opts ...Option) (*Client, error) {
 	options := defaultOptions()
 	for _, option := range opts {
@@ -74,7 +71,6 @@ func NewClient(opts ...Option) (*Client, error) {
 	}, nil
 }
 
-// Dial 建立底层连接并启动读写循环。
 func (c *Client) Dial(ctx context.Context) error {
 	if c.closed.Load() {
 		return ErrClosed
@@ -98,7 +94,6 @@ func (c *Client) Dial(ctx context.Context) error {
 	return nil
 }
 
-// Bind 使用 token 完成 Session 认证。
 func (c *Client) Bind(ctx context.Context, token []byte) error {
 	if len(token) == 0 || len(token) > c.options.maxToken {
 		return ErrUnauthorized
@@ -177,7 +172,6 @@ func (c *Client) clearBindWait(wait chan bindResult) {
 	c.mutex.Unlock()
 }
 
-// Call 发送 Req 并等待相同 route、seq 的 Rsp。
 func (c *Client) Call(ctx context.Context, route uint32, body []byte) ([]byte, error) {
 	if !c.bound.Load() {
 		return nil, ErrNotBound
@@ -236,7 +230,6 @@ func (c *Client) Call(ctx context.Context, route uint32, body []byte) ([]byte, e
 	}
 }
 
-// Tell 发送 Seq 为零的 Req，明确通知服务端不需要返回 Rsp。
 func (c *Client) Tell(ctx context.Context, route uint32, body []byte) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -271,7 +264,6 @@ func (c *Client) removePending(seq uint64, call *pendingCall) {
 	c.mutex.Unlock()
 }
 
-// OnPush 注册或替换一个 route 的 Push Handler。
 func (c *Client) OnPush(route uint32, handler PushHandler) {
 	c.mutex.Lock()
 	if handler == nil {
@@ -282,7 +274,6 @@ func (c *Client) OnPush(route uint32, handler PushHandler) {
 	c.mutex.Unlock()
 }
 
-// HandleMessage 处理 transport 读取到的一个完整包。
 func (c *Client) HandleMessage(conn transport.Conn, message *packet.Message) {
 	if !c.bound.Load() && message.Type != packet.BindRsp {
 		_ = conn.Close()
@@ -378,7 +369,6 @@ func (c *Client) HandleMessage(conn transport.Conn, message *packet.Message) {
 	}
 }
 
-// HandleClose 清理所有等待中的 Bind 和 Call。
 func (c *Client) HandleClose(transport.Conn) {
 	c.finish()
 }
@@ -448,7 +438,6 @@ func (c *Client) finish() {
 	})
 }
 
-// Close 幂等关闭 Client。
 func (c *Client) Close() error {
 	c.mutex.Lock()
 	conn := c.conn

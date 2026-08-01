@@ -9,6 +9,7 @@ import (
 	gateapp "github.com/2comjie/wali/app/gate"
 	"github.com/2comjie/wali/config"
 	"github.com/2comjie/wali/core/endpoint"
+	pbGate "github.com/2comjie/wali/internal/pb/transport/gate"
 	pbNode "github.com/2comjie/wali/internal/pb/transport/node"
 	"github.com/2comjie/wali/locator"
 )
@@ -45,6 +46,7 @@ func Gate(opts ...Option) (*GateApp, error) {
 		Instance:       instance,
 		Router:         options.gateRouter,
 		NodeClient:     pbNode.NewNodeClient(resources.rpcClient),
+		GateClient:     pbGate.NewGateClient(resources.rpcClient),
 		Locator:        locator.NewGateLocator(options.locator, options.discover),
 		Registry:       options.registry,
 		RPCServer:      rpcServer,

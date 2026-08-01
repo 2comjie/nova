@@ -14,7 +14,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Server 同时管理多个 Listener，并共享一套 Session。
 type Server struct {
 	options options
 	manager *sessionManager
@@ -23,7 +22,6 @@ type Server struct {
 	wait    sync.WaitGroup
 }
 
-// NewServer 创建网络服务。
 func NewServer(opts ...Option) (*Server, error) {
 	options := defaultOptions()
 	for _, option := range opts {
@@ -42,7 +40,6 @@ func NewServer(opts ...Option) (*Server, error) {
 	}, nil
 }
 
-// Start 启动所有 Listener 的接受循环。
 func (s *Server) Start() error {
 	if s.closed.Load() {
 		return ErrClosed
@@ -76,7 +73,6 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// HandleMessage 处理 transport 读取到的一个完整包。
 func (s *Server) HandleMessage(conn transport.Conn, message *packet.Message) {
 	session := s.manager.ByConn(conn)
 	if session == nil {
@@ -111,7 +107,6 @@ func (s *Server) HandleMessage(conn transport.Conn, message *packet.Message) {
 	}
 }
 
-// HandleClose 从 SessionManager 移除已关闭连接。
 func (s *Server) HandleClose(conn transport.Conn) {
 	s.manager.Remove(conn)
 }
@@ -130,14 +125,22 @@ func (s *Server) handleBind(session *Session, message *packet.Message) {
 		_ = session.Conn.Close()
 		return
 	}
+	if s.options.hooks.OnSessionBind != nil {
+		var bindErr error
+		completed := false
+		help.SafeRun(func() {
+			bindErr = s.options.hooks.OnSessionBind(session)
+			completed = true
+		})
+		if !completed || bindErr != nil {
+			s.writeBindResponse(session, protocol.BindCode_BIND_UNAUTHORIZED)
+			_ = session.Conn.Close()
+			return
+		}
+	}
 	if err := s.writeBindResponse(session, protocol.BindCode_BIND_OK); err != nil {
 		_ = session.Conn.Close()
 		return
-	}
-	if s.options.hooks.OnSessionBind != nil {
-		help.SafeRun(func() {
-			s.options.hooks.OnSessionBind(session)
-		})
 	}
 }
 
@@ -186,7 +189,6 @@ func (s *Server) handleReq(session *Session, message *packet.Message) {
 	}
 }
 
-// PushUID 向指定 uid 的当前 Session 推送消息。
 func (s *Server) PushUID(ctx context.Context, uid string, route uint32, body []byte) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -207,17 +209,18 @@ func (s *Server) PushUID(ctx context.Context, uid string, route uint32, body []b
 	})
 }
 
-// KickUID 关闭指定 uid 的当前连接。
 func (s *Server) KickUID(uid string) bool {
 	return s.manager.KickUID(uid)
 }
 
-// KickSession 按当前 Server 内的自增 Session ID 关闭连接。
 func (s *Server) KickSession(id uint64) bool {
 	return s.manager.KickSession(id)
 }
 
-// Shutdown 停止接受新连接，关闭现有 Session，并等待 Listener 退出。
+func (s *Server) KickUIDSession(uid string, id uint64) bool {
+	return s.manager.KickUIDSession(uid, id)
+}
+
 func (s *Server) Shutdown(ctx context.Context) error {
 	if !s.closed.CompareAndSwap(false, true) {
 		return nil
