@@ -244,3 +244,28 @@ func (n *Node) Wait() {
 func (n *Node) Done() <-chan struct{} {
 	return n.ctx.Done()
 }
+
+func (n *Node) UpdateMetadata(metadata map[string]string) error {
+	err := n.registry.UpdateMetaData(n.instance.ID, metadata)
+	if err != nil {
+		return err
+	}
+	if n.instance.MetaData == nil {
+		n.instance.MetaData = make(map[string]string)
+	}
+	for key, value := range metadata {
+		n.instance.MetaData[key] = value
+	}
+	return nil
+}
+
+func (n *Node) DeleteMetadata(keys ...string) error {
+	err := n.registry.DeleteMetaData(n.instance.ID, keys)
+	if err != nil {
+		return err
+	}
+	for _, key := range keys {
+		delete(n.instance.MetaData, key)
+	}
+	return nil
+}

@@ -257,6 +257,31 @@ func (g *Gate) Wait() {
 	g.wait.Wait()
 }
 
+func (g *Gate) UpdateMetadata(metadata map[string]string) error {
+	err := g.registry.UpdateMetaData(g.instance.ID, metadata)
+	if err != nil {
+		return err
+	}
+	if g.instance.MetaData == nil {
+		g.instance.MetaData = make(map[string]string)
+	}
+	for key, value := range metadata {
+		g.instance.MetaData[key] = value
+	}
+	return nil
+}
+
+func (g *Gate) DeleteMetadata(keys ...string) error {
+	err := g.registry.DeleteMetaData(g.instance.ID, keys)
+	if err != nil {
+		return err
+	}
+	for _, key := range keys {
+		delete(g.instance.MetaData, key)
+	}
+	return nil
+}
+
 func (g *Gate) Done() <-chan struct{} {
 	return g.ctx.Done()
 }

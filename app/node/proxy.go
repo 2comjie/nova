@@ -35,6 +35,12 @@ func (p *Proxy) Wait() {
 func (p *Proxy) Done() <-chan struct{} {
 	return p.app.Done()
 }
+func (p *Proxy) UpdateMetadata(metadata map[string]string) error {
+	return p.app.UpdateMetadata(metadata)
+}
+func (p *Proxy) DeleteMetadata(keys ...string) error {
+	return p.app.DeleteMetadata(keys...)
+}
 
 func (p *Proxy) Push(ctx context.Context, uid string, route uint32, body []byte) error {
 	if err := ctx.Err(); err != nil {
