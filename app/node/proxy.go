@@ -41,6 +41,9 @@ func (p *Proxy) UpdateMetadata(metadata map[string]string) error {
 func (p *Proxy) DeleteMetadata(keys ...string) error {
 	return p.app.DeleteMetadata(keys...)
 }
+func (p *Proxy) RandString() string {
+	return p.app.RandString()
+}
 
 func (p *Proxy) Push(ctx context.Context, uid string, route uint32, body []byte) error {
 	if err := ctx.Err(); err != nil {
