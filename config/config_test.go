@@ -8,9 +8,10 @@ import (
 )
 
 type testSource struct {
-	mu      sync.Mutex
-	kvs     []*KeyValue
-	watcher *testWatcher
+	mu         sync.Mutex
+	kvs        []*KeyValue
+	watcher    *testWatcher
+	watchCalls int
 }
 
 func newTestSource(kvs ...*KeyValue) *testSource {
@@ -27,7 +28,16 @@ func (s *testSource) Load() ([]*KeyValue, error) {
 }
 
 func (s *testSource) Watch() (Watcher, error) {
+	s.mu.Lock()
+	s.watchCalls++
+	s.mu.Unlock()
 	return s.watcher, nil
+}
+
+func (s *testSource) watchCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.watchCalls
 }
 
 func (s *testSource) set(kvs ...*KeyValue) {
@@ -95,6 +105,22 @@ func TestConfigWatchReloadsCachedValue(t *testing.T) {
 	waitFor(t, func() bool {
 		return port.Load() == "9090"
 	})
+}
+
+func TestConfigLoadIsIdempotent(t *testing.T) {
+	src := newTestSource(&KeyValue{Key: "server.port", Value: []byte("8080")})
+	c := New(WithSource(src))
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if got := src.watchCount(); got != 1 {
+		t.Fatalf("Watch called %d times, want 1", got)
+	}
 }
 
 func TestConfigWatchClearsRemovedCachedValue(t *testing.T) {

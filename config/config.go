@@ -16,6 +16,7 @@ import (
 var (
 	_           Config = (*config)(nil)
 	ErrNotFound        = errors.New("config: key not found")
+	ErrClosed          = errors.New("config: closed")
 )
 
 type Observer func(string, Value)
@@ -34,6 +35,10 @@ type observerState struct {
 }
 
 type config struct {
+	lifecycleMu sync.Mutex
+	loaded      bool
+	closed      bool
+
 	sources   []Source
 	reader    *Reader
 	opts      options
@@ -55,20 +60,37 @@ func New(opts ...Option) Config {
 }
 
 func (c *config) Load() error {
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	if c.closed {
+		return ErrClosed
+	}
+	if c.loaded {
+		return nil
+	}
 	if err := c.reload(); err != nil {
 		return err
 	}
 
+	watchers := make([]Watcher, 0, len(c.sources))
 	for _, src := range c.sources {
 		w, err := src.Watch()
 		if errors.Is(err, ErrWatchUnsupported) {
 			continue
 		}
 		if err != nil {
+			for _, watcher := range watchers {
+				watcher.Stop()
+			}
 			logx.Errorf("config: watch source: %v", err)
 			return err
 		}
-		c.watchers = append(c.watchers, w)
+		watchers = append(watchers, w)
+	}
+	c.watchers = watchers
+	c.loaded = true
+	for _, watcher := range watchers {
+		w := watcher
 		help.SafeGo(func() {
 			c.watchLoop(w)
 		})
@@ -127,7 +149,17 @@ func (c *config) Watch(key string, o Observer) error {
 }
 
 func (c *config) Close() error {
-	for _, w := range c.watchers {
+	c.lifecycleMu.Lock()
+	if c.closed {
+		c.lifecycleMu.Unlock()
+		return nil
+	}
+	c.closed = true
+	watchers := c.watchers
+	c.watchers = nil
+	c.lifecycleMu.Unlock()
+
+	for _, w := range watchers {
 		w.Stop()
 	}
 	return nil
