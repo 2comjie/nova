@@ -16,33 +16,26 @@ var (
 	ErrInvalidBinding = errors.New("node: Locator binding不能为空")
 )
 
-// Proxy 是 Node 暴露给 Handler 和 Middleware 的能力门面。
-// Proxy 不暴露 Registry、Locator 和 RPC Client 等内部组件。
 type Proxy struct {
 	app *Node
 }
 
-// AddWait 注册一个需要在Node关闭时等待的后台任务。
 func (p *Proxy) AddWait() {
 	p.app.AddWait()
 }
 
-// DoneWait 标记一个后台任务已经退出。
 func (p *Proxy) DoneWait() {
 	p.app.DoneWait()
 }
 
-// Wait 等待Node管理的全部后台任务退出。
 func (p *Proxy) Wait() {
 	p.app.Wait()
 }
 
-// Done 在Node停止后台任务时关闭。
 func (p *Proxy) Done() <-chan struct{} {
 	return p.app.Done()
 }
 
-// Push 向指定UID所在的Gate推送消息。
 func (p *Proxy) Push(ctx context.Context, uid string, route uint32, body []byte) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -68,7 +61,6 @@ func (p *Proxy) Push(ctx context.Context, uid string, route uint32, body []byte)
 	return err
 }
 
-// Kick 关闭指定UID所在Gate上的客户端连接。
 func (p *Proxy) Kick(ctx context.Context, uid string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -89,7 +81,6 @@ func (p *Proxy) Kick(ctx context.Context, uid string) error {
 	return err
 }
 
-// Bind 将指定类型的游戏状态绑定到当前Node实例。
 func (p *Proxy) Bind(ctx context.Context, binding string, key string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -103,7 +94,6 @@ func (p *Proxy) Bind(ctx context.Context, binding string, key string) error {
 	return p.app.nodeLocator.Bind(ctx, binding, key, p.app.instance.ID)
 }
 
-// Unbind 解除指定类型游戏状态与当前Node实例的绑定。
 func (p *Proxy) Unbind(ctx context.Context, binding string, key string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -117,7 +107,6 @@ func (p *Proxy) Unbind(ctx context.Context, binding string, key string) error {
 	return p.app.nodeLocator.Unbind(ctx, binding, key, p.app.instance.ID)
 }
 
-// Locate 查找指定类型游戏状态当前绑定的Node实例。
 func (p *Proxy) Locate(ctx context.Context, binding string, key string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -131,7 +120,6 @@ func (p *Proxy) Locate(ctx context.Context, binding string, key string) (string,
 	return p.app.nodeLocator.Locate(ctx, binding, key)
 }
 
-// Instance 返回当前Node实例信息的副本。
 func (p *Proxy) Instance() endpoint.ServiceInstance {
 	instance := p.app.instance
 	instance.MetaData = maps.Clone(instance.MetaData)

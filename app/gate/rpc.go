@@ -11,7 +11,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// Push 向UID当前绑定的客户端连接推送消息。
 func (g *Gate) Push(ctx context.Context, request *pbGate.PushRequest) (*emptypb.Empty, error) {
 	if request == nil || request.Uid == "" || request.Route == 0 ||
 		request.NodeServiceName == "" || request.NodeInstanceId == "" {
@@ -26,7 +25,6 @@ func (g *Gate) Push(ctx context.Context, request *pbGate.PushRequest) (*emptypb.
 	return &emptypb.Empty{}, nil
 }
 
-// Kick 关闭UID当前绑定的客户端连接，不在线时同样返回成功。
 func (g *Gate) Kick(ctx context.Context, request *pbGate.KickRequest) (*emptypb.Empty, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

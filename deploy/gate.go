@@ -13,7 +13,6 @@ import (
 	"github.com/2comjie/wali/locator"
 )
 
-// GateApp 是deploy装配完成的Gate服务。
 type GateApp struct {
 	*gateapp.Gate
 
@@ -21,7 +20,6 @@ type GateApp struct {
 	resources *resources
 }
 
-// Gate 使用启动参数和Option装配Gate服务。
 func Gate(opts ...Option) (*GateApp, error) {
 	options := defaultOptions()
 	for _, option := range opts {
@@ -66,22 +64,18 @@ func Gate(opts ...Option) (*GateApp, error) {
 	}, nil
 }
 
-// Run 启动Gate，收到SIGINT或SIGTERM后执行优雅停机。
 func (g *GateApp) Run() error {
 	return g.resources.run(g.Start, g.Shutdown)
 }
 
-// Shutdown 关闭Gate和deploy创建的配置、RPC及发现资源。
 func (g *GateApp) Shutdown(ctx context.Context) error {
 	return errors.Join(g.Gate.Shutdown(ctx), g.resources.close())
 }
 
-// Config 返回已经完成Load的配置中心。
 func (g *GateApp) Config() config.Config {
 	return g.resources.config
 }
 
-// Instance 返回当前Gate注册信息的副本。
 func (g *GateApp) Instance() endpoint.ServiceInstance {
 	instance := g.instance
 	instance.MetaData = maps.Clone(instance.MetaData)

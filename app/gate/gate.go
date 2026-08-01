@@ -36,10 +36,8 @@ var (
 	ErrInvalidNodeSource   = errors.New("gate: Node来源信息无效")
 )
 
-// ErrorHandler 处理路由、Filter、Node RPC和客户端写回错误。
 type ErrorHandler func(ctx *Context, err error)
 
-// Config 是一个Gate实例的完整依赖。
 type Config struct {
 	Instance       endpoint.ServiceInstance
 	Router         *Router
@@ -54,7 +52,6 @@ type Config struct {
 	LocatorTimeout time.Duration
 }
 
-// Gate 管理客户端Session、网关路由和Gate RPC服务。
 type Gate struct {
 	pbGate.UnimplementedGateServer
 
@@ -79,7 +76,6 @@ type Gate struct {
 	wait           sync.WaitGroup
 }
 
-// New 创建Gate并注册Gate RPC服务。
 func New(config Config) (*Gate, error) {
 	if config.Instance.ID == "" || config.Instance.ServiceName != locator.GateName {
 		return nil, ErrInstanceRequired
@@ -170,7 +166,6 @@ func New(config Config) (*Gate, error) {
 	return g, nil
 }
 
-// Start 注册Gate实例并启动客户端网络服务。
 func (g *Gate) Start() error {
 	if g.closed.Load() {
 		return ErrClosed
@@ -207,7 +202,6 @@ func (g *Gate) Start() error {
 	return nil
 }
 
-// Shutdown 停止服务并注销Gate实例。
 func (g *Gate) Shutdown(ctx context.Context) error {
 	if !g.closed.CompareAndSwap(false, true) {
 		return nil
@@ -251,23 +245,18 @@ func (g *Gate) Shutdown(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// AddWait 注册一个需要在Gate关闭时等待的后台任务。
-// 必须在启动后台协程前调用，并且不能在Shutdown开始后调用。
 func (g *Gate) AddWait() {
 	g.wait.Add(1)
 }
 
-// DoneWait 标记一个后台任务已经退出。
 func (g *Gate) DoneWait() {
 	g.wait.Done()
 }
 
-// Wait 等待Gate管理的全部后台任务退出。
 func (g *Gate) Wait() {
 	g.wait.Wait()
 }
 
-// Done 在Gate停止后台任务时关闭。
 func (g *Gate) Done() <-chan struct{} {
 	return g.ctx.Done()
 }

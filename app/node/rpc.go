@@ -12,7 +12,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// Call 执行业务请求，业务层调用Context.Reply后才响应客户端。
 func (n *Node) Call(ctx context.Context, request *pbNode.Request) (*pbNode.Response, error) {
 	nodeContext, err := n.handle(ctx, request, true)
 	if err != nil {
@@ -26,7 +25,6 @@ func (n *Node) Call(ctx context.Context, request *pbNode.Request) (*pbNode.Respo
 	}, nil
 }
 
-// Tell 执行业务请求，但不允许响应客户端。
 func (n *Node) Tell(ctx context.Context, request *pbNode.Request) (*emptypb.Empty, error) {
 	if _, err := n.handle(ctx, request, false); err != nil {
 		return nil, err

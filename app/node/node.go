@@ -32,7 +32,6 @@ var (
 	ErrClosed              = errors.New("node: Node已经关闭")
 )
 
-// Config 是一个Node实例的完整依赖。
 type Config struct {
 	Instance    endpoint.ServiceInstance
 	Router      *Router
@@ -45,7 +44,6 @@ type Config struct {
 	Components  []app.Component
 }
 
-// Node 管理业务路由、Locator、Gate调用和gRPC服务。
 type Node struct {
 	pbNode.UnimplementedNodeServer
 
@@ -69,7 +67,6 @@ type Node struct {
 	wait              sync.WaitGroup
 }
 
-// New 创建Node并注册Node RPC服务。
 func New(config Config) (*Node, error) {
 	if config.Instance.ID == "" ||
 		config.Instance.ServiceName == "" ||
@@ -120,7 +117,6 @@ func New(config Config) (*Node, error) {
 	return node, nil
 }
 
-// Start 注册Node实例并启动gRPC服务。
 func (n *Node) Start() error {
 	if n.closed.Load() {
 		return ErrClosed
@@ -183,7 +179,6 @@ func (n *Node) Start() error {
 	return nil
 }
 
-// Shutdown 停止gRPC服务并注销Node实例。
 func (n *Node) Shutdown(ctx context.Context) error {
 	if !n.closed.CompareAndSwap(false, true) {
 		return nil
@@ -234,23 +229,18 @@ func (n *Node) Shutdown(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// AddWait 注册一个需要在Node关闭时等待的后台任务。
-// 必须在启动后台协程前调用，并且不能在Shutdown开始后调用。
 func (n *Node) AddWait() {
 	n.wait.Add(1)
 }
 
-// DoneWait 标记一个后台任务已经退出。
 func (n *Node) DoneWait() {
 	n.wait.Done()
 }
 
-// Wait 等待Node管理的全部后台任务退出。
 func (n *Node) Wait() {
 	n.wait.Wait()
 }
 
-// Done 在Node停止后台任务时关闭。
 func (n *Node) Done() <-chan struct{} {
 	return n.ctx.Done()
 }

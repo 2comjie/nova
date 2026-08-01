@@ -11,7 +11,6 @@ import (
 	"github.com/2comjie/wali/rpc/lx"
 )
 
-// RouteMode 表示Gate选择Node的方式。
 type RouteMode string
 
 const (
@@ -45,7 +44,6 @@ type FilterConfig struct {
 	Args map[string]string `json:"args" yaml:"args"`
 }
 
-// Target 描述请求要转发到的Node。
 type Target struct {
 	Mode    RouteMode        `json:"mode" yaml:"mode"`
 	Service string           `json:"service" yaml:"service"`
@@ -54,7 +52,6 @@ type Target struct {
 	NodeID  string           `json:"node_id" yaml:"node_id"`
 }
 
-// Route 路由规则。
 type Route struct {
 	ID      string         `json:"id" yaml:"id"`
 	Routes  []uint32       `json:"routes" yaml:"routes"`
@@ -70,7 +67,6 @@ type compiledRoute struct {
 
 type routeTable map[uint32]compiledRoute
 
-// Router 在 Freeze 前保存配置，Freeze 后只保留不可变执行表。
 type Router struct {
 	mutex     sync.Mutex
 	routes    []Route
@@ -86,7 +82,6 @@ func NewRouter() *Router {
 	}
 }
 
-// RegisterFilter 注册配置中可以使用的 FilterFactory。
 func (r *Router) RegisterFilter(name string, factory FilterFactory) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -108,7 +103,6 @@ func (r *Router) RegisterFilter(name string, factory FilterFactory) error {
 	return nil
 }
 
-// Use 添加所有 Route 共用的 Filter 配置。
 func (r *Router) Use(filters ...FilterConfig) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
@@ -121,7 +115,6 @@ func (r *Router) Use(filters ...FilterConfig) error {
 	return nil
 }
 
-// Add 添加 Route 配置。
 func (r *Router) Add(routes ...Route) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
@@ -134,7 +127,6 @@ func (r *Router) Add(routes ...Route) error {
 	return nil
 }
 
-// Freeze 校验配置并编译 Filter Chain。
 func (r *Router) Freeze() error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
@@ -207,7 +199,6 @@ func (r *Router) Freeze() error {
 	return nil
 }
 
-// Dispatch 查找 Route 并执行编译后的 Filter Chain。
 func (r *Router) Dispatch(ctx *Context) error {
 	table := r.table.Load()
 	if table == nil {
