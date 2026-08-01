@@ -61,6 +61,9 @@ func (c *config) Load() error {
 
 	for _, src := range c.sources {
 		w, err := src.Watch()
+		if errors.Is(err, ErrWatchUnsupported) {
+			continue
+		}
 		if err != nil {
 			logx.Errorf("config: watch source: %v", err)
 			return err
