@@ -6,6 +6,7 @@ require (
 	github.com/clbanning/mxj v1.8.4
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gorilla/websocket v1.5.3
+	github.com/klauspost/compress v1.18.4
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/spf13/cast v1.10.0
 	github.com/xtaci/kcp-go/v5 v5.6.72
