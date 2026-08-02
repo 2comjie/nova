@@ -46,6 +46,13 @@ type Lease struct {
 	renewErr error
 }
 
+func TryLockDefault(rc redis.UniversalClient, ctx context.Context, lockKey string) (*Lease, bool, error) {
+	return TryLock(rc, ctx, lockKey, 10*time.Second, 5*time.Second)
+}
+func LockDefault(rc redis.UniversalClient, ctx context.Context, lockKey string) (*Lease, bool, error) {
+	return Lock(rc, ctx, lockKey, 10*time.Second)
+}
+
 func TryLock(rc redis.UniversalClient, ctx context.Context, lockKey string, ttl time.Duration, timeout time.Duration) (*Lease, bool, error) {
 	if err := validateLockArgs(rc, lockKey, ttl); err != nil {
 		return nil, false, err
