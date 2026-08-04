@@ -54,7 +54,7 @@ type config struct {
 	values   map[string]*atomicValue
 
 	observersMu sync.Mutex
-	observers   map[string]*observerState
+	observers   map[string][]*observerState
 }
 
 func New(opts ...Option) Config {
@@ -65,7 +65,7 @@ func New(opts ...Option) Config {
 	center := &config{
 		sources:   append([]Source(nil), settings.sources...),
 		values:    make(map[string]*atomicValue),
-		observers: make(map[string]*observerState),
+		observers: make(map[string][]*observerState),
 	}
 	center.current.Store(&snapshot{root: make(map[string]any)})
 	return center
@@ -149,10 +149,10 @@ func (c *config) Watch(key string, observer Observer) error {
 		return ErrNotFound
 	}
 	c.observersMu.Lock()
-	c.observers[key] = &observerState{
+	c.observers[key] = append(c.observers[key], &observerState{
 		snapshot: clone(current),
 		observer: observer,
-	}
+	})
 	c.observersMu.Unlock()
 	return nil
 }
@@ -235,22 +235,24 @@ func (c *config) notifyObservers(root map[string]any) {
 
 	c.observersMu.Lock()
 	notifications := make([]notification, 0, len(c.observers))
-	for key, state := range c.observers {
+	for key, states := range c.observers {
 		current, exists := readTree(root, key)
 		if !exists {
 			current = nil
 		}
-		if reflect.DeepEqual(state.snapshot, current) {
-			continue
+		for _, state := range states {
+			if reflect.DeepEqual(state.snapshot, current) {
+				continue
+			}
+			state.snapshot = clone(current)
+			value := &atomicValue{}
+			value.Store(clone(current))
+			notifications = append(notifications, notification{
+				key:      key,
+				value:    value,
+				observer: state.observer,
+			})
 		}
-		state.snapshot = clone(current)
-		value := &atomicValue{}
-		value.Store(clone(current))
-		notifications = append(notifications, notification{
-			key:      key,
-			value:    value,
-			observer: state.observer,
-		})
 	}
 	c.observersMu.Unlock()
 
