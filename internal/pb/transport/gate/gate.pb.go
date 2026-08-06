@@ -166,6 +166,238 @@ func (x *KickRequest) GetSessionId() uint64 {
 	return 0
 }
 
+type BroadcastRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Route           uint32                 `protobuf:"varint,1,opt,name=route,proto3" json:"route,omitempty"`
+	Body            []byte                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	NodeServiceName string                 `protobuf:"bytes,3,opt,name=node_service_name,json=nodeServiceName,proto3" json:"node_service_name,omitempty"`
+	NodeInstanceId  string                 `protobuf:"bytes,4,opt,name=node_instance_id,json=nodeInstanceId,proto3" json:"node_instance_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BroadcastRequest) Reset() {
+	*x = BroadcastRequest{}
+	mi := &file_transport_gate_gate_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BroadcastRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BroadcastRequest) ProtoMessage() {}
+
+func (x *BroadcastRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_gate_gate_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BroadcastRequest.ProtoReflect.Descriptor instead.
+func (*BroadcastRequest) Descriptor() ([]byte, []int) {
+	return file_transport_gate_gate_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *BroadcastRequest) GetRoute() uint32 {
+	if x != nil {
+		return x.Route
+	}
+	return 0
+}
+
+func (x *BroadcastRequest) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+func (x *BroadcastRequest) GetNodeServiceName() string {
+	if x != nil {
+		return x.NodeServiceName
+	}
+	return ""
+}
+
+func (x *BroadcastRequest) GetNodeInstanceId() string {
+	if x != nil {
+		return x.NodeInstanceId
+	}
+	return ""
+}
+
+type BroadcastResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Count         uint32                 `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BroadcastResponse) Reset() {
+	*x = BroadcastResponse{}
+	mi := &file_transport_gate_gate_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BroadcastResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BroadcastResponse) ProtoMessage() {}
+
+func (x *BroadcastResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_gate_gate_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BroadcastResponse.ProtoReflect.Descriptor instead.
+func (*BroadcastResponse) Descriptor() ([]byte, []int) {
+	return file_transport_gate_gate_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *BroadcastResponse) GetCount() uint32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+type MultiPushRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	UidList         []string               `protobuf:"bytes,1,rep,name=uid_list,json=uidList,proto3" json:"uid_list,omitempty"`
+	Route           uint32                 `protobuf:"varint,2,opt,name=route,proto3" json:"route,omitempty"`
+	Body            []byte                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	NodeServiceName string                 `protobuf:"bytes,4,opt,name=node_service_name,json=nodeServiceName,proto3" json:"node_service_name,omitempty"`
+	NodeInstanceId  string                 `protobuf:"bytes,5,opt,name=node_instance_id,json=nodeInstanceId,proto3" json:"node_instance_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *MultiPushRequest) Reset() {
+	*x = MultiPushRequest{}
+	mi := &file_transport_gate_gate_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MultiPushRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MultiPushRequest) ProtoMessage() {}
+
+func (x *MultiPushRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_gate_gate_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MultiPushRequest.ProtoReflect.Descriptor instead.
+func (*MultiPushRequest) Descriptor() ([]byte, []int) {
+	return file_transport_gate_gate_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *MultiPushRequest) GetUidList() []string {
+	if x != nil {
+		return x.UidList
+	}
+	return nil
+}
+
+func (x *MultiPushRequest) GetRoute() uint32 {
+	if x != nil {
+		return x.Route
+	}
+	return 0
+}
+
+func (x *MultiPushRequest) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+func (x *MultiPushRequest) GetNodeServiceName() string {
+	if x != nil {
+		return x.NodeServiceName
+	}
+	return ""
+}
+
+func (x *MultiPushRequest) GetNodeInstanceId() string {
+	if x != nil {
+		return x.NodeInstanceId
+	}
+	return ""
+}
+
+type MultiPushResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Count         uint32                 `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MultiPushResponse) Reset() {
+	*x = MultiPushResponse{}
+	mi := &file_transport_gate_gate_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MultiPushResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MultiPushResponse) ProtoMessage() {}
+
+func (x *MultiPushResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_gate_gate_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MultiPushResponse.ProtoReflect.Descriptor instead.
+func (*MultiPushResponse) Descriptor() ([]byte, []int) {
+	return file_transport_gate_gate_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *MultiPushResponse) GetCount() uint32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
 var File_transport_gate_gate_proto protoreflect.FileDescriptor
 
 const file_transport_gate_gate_proto_rawDesc = "" +
@@ -182,10 +414,27 @@ const file_transport_gate_gate_proto_rawDesc = "" +
 	"\x11node_service_name\x18\x02 \x01(\tR\x0fnodeServiceName\x12(\n" +
 	"\x10node_instance_id\x18\x03 \x01(\tR\x0enodeInstanceId\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x04 \x01(\x04R\tsessionId2\x8a\x01\n" +
+	"session_id\x18\x04 \x01(\x04R\tsessionId\"\x92\x01\n" +
+	"\x10BroadcastRequest\x12\x14\n" +
+	"\x05route\x18\x01 \x01(\rR\x05route\x12\x12\n" +
+	"\x04body\x18\x02 \x01(\fR\x04body\x12*\n" +
+	"\x11node_service_name\x18\x03 \x01(\tR\x0fnodeServiceName\x12(\n" +
+	"\x10node_instance_id\x18\x04 \x01(\tR\x0enodeInstanceId\")\n" +
+	"\x11BroadcastResponse\x12\x14\n" +
+	"\x05count\x18\x01 \x01(\rR\x05count\"\xad\x01\n" +
+	"\x10MultiPushRequest\x12\x19\n" +
+	"\buid_list\x18\x01 \x03(\tR\auidList\x12\x14\n" +
+	"\x05route\x18\x02 \x01(\rR\x05route\x12\x12\n" +
+	"\x04body\x18\x03 \x01(\fR\x04body\x12*\n" +
+	"\x11node_service_name\x18\x04 \x01(\tR\x0fnodeServiceName\x12(\n" +
+	"\x10node_instance_id\x18\x05 \x01(\tR\x0enodeInstanceId\")\n" +
+	"\x11MultiPushResponse\x12\x14\n" +
+	"\x05count\x18\x01 \x01(\rR\x05count2\xc2\x02\n" +
 	"\x04Gate\x12@\n" +
 	"\x04Push\x12 .wali.transport.gate.PushRequest\x1a\x16.google.protobuf.Empty\x12@\n" +
-	"\x04Kick\x12 .wali.transport.gate.KickRequest\x1a\x16.google.protobuf.EmptyB9Z7github.com/2comjie/wali/internal/pb/transport/gate;gateb\x06proto3"
+	"\x04Kick\x12 .wali.transport.gate.KickRequest\x1a\x16.google.protobuf.Empty\x12Z\n" +
+	"\tBroadcast\x12%.wali.transport.gate.BroadcastRequest\x1a&.wali.transport.gate.BroadcastResponse\x12Z\n" +
+	"\tMultiPush\x12%.wali.transport.gate.MultiPushRequest\x1a&.wali.transport.gate.MultiPushResponseB9Z7github.com/2comjie/wali/internal/pb/transport/gate;gateb\x06proto3"
 
 var (
 	file_transport_gate_gate_proto_rawDescOnce sync.Once
@@ -199,19 +448,27 @@ func file_transport_gate_gate_proto_rawDescGZIP() []byte {
 	return file_transport_gate_gate_proto_rawDescData
 }
 
-var file_transport_gate_gate_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_transport_gate_gate_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_transport_gate_gate_proto_goTypes = []any{
-	(*PushRequest)(nil),   // 0: wali.transport.gate.PushRequest
-	(*KickRequest)(nil),   // 1: wali.transport.gate.KickRequest
-	(*emptypb.Empty)(nil), // 2: google.protobuf.Empty
+	(*PushRequest)(nil),       // 0: wali.transport.gate.PushRequest
+	(*KickRequest)(nil),       // 1: wali.transport.gate.KickRequest
+	(*BroadcastRequest)(nil),  // 2: wali.transport.gate.BroadcastRequest
+	(*BroadcastResponse)(nil), // 3: wali.transport.gate.BroadcastResponse
+	(*MultiPushRequest)(nil),  // 4: wali.transport.gate.MultiPushRequest
+	(*MultiPushResponse)(nil), // 5: wali.transport.gate.MultiPushResponse
+	(*emptypb.Empty)(nil),     // 6: google.protobuf.Empty
 }
 var file_transport_gate_gate_proto_depIdxs = []int32{
 	0, // 0: wali.transport.gate.Gate.Push:input_type -> wali.transport.gate.PushRequest
 	1, // 1: wali.transport.gate.Gate.Kick:input_type -> wali.transport.gate.KickRequest
-	2, // 2: wali.transport.gate.Gate.Push:output_type -> google.protobuf.Empty
-	2, // 3: wali.transport.gate.Gate.Kick:output_type -> google.protobuf.Empty
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	2, // 2: wali.transport.gate.Gate.Broadcast:input_type -> wali.transport.gate.BroadcastRequest
+	4, // 3: wali.transport.gate.Gate.MultiPush:input_type -> wali.transport.gate.MultiPushRequest
+	6, // 4: wali.transport.gate.Gate.Push:output_type -> google.protobuf.Empty
+	6, // 5: wali.transport.gate.Gate.Kick:output_type -> google.protobuf.Empty
+	3, // 6: wali.transport.gate.Gate.Broadcast:output_type -> wali.transport.gate.BroadcastResponse
+	5, // 7: wali.transport.gate.Gate.MultiPush:output_type -> wali.transport.gate.MultiPushResponse
+	4, // [4:8] is the sub-list for method output_type
+	0, // [0:4] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -228,7 +485,7 @@ func file_transport_gate_gate_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_gate_gate_proto_rawDesc), len(file_transport_gate_gate_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

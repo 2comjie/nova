@@ -235,3 +235,34 @@ func (m *sessionManager) Close() {
 		_ = conn.Close()
 	}
 }
+
+func (m *sessionManager) BoundSessions() []*Session {
+	m.mutex.RLock()
+	sessions := make([]*Session, 0, len(m.byUID))
+	for _, session := range m.byUID {
+		sessions = append(sessions, session)
+	}
+	m.mutex.RUnlock()
+	return sessions
+}
+
+func (m *sessionManager) ByUIDs(uidList []string) []*Session {
+	m.mutex.RLock()
+	sessions := make([]*Session, 0, len(uidList))
+	seen := make(map[*Session]struct{}, len(uidList))
+
+	for _, uid := range uidList {
+		session := m.byUID[uid]
+		if session == nil {
+			continue
+		}
+		if _, exists := seen[session]; exists {
+			continue
+		}
+		seen[session] = struct{}{}
+		sessions = append(sessions, session)
+	}
+
+	m.mutex.RUnlock()
+	return sessions
+}

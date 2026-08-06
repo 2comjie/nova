@@ -279,3 +279,47 @@ func (n *Node) DeleteMetadata(keys ...string) error {
 	}
 	return nil
 }
+
+func (n *Node) Push(ctx context.Context, uid string, route uint32, body []byte) error {
+	_, err := n.gateClient.Push(ctx, &pbGate.PushRequest{
+		Uid:             uid,
+		Route:           route,
+		Body:            body,
+		NodeServiceName: n.instance.ServiceName,
+		NodeInstanceId:  n.instance.ID,
+	})
+	return err
+}
+func (n *Node) Kick(ctx context.Context, uid string) error {
+	_, err := n.gateClient.Kick(ctx, &pbGate.KickRequest{
+		Uid:             uid,
+		NodeServiceName: n.instance.ServiceName,
+		NodeInstanceId:  n.instance.ID,
+	})
+	return err
+}
+func (n *Node) Broadcast(ctx context.Context, route uint32, body []byte) (uint32, error) {
+	response, err := n.gateClient.Broadcast(ctx, &pbGate.BroadcastRequest{
+		Route:           route,
+		Body:            body,
+		NodeServiceName: n.instance.ServiceName,
+		NodeInstanceId:  n.instance.ID,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return response.Count, nil
+}
+func (n *Node) MultiPush(ctx context.Context, uidList []string, route uint32, body []byte) (uint32, error) {
+	response, err := n.gateClient.MultiPush(ctx, &pbGate.MultiPushRequest{
+		UidList:         uidList,
+		Route:           route,
+		Body:            body,
+		NodeServiceName: n.instance.ServiceName,
+		NodeInstanceId:  n.instance.ID,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return response.Count, nil
+}

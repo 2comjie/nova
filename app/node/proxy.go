@@ -134,3 +134,10 @@ func (p *Proxy) Instance() endpoint.ServiceInstance {
 	instance.MetaData = maps.Clone(instance.MetaData)
 	return instance
 }
+
+func (n *Proxy) Broadcast(ctx context.Context, route uint32, body []byte) (uint32, error) {
+	return n.app.Broadcast(ctx, route, body)
+}
+func (n *Proxy) MultiPush(ctx context.Context, uidList []string, route uint32, body []byte) (uint32, error) {
+	return n.app.MultiPush(ctx, uidList, route, body)
+}

@@ -21,8 +21,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Gate_Push_FullMethodName = "/wali.transport.gate.Gate/Push"
-	Gate_Kick_FullMethodName = "/wali.transport.gate.Gate/Kick"
+	Gate_Push_FullMethodName      = "/wali.transport.gate.Gate/Push"
+	Gate_Kick_FullMethodName      = "/wali.transport.gate.Gate/Kick"
+	Gate_Broadcast_FullMethodName = "/wali.transport.gate.Gate/Broadcast"
+	Gate_MultiPush_FullMethodName = "/wali.transport.gate.Gate/MultiPush"
 )
 
 // GateClient is the client API for Gate service.
@@ -31,6 +33,8 @@ const (
 type GateClient interface {
 	Push(ctx context.Context, in *PushRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	Kick(ctx context.Context, in *KickRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Broadcast(ctx context.Context, in *BroadcastRequest, opts ...grpc.CallOption) (*BroadcastResponse, error)
+	MultiPush(ctx context.Context, in *MultiPushRequest, opts ...grpc.CallOption) (*MultiPushResponse, error)
 }
 
 type gateClient struct {
@@ -69,12 +73,42 @@ func (c *gateClient) Kick(ctx context.Context, in *KickRequest, opts ...grpc.Cal
 	return out, nil
 }
 
+func (c *gateClient) Broadcast(ctx context.Context, in *BroadcastRequest, opts ...grpc.CallOption) (*BroadcastResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	conn, err := c.cc.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := new(BroadcastResponse)
+	err = conn.Invoke(ctx, Gate_Broadcast_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gateClient) MultiPush(ctx context.Context, in *MultiPushRequest, opts ...grpc.CallOption) (*MultiPushResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	conn, err := c.cc.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := new(MultiPushResponse)
+	err = conn.Invoke(ctx, Gate_MultiPush_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GateServer is the server API for Gate service.
 // All implementations must embed UnimplementedGateServer
 // for forward compatibility.
 type GateServer interface {
 	Push(context.Context, *PushRequest) (*emptypb.Empty, error)
 	Kick(context.Context, *KickRequest) (*emptypb.Empty, error)
+	Broadcast(context.Context, *BroadcastRequest) (*BroadcastResponse, error)
+	MultiPush(context.Context, *MultiPushRequest) (*MultiPushResponse, error)
 	mustEmbedUnimplementedGateServer()
 }
 
@@ -90,6 +124,12 @@ func (UnimplementedGateServer) Push(context.Context, *PushRequest) (*emptypb.Emp
 }
 func (UnimplementedGateServer) Kick(context.Context, *KickRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method Kick not implemented")
+}
+func (UnimplementedGateServer) Broadcast(context.Context, *BroadcastRequest) (*BroadcastResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Broadcast not implemented")
+}
+func (UnimplementedGateServer) MultiPush(context.Context, *MultiPushRequest) (*MultiPushResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MultiPush not implemented")
 }
 func (UnimplementedGateServer) mustEmbedUnimplementedGateServer() {}
 func (UnimplementedGateServer) testEmbeddedByValue()              {}
@@ -148,6 +188,42 @@ func _Gate_Kick_Handler(srv interface{}, ctx context.Context, dec func(interface
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Gate_Broadcast_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BroadcastRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GateServer).Broadcast(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gate_Broadcast_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GateServer).Broadcast(ctx, req.(*BroadcastRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gate_MultiPush_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MultiPushRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GateServer).MultiPush(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gate_MultiPush_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GateServer).MultiPush(ctx, req.(*MultiPushRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Gate_ServiceDesc is the grpc.ServiceDesc for Gate service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -162,6 +238,14 @@ var Gate_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Kick",
 			Handler:    _Gate_Kick_Handler,
+		},
+		{
+			MethodName: "Broadcast",
+			Handler:    _Gate_Broadcast_Handler,
+		},
+		{
+			MethodName: "MultiPush",
+			Handler:    _Gate_MultiPush_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

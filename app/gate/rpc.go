@@ -40,3 +40,30 @@ func (g *Gate) Kick(ctx context.Context, request *pbGate.KickRequest) (*emptypb.
 	}
 	return &emptypb.Empty{}, nil
 }
+
+func (g *Gate) Broadcast(ctx context.Context, request *pbGate.BroadcastRequest) (*pbGate.BroadcastResponse, error) {
+	if request == nil || request.Route == 0 ||
+		request.NodeServiceName == "" || request.NodeInstanceId == "" {
+		return nil, status.Error(codes.InvalidArgument, "gate: Broadcast参数无效")
+	}
+	count, err := g.server.Broadcast(ctx, request.Route, request.Body)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "gate: Broadcast失败")
+	}
+	return &pbGate.BroadcastResponse{
+		Count: count,
+	}, nil
+}
+
+func (g *Gate) MultiPush(ctx context.Context, request *pbGate.MultiPushRequest) (*pbGate.MultiPushResponse, error) {
+	if request == nil || request.NodeServiceName == "" || request.NodeInstanceId == "" {
+		return nil, status.Error(codes.InvalidArgument, "gate: MultiPush参数无效")
+	}
+	count, err := g.server.MultiPush(ctx, request.UidList, request.Route, request.Body)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "gate: MultiPush失败")
+	}
+	return &pbGate.MultiPushResponse{
+		Count: count,
+	}, nil
+}

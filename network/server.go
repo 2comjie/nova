@@ -242,3 +242,74 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return ctx.Err()
 	}
 }
+
+func (s *Server) Broadcast(ctx context.Context, route uint32, body []byte) (uint32, error) {
+	sessions := s.manager.BoundSessions()
+	return s.pushSessions(ctx, sessions, route, body)
+}
+
+func (s *Server) MultiPush(ctx context.Context, uidList []string, route uint32, body []byte) (uint32, error) {
+	sessions := s.manager.ByUIDs(uidList)
+	return s.pushSessions(ctx, sessions, route, body)
+}
+
+func (s *Server) pushSessions(ctx context.Context, sessions []*Session, route uint32, body []byte) (uint32, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if len(sessions) == 0 {
+		return 0, nil
+	}
+
+	encodedBody, err := encodeBody(s.options, packet.Push, route, 0, body)
+	if err != nil {
+		return 0, err
+	}
+
+	workerCount := min(16, len(sessions))
+
+	var (
+		nextIndex atomic.Int64
+		success   atomic.Uint32
+		wait      sync.WaitGroup
+	)
+
+	wait.Add(workerCount)
+
+	for workerID := 0; workerID < workerCount; workerID++ {
+		help.SafeGo(func() {
+			defer wait.Done()
+
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+
+				index := int(nextIndex.Add(1) - 1)
+				if index >= len(sessions) {
+					return
+				}
+
+				session := sessions[index]
+				err := session.Conn.Write(&packet.Message{
+					Type:  packet.Push,
+					Route: route,
+					Body:  encodedBody,
+				})
+				if err != nil {
+					_ = session.Conn.Close()
+					continue
+				}
+
+				success.Add(1)
+			}
+		})
+	}
+
+	wait.Wait()
+
+	if err := ctx.Err(); err != nil {
+		return success.Load(), err
+	}
+	return success.Load(), nil
+}

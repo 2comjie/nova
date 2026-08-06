@@ -21,7 +21,31 @@ message KickRequest {
   uint64 session_id = 4;
 }
 
+message BroadcastRequest {
+  uint32 route = 1;
+  bytes body = 2;
+  string node_service_name = 3;
+  string node_instance_id = 4;
+}
+message BroadcastResponse {
+  uint32 count = 1;
+}
+
+message MultiPushRequest {
+  repeated string uid_list = 1;
+  uint32 route = 2;
+  bytes body = 3;
+  string node_service_name = 4;
+  string node_instance_id = 5;
+}
+message MultiPushResponse {
+  uint32 count = 1;
+}
+
 service Gate {
   rpc Push(PushRequest) returns (google.protobuf.Empty);
   rpc Kick(KickRequest) returns (google.protobuf.Empty);
+
+  rpc Broadcast(BroadcastRequest) returns (BroadcastResponse);
+  rpc MultiPush(MultiPushRequest) returns (MultiPushResponse);
 }
