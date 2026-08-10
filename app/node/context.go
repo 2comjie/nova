@@ -22,7 +22,7 @@ type Request struct {
 type Context struct {
 	context.Context
 
-	App     *Proxy
+	App     *Node
 	Request *Request
 
 	replied      bool

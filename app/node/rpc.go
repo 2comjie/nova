@@ -39,7 +39,7 @@ func (n *Node) handle(ctx context.Context, request *pbNode.Request, needReply bo
 
 	nodeContext := &Context{
 		Context: ctx,
-		App:     n.proxy,
+		App:     n,
 		Request: &Request{
 			Route:           request.Route,
 			UID:             request.Uid,

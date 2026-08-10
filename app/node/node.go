@@ -60,7 +60,6 @@ type Node struct {
 	rpcServer   *grpc.Server
 	rpcListener net.Listener
 	components  []app.Component
-	proxy       *Proxy
 
 	ctx               context.Context
 	cancel            context.CancelFunc
@@ -116,7 +115,6 @@ func New(config Config) (*Node, error) {
 		ctx:         ctx,
 		cancel:      cancel,
 	}
-	node.proxy = &Proxy{app: node}
 	pbNode.RegisterNodeServer(config.RPCServer, node)
 	return node, nil
 }

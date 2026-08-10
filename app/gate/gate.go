@@ -60,7 +60,6 @@ type Gate struct {
 	instance     endpoint.ServiceInstance
 	router       *Router
 	server       *network.Server
-	proxy        *Proxy
 	nodeClient   pbNode.NodeClient
 	gateClient   pbGate.GateClient
 	locator      *locator.GateLocator
@@ -163,7 +162,6 @@ func New(config Config) (*Gate, error) {
 		return nil, err
 	}
 	g.server = server
-	g.proxy = &Proxy{app: g}
 
 	if err := g.router.Freeze(); err != nil {
 		cancel()
@@ -298,7 +296,7 @@ func (g *Gate) onReq(request *network.ReqContext) {
 	message := request.Request
 	ctx := &Context{
 		Context:    g.ctx,
-		App:        g.proxy,
+		App:        g,
 		Session:    request.Session,
 		Route:      message.Route,
 		Seq:        message.Seq,

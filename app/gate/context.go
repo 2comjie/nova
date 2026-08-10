@@ -15,7 +15,7 @@ var (
 type Context struct {
 	context.Context
 
-	App     *Proxy
+	App     *Gate
 	Session *network.Session
 	Route   uint32
 	Seq     uint64
