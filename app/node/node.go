@@ -34,6 +34,7 @@ var (
 	ErrRPCListenerRequired = errors.New("node: 必须提供gRPC Listener")
 	ErrStarted             = errors.New("node: Node已经启动")
 	ErrClosed              = errors.New("node: Node已经关闭")
+	ErrDiscoveryRequired   = errors.New("node: 必须提供Discovery")
 )
 
 type Config struct {
@@ -43,6 +44,7 @@ type Config struct {
 	GateLocator *locator.GateLocator
 	GateClient  pbGate.GateClient
 	Registry    registry.Registry
+	Discovery   registry.Discover
 	RPCServer   *grpc.Server
 	RPCListener net.Listener
 	Components  []app.Component
@@ -57,6 +59,7 @@ type Node struct {
 	gateLocator *locator.GateLocator
 	gateClient  pbGate.GateClient
 	registry    registry.Registry
+	discovery   registry.Discover
 	rpcServer   *grpc.Server
 	rpcListener net.Listener
 	components  []app.Component
@@ -97,6 +100,9 @@ func New(config Config) (*Node, error) {
 	if config.RPCListener == nil {
 		return nil, ErrRPCListenerRequired
 	}
+	if config.Discovery == nil {
+		return nil, ErrDiscoveryRequired
+	}
 	if err := config.Router.Freeze(); err != nil {
 		return nil, err
 	}
@@ -109,6 +115,7 @@ func New(config Config) (*Node, error) {
 		gateLocator: config.GateLocator,
 		gateClient:  config.GateClient,
 		registry:    config.Registry,
+		discovery:   config.Discovery,
 		rpcServer:   config.RPCServer,
 		rpcListener: config.RPCListener,
 		components:  append([]app.Component(nil), config.Components...),
@@ -320,4 +327,11 @@ func (n *Node) MultiPush(ctx context.Context, uidList []string, route uint32, bo
 		return 0, err
 	}
 	return response.Count, nil
+}
+func (n *Node) ListServices(ctx context.Context) (map[string]endpoint.ServiceInstance, error) {
+	serviceList, err := n.discovery.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return serviceList, nil
 }

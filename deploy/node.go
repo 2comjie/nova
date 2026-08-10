@@ -42,6 +42,7 @@ func Node(opts ...Option) (*NodeApp, error) {
 		RPCServer:   rpcServer,
 		RPCListener: resources.rpcListener,
 		Components:  options.components,
+		Discovery:   options.discover,
 	})
 	if err != nil {
 		return nil, errors.Join(err, resources.close())
