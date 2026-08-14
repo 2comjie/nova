@@ -125,18 +125,27 @@ func (r *Runner[T]) WaitResultOnMainLoop(ctx context.Context, fn func(T)) error 
 func (r *Runner[T]) Stop(reason actorDef.StopReason) error {
 	r.stateMu.Lock()
 
-	if !r.stopped {
-		r.stopped = true
-		r.stopReason = reason
-		r.cancel()
+	if r.stopped {
+		started := r.started
+		r.stateMu.Unlock()
+
+		if started {
+			<-r.done
+		}
+		return r.Err()
 	}
 
-	started := r.started
-	r.stateMu.Unlock()
+	r.stopped = true
+	r.stopReason = reason
+	r.cancel()
 
-	if !started {
+	if !r.started {
+		close(r.done)
+		r.stateMu.Unlock()
 		return nil
 	}
+
+	r.stateMu.Unlock()
 
 	<-r.done
 	return r.Err()
