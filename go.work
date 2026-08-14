@@ -3,7 +3,7 @@ go 1.24.3
 use (
 	.
 	./cmd/protoc-gen-go-grpc-locator
+	./examples
 	./locator/redis
 	./registry/redis
-	./examples
 )
