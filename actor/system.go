@@ -6,58 +6,79 @@ import (
 	"sync"
 
 	"github.com/2comjie/wali/actor/actorDef"
+	"github.com/2comjie/wali/actor/actorGuard"
 	"github.com/2comjie/wali/core/help"
 	"golang.org/x/sync/singleflight"
 )
 
-type Loader[T actorDef.Actor] func(ctx context.Context, pid actorDef.PID) (T, error)
+type Loader[T actorDef.Actor] func(runCtx context.Context, pid actorDef.PID) (T, error)
 
-var ErrSystemStopped = errors.New("actor system stopped")
+var (
+	ErrSystemStopped = errors.New("actor system stopped")
+	ErrActorGuarded  = errors.New("actor guarded by another instance")
+)
+
+type activation[T actorDef.Actor] struct {
+	runner *Runner[T]
+	lease  *actorGuard.Lease
+	done   chan struct{}
+	err    error
+}
 
 type System[T actorDef.Actor] struct {
 	actorType    actorDef.Type
 	loader       Loader[T]
+	guard        *actorGuard.Guard
 	runnerConfig RunnerConfig
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	runCtx context.Context
+	stop   context.CancelFunc
 
 	mu      sync.RWMutex
-	actors  map[actorDef.Key]*Runner[T]
+	actors  map[actorDef.Key]*activation[T]
 	loads   singleflight.Group
-	loading sync.WaitGroup
+	loadWg  sync.WaitGroup
 	stopped bool
 }
 
-func NewSystem[T actorDef.Actor](parent context.Context, actorType actorDef.Type, loader Loader[T], runnerConfig RunnerConfig) *System[T] {
-	ctx, cancel := context.WithCancel(parent)
+func NewSystem[T actorDef.Actor](parentCtx context.Context, actorType actorDef.Type, guard *actorGuard.Guard, loader Loader[T], runnerConfig RunnerConfig) *System[T] {
+	runCtx, stop := context.WithCancel(parentCtx)
 	return &System[T]{
 		actorType:    actorType,
 		loader:       loader,
+		guard:        guard,
 		runnerConfig: runnerConfig,
-		ctx:          ctx,
-		cancel:       cancel,
-		actors:       make(map[actorDef.Key]*Runner[T]),
+		runCtx:       runCtx,
+		stop:         stop,
+		actors:       make(map[actorDef.Key]*activation[T]),
 	}
 }
 
 func (s *System[T]) TryGetActor(key actorDef.Key) (*Runner[T], bool) {
+	if s.runCtx.Err() != nil {
+		return nil, false
+	}
 	s.mu.RLock()
-	runner, ex := s.actors[key]
+	activation := s.actors[key]
 	s.mu.RUnlock()
-	if !ex {
+	if activation == nil {
 		return nil, false
 	}
 	select {
-	case <-runner.Done():
+	case <-activation.lease.Done():
 		return nil, false
 	default:
 	}
-	return runner, ex
+	select {
+	case <-activation.runner.Done():
+		return nil, false
+	default:
+	}
+	return activation.runner, true
 }
 
-func (s *System[T]) GetOrLoadActor(ctx context.Context, key actorDef.Key) (*Runner[T], error) {
-	if s.ctx.Err() != nil {
+func (s *System[T]) GetOrLoadActor(waitCtx context.Context, key actorDef.Key) (*Runner[T], error) {
+	if s.runCtx.Err() != nil {
 		return nil, ErrSystemStopped
 	}
 	if runner, ok := s.TryGetActor(key); ok {
@@ -70,51 +91,92 @@ func (s *System[T]) GetOrLoadActor(ctx context.Context, key actorDef.Key) (*Runn
 			s.mu.RUnlock()
 			return nil, ErrSystemStopped
 		}
-		s.loading.Add(1)
+		s.loadWg.Add(1)
 		s.mu.RUnlock()
-		defer s.loading.Done()
+		defer s.loadWg.Done()
 
 		if runner, ok := s.TryGetActor(key); ok {
 			return runner, nil
 		}
+		s.mu.RLock()
+		previous := s.actors[key]
+		s.mu.RUnlock()
+		if previous != nil {
+			select {
+			case <-previous.done:
+			case <-s.runCtx.Done():
+				return nil, ErrSystemStopped
+			}
+		}
+		if s.runCtx.Err() != nil {
+			return nil, ErrSystemStopped
+		}
 
 		pid := actorDef.PID{Type: s.actorType, Key: key}
+		lease, acquired, err := s.guard.TryAcquire(s.runCtx, pid)
+		if err != nil {
+			return nil, err
+		}
+		if !acquired {
+			return nil, ErrActorGuarded
+		}
+
 		var actorValue T
 		var loadErr error
 
 		help.SafeRun(func() {
-			actorValue, loadErr = s.loader(s.ctx, pid)
+			actorValue, loadErr = s.loader(s.runCtx, pid)
 		})
 		if loadErr != nil {
-			return nil, loadErr
+			return nil, errors.Join(loadErr, lease.Release())
 		}
-		if s.ctx.Err() != nil {
-			return nil, ErrSystemStopped
+		if s.runCtx.Err() != nil {
+			return nil, errors.Join(ErrSystemStopped, lease.Release())
+		}
+		if lease.Err() != nil {
+			return nil, lease.Err()
 		}
 
-		runner := NewRunner(s.ctx, pid, actorValue, s.runnerConfig)
-		if err := runner.Start(); err != nil {
-			return nil, err
+		runner := NewRunner(s.runCtx, pid, actorValue, s.runnerConfig)
+		if err = runner.Start(); err != nil {
+			return nil, errors.Join(err, lease.Release())
 		}
+		if lease.Err() != nil {
+			_ = runner.Stop(actorDef.StopReasonLeaseLost)
+			return nil, errors.Join(lease.Err(), runner.Err())
+		}
+		current := &activation[T]{runner: runner, lease: lease, done: make(chan struct{})}
 
 		s.mu.Lock()
 		if s.stopped {
 			s.mu.Unlock()
 			_ = runner.Stop(actorDef.StopReasonShutdown)
-			return nil, ErrSystemStopped
+			return nil, errors.Join(ErrSystemStopped, lease.Release())
 		}
-		s.actors[key] = runner
+		s.actors[key] = current
 		s.mu.Unlock()
 
-		go func() {
+		help.SafeGo(func() {
+			select {
+			case <-lease.Done():
+				runner.RequestStop(actorDef.StopReasonLeaseLost)
+			case <-runner.Done():
+			}
 			<-runner.Done()
 
+			leaseErr := lease.Err()
+			if leaseErr == nil {
+				leaseErr = lease.Release()
+			}
+			current.err = errors.Join(runner.Err(), leaseErr)
+
 			s.mu.Lock()
-			if s.actors[key] == runner {
+			if s.actors[key] == current {
 				delete(s.actors, key)
 			}
 			s.mu.Unlock()
-		}()
+			close(current.done)
+		})
 
 		return runner, nil
 	})
@@ -126,34 +188,39 @@ func (s *System[T]) GetOrLoadActor(ctx context.Context, key actorDef.Key) (*Runn
 		}
 		return res.Val.(*Runner[T]), nil
 
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	case <-waitCtx.Done():
+		return nil, waitCtx.Err()
 	}
 }
 
 func (s *System[T]) UnloadActor(key actorDef.Key) error {
-	runner, ok := s.TryGetActor(key)
-	if !ok {
+	s.mu.RLock()
+	activation := s.actors[key]
+	s.mu.RUnlock()
+	if activation == nil {
 		return nil
 	}
-	return runner.Stop(actorDef.StopReasonUnload)
+	activation.runner.RequestStop(actorDef.StopReasonUnload)
+	<-activation.done
+	return activation.err
 }
 
 func (s *System[T]) Stop() error {
 	s.mu.Lock()
 	s.stopped = true
-	runners := make([]*Runner[T], 0, len(s.actors))
-	for _, runner := range s.actors {
-		runners = append(runners, runner)
+	activations := make([]*activation[T], 0, len(s.actors))
+	for _, activation := range s.actors {
+		activations = append(activations, activation)
 	}
 	s.mu.Unlock()
 
-	s.cancel()
-	s.loading.Wait()
+	s.stop()
+	s.loadWg.Wait()
 
 	var stopErr error
-	for _, runner := range runners {
-		stopErr = errors.Join(stopErr, runner.Stop(actorDef.StopReasonShutdown))
+	for _, activation := range activations {
+		<-activation.done
+		stopErr = errors.Join(stopErr, activation.err)
 	}
 	return stopErr
 }

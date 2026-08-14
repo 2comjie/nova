@@ -20,8 +20,8 @@ type Runner[T actorDef.Actor] struct {
 	actor  T
 	config RunnerConfig
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	runCtx context.Context
+	stop   context.CancelFunc
 	queue  chan func(T)
 	done   chan struct{}
 	start  chan error
@@ -36,20 +36,20 @@ type Runner[T actorDef.Actor] struct {
 	err   error
 }
 
-func NewRunner[T actorDef.Actor](parent context.Context, self actorDef.PID, actorValue T, config RunnerConfig) *Runner[T] {
+func NewRunner[T actorDef.Actor](parentCtx context.Context, self actorDef.PID, actorValue T, config RunnerConfig) *Runner[T] {
 	if config.QueueCap == 0 {
 		config.QueueCap = 1024
 	}
 	if config.UpdateDt == 0 {
 		config.UpdateDt = 100 * time.Millisecond
 	}
-	ctx, cancel := context.WithCancel(parent)
+	runCtx, stop := context.WithCancel(parentCtx)
 	return &Runner[T]{
 		self:       self,
 		actor:      actorValue,
 		config:     config,
-		ctx:        ctx,
-		cancel:     cancel,
+		runCtx:     runCtx,
+		stop:       stop,
 		queue:      make(chan func(T), config.QueueCap),
 		done:       make(chan struct{}),
 		start:      make(chan error, 1),
@@ -91,7 +91,7 @@ func (r *Runner[T]) RunOnMainLoop(fn func(T)) error {
 	}
 }
 
-func (r *Runner[T]) WaitResultOnMainLoop(ctx context.Context, fn func(T)) error {
+func (r *Runner[T]) WaitResultOnMainLoop(waitCtx context.Context, fn func(T)) error {
 	done := make(chan struct{}, 1)
 
 	err := r.RunOnMainLoop(func(actorValue T) {
@@ -99,7 +99,7 @@ func (r *Runner[T]) WaitResultOnMainLoop(ctx context.Context, fn func(T)) error 
 			done <- struct{}{}
 		}()
 
-		if ctx.Err() != nil {
+		if waitCtx.Err() != nil {
 			return
 		}
 
@@ -111,13 +111,13 @@ func (r *Runner[T]) WaitResultOnMainLoop(ctx context.Context, fn func(T)) error 
 
 	select {
 	case <-done:
-		return ctx.Err()
-	case <-ctx.Done():
-		return ctx.Err()
+		return waitCtx.Err()
+	case <-waitCtx.Done():
+		return waitCtx.Err()
 	case <-r.done:
 		select {
 		case <-done:
-			return ctx.Err()
+			return waitCtx.Err()
 		default:
 		}
 		if err := r.Err(); err != nil {
@@ -150,7 +150,7 @@ func (r *Runner[T]) RequestStop(reason actorDef.StopReason) {
 
 	r.stopped = true
 	r.stopReason = reason
-	r.cancel()
+	r.stop()
 
 	if !r.started {
 		close(r.done)
@@ -163,7 +163,7 @@ func (r *Runner[T]) loop() {
 	startErr := errors.New("actor start panic")
 	help.SafeRun(func() {
 		startErr = r.actor.OnStart(actorDef.ActorStartCtx{
-			Context: r.ctx,
+			Context: r.runCtx,
 			Self:    r.self,
 			Unload: func() {
 				r.RequestStop(actorDef.StopReasonUnload)
@@ -186,7 +186,7 @@ func (r *Runner[T]) loop() {
 		stopErr := errors.New("actor stop panic")
 		help.SafeRun(func() {
 			stopErr = r.actor.OnStop(actorDef.ActorStopCtx{
-				Context: context.WithoutCancel(r.ctx),
+				Context: context.WithoutCancel(r.runCtx),
 				Self:    r.self,
 				Reason:  r.stopReason,
 			})
@@ -205,7 +205,7 @@ func (r *Runner[T]) loop() {
 	updatePaused := false
 	for {
 		select {
-		case <-r.ctx.Done():
+		case <-r.runCtx.Done():
 			return
 		case fn := <-r.queue:
 			lastActive = time.Now()
@@ -222,7 +222,7 @@ func (r *Runner[T]) loop() {
 			nextUpdate := r.config.UpdateDt
 			help.SafeRun(func() {
 				nextUpdate = r.actor.OnUpdate(actorDef.ActorUpdateCtx{
-					Context: r.ctx,
+					Context: r.runCtx,
 					Self:    r.self,
 					Delta:   now.Sub(lastUpdate),
 					Idle:    now.Sub(lastActive),
@@ -257,7 +257,7 @@ func (r *Runner[T]) setErr(err error) {
 func (r *Runner[T]) markStopped() {
 	r.stateMu.Lock()
 	r.stopped = true
-	r.cancel()
+	r.stop()
 	r.stateMu.Unlock()
 }
 

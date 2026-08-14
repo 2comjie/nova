@@ -58,9 +58,9 @@ func New(instanceId string, rc redis.UniversalClient, opts ...Option) *Guard {
 	return guard
 }
 
-func (g *Guard) TryAcquire(ctx context.Context, pid actorDef.PID) (*Lease, bool, error) {
+func (g *Guard) TryAcquire(runCtx context.Context, pid actorDef.PID) (*Lease, bool, error) {
 	key := g.keyPrefix + pid.String()
-	acquired, err := acquireScriptSHA.Run(ctx, g.rc, []string{key}, g.instanceId, g.ttl.Milliseconds()).Int64()
+	acquired, err := acquireScriptSHA.Run(runCtx, g.rc, []string{key}, g.instanceId, g.ttl.Milliseconds()).Int64()
 	if err != nil {
 		return nil, false, err
 	}
@@ -68,13 +68,13 @@ func (g *Guard) TryAcquire(ctx context.Context, pid actorDef.PID) (*Lease, bool,
 		return nil, false, nil
 	}
 
-	leaseCtx, cancel := context.WithCancel(context.Background())
+	renewCtx, stopRenew := context.WithCancel(context.Background())
 	lease := &Lease{
-		guard:  g,
-		key:    key,
-		ctx:    leaseCtx,
-		cancel: cancel,
-		done:   make(chan struct{}),
+		guard:     g,
+		key:       key,
+		renewCtx:  renewCtx,
+		stopRenew: stopRenew,
+		done:      make(chan struct{}),
 	}
 	help.SafeGo(lease.renew)
 	return lease, true, nil
@@ -84,9 +84,9 @@ type Lease struct {
 	guard *Guard
 	key   string
 
-	ctx    context.Context
-	cancel context.CancelFunc
-	done   chan struct{}
+	renewCtx  context.Context
+	stopRenew context.CancelFunc
+	done      chan struct{}
 
 	errMu sync.RWMutex
 	err   error
@@ -102,15 +102,11 @@ func (l *Lease) Err() error {
 	return l.err
 }
 
-func (l *Lease) Release(ctx context.Context) error {
-	l.cancel()
-	select {
-	case <-l.done:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+func (l *Lease) Release() error {
+	l.stopRenew()
+	<-l.done
 
-	released, err := releaseScriptSHA.Run(ctx, l.guard.rc, []string{l.key}, l.guard.instanceId).Int64()
+	released, err := releaseScriptSHA.Run(context.Background(), l.guard.rc, []string{l.key}, l.guard.instanceId).Int64()
 	if err != nil {
 		return err
 	}
@@ -128,18 +124,18 @@ func (l *Lease) renew() {
 
 	for {
 		select {
-		case <-l.ctx.Done():
+		case <-l.renewCtx.Done():
 			return
 		case <-ticker.C:
 			renewed, err := renewScriptSHA.Run(
-				l.ctx,
+				l.renewCtx,
 				l.guard.rc,
 				[]string{l.key},
 				l.guard.instanceId,
 				l.guard.ttl.Milliseconds(),
 			).Int64()
 			if err != nil {
-				if l.ctx.Err() == nil {
+				if l.renewCtx.Err() == nil {
 					l.setErr(err)
 				}
 				return
