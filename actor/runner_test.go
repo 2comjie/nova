@@ -282,3 +282,63 @@ func TestRunnerStopBeforeStartAndConcurrentStop(t *testing.T) {
 		t.Fatalf("OnStop执行次数=%d", stopCount.Load())
 	}
 }
+
+func TestRunnerActorCanUnloadItself(t *testing.T) {
+	t.Run("StartCtx", func(t *testing.T) {
+		var unload func()
+		stopReason := make(chan actorDef.StopReason, 1)
+		testActor := &actorSimple.SimpleActor{
+			MStart: func(ctx actorDef.ActorStartCtx) error {
+				unload = ctx.Unload
+				return nil
+			},
+			MStop: func(ctx actorDef.ActorStopCtx) error {
+				stopReason <- ctx.Reason
+				return nil
+			},
+		}
+		runner := actor.NewRunner(context.Background(), actorDef.PID{Type: 1, Key: "self-unload"}, testActor, actor.RunnerConfig{UpdateDt: time.Hour})
+		if err := runner.Start(); err != nil {
+			t.Fatal(err)
+		}
+		if err := runner.WaitResultOnMainLoop(context.Background(), func(*actorSimple.SimpleActor) {
+			unload()
+		}); err != nil {
+			t.Fatalf("请求卸载的当前任务执行失败: %v", err)
+		}
+		select {
+		case <-runner.Done():
+		case <-time.After(time.Second):
+			t.Fatal("Actor主动卸载后Runner没有停止")
+		}
+		if reason := <-stopReason; reason != actorDef.StopReasonUnload {
+			t.Fatalf("停止原因=%d", reason)
+		}
+	})
+
+	t.Run("UpdateCtx", func(t *testing.T) {
+		stopReason := make(chan actorDef.StopReason, 1)
+		testActor := &actorSimple.SimpleActor{
+			MUpdate: func(ctx actorDef.ActorUpdateCtx) time.Duration {
+				ctx.Unload()
+				return -1
+			},
+			MStop: func(ctx actorDef.ActorStopCtx) error {
+				stopReason <- ctx.Reason
+				return nil
+			},
+		}
+		runner := actor.NewRunner(context.Background(), actorDef.PID{Type: 1, Key: "update-unload"}, testActor, actor.RunnerConfig{UpdateDt: time.Millisecond})
+		if err := runner.Start(); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-runner.Done():
+		case <-time.After(time.Second):
+			t.Fatal("Update请求卸载后Runner没有停止")
+		}
+		if reason := <-stopReason; reason != actorDef.StopReasonUnload {
+			t.Fatalf("停止原因=%d", reason)
+		}
+	})
+}

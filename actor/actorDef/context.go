@@ -7,7 +7,8 @@ import (
 
 type ActorStartCtx struct {
 	context.Context
-	Self PID
+	Self   PID
+	Unload func()
 }
 
 type ActorStopCtx struct {
@@ -18,9 +19,10 @@ type ActorStopCtx struct {
 
 type ActorUpdateCtx struct {
 	context.Context
-	Self  PID
-	Delta time.Duration
-	Idle  time.Duration
+	Self   PID
+	Delta  time.Duration
+	Idle   time.Duration
+	Unload func()
 }
 type StopReason uint8
 

@@ -115,6 +115,11 @@ func (r *Runner[T]) WaitResultOnMainLoop(ctx context.Context, fn func(T)) error 
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-r.done:
+		select {
+		case <-done:
+			return ctx.Err()
+		default:
+		}
 		if err := r.Err(); err != nil {
 			return err
 		}
@@ -123,16 +128,24 @@ func (r *Runner[T]) WaitResultOnMainLoop(ctx context.Context, fn func(T)) error 
 }
 
 func (r *Runner[T]) Stop(reason actorDef.StopReason) error {
+	r.RequestStop(reason)
+
 	r.stateMu.Lock()
+	started := r.started
+	r.stateMu.Unlock()
+
+	if started {
+		<-r.done
+	}
+	return r.Err()
+}
+
+func (r *Runner[T]) RequestStop(reason actorDef.StopReason) {
+	r.stateMu.Lock()
+	defer r.stateMu.Unlock()
 
 	if r.stopped {
-		started := r.started
-		r.stateMu.Unlock()
-
-		if started {
-			<-r.done
-		}
-		return r.Err()
+		return
 	}
 
 	r.stopped = true
@@ -141,14 +154,7 @@ func (r *Runner[T]) Stop(reason actorDef.StopReason) error {
 
 	if !r.started {
 		close(r.done)
-		r.stateMu.Unlock()
-		return nil
 	}
-
-	r.stateMu.Unlock()
-
-	<-r.done
-	return r.Err()
 }
 
 func (r *Runner[T]) loop() {
@@ -159,6 +165,9 @@ func (r *Runner[T]) loop() {
 		startErr = r.actor.OnStart(actorDef.ActorStartCtx{
 			Context: r.ctx,
 			Self:    r.self,
+			Unload: func() {
+				r.RequestStop(actorDef.StopReasonUnload)
+			},
 		})
 	})
 
@@ -217,6 +226,9 @@ func (r *Runner[T]) loop() {
 					Self:    r.self,
 					Delta:   now.Sub(lastUpdate),
 					Idle:    now.Sub(lastActive),
+					Unload: func() {
+						r.RequestStop(actorDef.StopReasonUnload)
+					},
 				})
 				return
 			})
