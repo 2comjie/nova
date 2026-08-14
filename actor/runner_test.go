@@ -56,4 +56,6 @@ func TestRunner(t *testing.T) {
 	}()
 	util.WaitUntilSignaled()
 	done <- struct{}{}
+	err = runner.Stop(actorDef.StopReasonShutdown)
+	<-runner.Done()
 }
