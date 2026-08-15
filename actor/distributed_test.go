@@ -17,6 +17,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+type messageActor struct {
+	actorSimple.SimpleActor
+	value byte
+}
+
 func localRedis(t *testing.T) *redis.Client {
 	t.Helper()
 	address := os.Getenv("REDIS_ADDR")
@@ -299,5 +304,90 @@ func TestSystemStopsActorAfterGuardLost(t *testing.T) {
 	}
 	if owner != "player-2" {
 		t.Fatalf("guard owner=%s", owner)
+	}
+}
+
+func TestActorServerAskTellAndActivation(t *testing.T) {
+	rc := localRedis(t)
+	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(actorGuardPrefix()))
+	var loads atomic.Int32
+	system := actor.NewSystem(context.Background(), actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
+		loads.Add(1)
+		return &messageActor{}, nil
+	}, actor.RunnerConfig{UpdateDt: time.Hour})
+	t.Cleanup(func() {
+		_ = system.Stop()
+	})
+
+	server := actor.NewServer()
+	if err := actor.RegAsk(server, system, 1001, func(_ context.Context, actorValue *messageActor, message actor.Message) ([]byte, error) {
+		actorValue.value += message.Body[0]
+		return []byte{actorValue.value}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := actor.RegTell(server, system, 1002, func(_ context.Context, actorValue *messageActor, message actor.Message) error {
+		actorValue.value += message.Body[0]
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := actor.RegTell(server, system, 1001, func(context.Context, *messageActor, actor.Message) error {
+		return nil
+	}); !errors.Is(err, actor.ErrMessageRouteRegistered) {
+		t.Fatalf("duplicate route error=%v", err)
+	}
+
+	key := actorDef.Key("uid-1001")
+	message := actor.Message{Route: 1001, Body: []byte{1}}
+	if _, handled, err := server.Ask(context.Background(), key, actor.ActivationIgnore, message); err != nil || handled {
+		t.Fatalf("ignore handled=%t error=%v", handled, err)
+	}
+	if _, _, err := server.Ask(context.Background(), key, actor.ActivationRequire, message); !errors.Is(err, actor.ErrActorNotActive) {
+		t.Fatalf("require error=%v", err)
+	}
+
+	body, handled, err := server.Ask(context.Background(), key, actor.ActivationLoad, message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || len(body) != 1 || body[0] != 1 {
+		t.Fatalf("handled=%t body=%v", handled, body)
+	}
+	if loads.Load() != 1 {
+		t.Fatalf("loads=%d", loads.Load())
+	}
+
+	if err = server.Tell(context.Background(), key, actor.ActivationRequire, actor.Message{Route: 1002, Body: []byte{2}}); err != nil {
+		t.Fatal(err)
+	}
+	body, handled, err = server.Ask(context.Background(), key, actor.ActivationRequire, actor.Message{Route: 1001, Body: []byte{0}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handled || len(body) != 1 || body[0] != 3 {
+		t.Fatalf("handled=%t body=%v", handled, body)
+	}
+}
+
+func TestActorServerHandlerPanic(t *testing.T) {
+	rc := localRedis(t)
+	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(actorGuardPrefix()))
+	system := actor.NewSystem(context.Background(), actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
+		return &messageActor{}, nil
+	}, actor.RunnerConfig{UpdateDt: time.Hour})
+	t.Cleanup(func() {
+		_ = system.Stop()
+	})
+
+	server := actor.NewServer()
+	if err := actor.RegAsk(server, system, 1001, func(context.Context, *messageActor, actor.Message) ([]byte, error) {
+		panic("handler panic")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := server.Ask(context.Background(), actorDef.Key("uid-1001"), actor.ActivationLoad, actor.Message{Route: 1001})
+	if !errors.Is(err, actor.ErrMessageHandlerPanic) {
+		t.Fatalf("handler error=%v", err)
 	}
 }
