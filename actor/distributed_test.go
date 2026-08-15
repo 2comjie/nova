@@ -397,7 +397,7 @@ func TestActorServerHandlerPanic(t *testing.T) {
 	}
 }
 
-func TestActorMiddlewarePassesNodeContext(t *testing.T) {
+func TestActorRouteGroup(t *testing.T) {
 	rc := localRedis(t)
 	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(actorGuardPrefix()))
 	system := actor.NewSystem(context.Background(), actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
@@ -407,22 +407,32 @@ func TestActorMiddlewarePassesNodeContext(t *testing.T) {
 		_ = system.Stop()
 	})
 
+	router := node.NewRouter()
 	server := actor.NewServer()
 	received := make(chan *node.Context, 1)
-	if err := actor.RegAsk(server, system, 1001, func(actorValue *messageActor, ctx *node.Context) error {
+	routes := actor.NewRouteGroup(router, server, system, actor.ActivationLoad, func(ctx *node.Context) actorDef.Key {
+		return actorDef.Key(ctx.Request.UID)
+	})
+	if err := routes.RegAsk(1001, func(actorValue *messageActor, ctx *node.Context) error {
 		received <- ctx
 		return actorValue.ask(ctx)
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := routes.RegTell(1002, (*messageActor).tell); err != nil {
+		t.Fatal(err)
+	}
 
 	var fallback atomic.Int32
-	handler := actor.Middleware(server, actor.ActivationLoad, func(ctx *node.Context) actorDef.Key {
-		return actorDef.Key(ctx.Request.UID)
-	})(func(*node.Context) error {
+	if err := router.Handle(2001, func(*node.Context) error {
 		fallback.Add(1)
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := router.Freeze(); err != nil {
+		t.Fatal(err)
+	}
 
 	nodeApp := &node.Node{}
 	requestCtx := &node.Context{
@@ -437,7 +447,7 @@ func TestActorMiddlewarePassesNodeContext(t *testing.T) {
 			NeedReply:       true,
 		},
 	}
-	if err := handler(requestCtx); err != nil {
+	if err := router.Dispatch(requestCtx); err != nil {
 		t.Fatal(err)
 	}
 	if handledCtx := <-received; handledCtx != requestCtx {
@@ -450,7 +460,28 @@ func TestActorMiddlewarePassesNodeContext(t *testing.T) {
 		t.Fatalf("response body=%v", body)
 	}
 
-	if err := handler(&node.Context{Context: context.Background(), Request: &node.Request{Route: 2001}}); err != nil {
+	tellCtx := &node.Context{
+		Context: context.Background(),
+		App:     nodeApp,
+		Request: &node.Request{Route: 1002, UID: "uid-1001", Body: []byte{2}},
+	}
+	if err := router.Dispatch(tellCtx); err != nil {
+		t.Fatal(err)
+	}
+	checkCtx := &node.Context{
+		Context: context.Background(),
+		App:     nodeApp,
+		Request: &node.Request{Route: 1001, UID: "uid-1001", Body: []byte{0}, NeedReply: true},
+	}
+	if err := router.Dispatch(checkCtx); err != nil {
+		t.Fatal(err)
+	}
+	<-received
+	if body := checkCtx.ResponseBody(); len(body) != 1 || body[0] != 3 {
+		t.Fatalf("response body after tell=%v", body)
+	}
+
+	if err := router.Dispatch(&node.Context{Context: context.Background(), Request: &node.Request{Route: 2001}}); err != nil {
 		t.Fatal(err)
 	}
 	if fallback.Load() != 1 {
