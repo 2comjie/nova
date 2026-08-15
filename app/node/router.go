@@ -121,7 +121,13 @@ func (r *Router) add(route uint32, handler Handler, group *RouteGroup) error {
 	}
 	var middlewares []Middleware
 	if group != nil {
-		middlewares = append(middlewares, group.middlewares...)
+		groups := make([]*RouteGroup, 0, 2)
+		for current := group; current != nil; current = current.parent {
+			groups = append(groups, current)
+		}
+		for index := len(groups) - 1; index >= 0; index-- {
+			middlewares = append(middlewares, groups[index].middlewares...)
+		}
 	}
 	r.routes[route] = routeEntry{
 		handler:     handler,
@@ -143,7 +149,12 @@ func buildHandler(handler Handler, middlewares []Middleware) (result Handler, er
 
 type RouteGroup struct {
 	router      *Router
+	parent      *RouteGroup
 	middlewares []Middleware
+}
+
+func (g *RouteGroup) Group() *RouteGroup {
+	return &RouteGroup{router: g.router, parent: g}
 }
 
 func (g *RouteGroup) Use(middlewares ...Middleware) error {

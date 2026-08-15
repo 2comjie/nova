@@ -23,14 +23,12 @@ type messageActor struct {
 	value byte
 }
 
-func (a *messageActor) ask(ctx *node.Context) error {
+func (a *messageActor) handle(_ actorDef.PID, ctx *node.Context) error {
 	a.value += ctx.Request.Body[0]
+	if !ctx.NeedReply() {
+		return nil
+	}
 	return ctx.Reply([]byte{a.value})
-}
-
-func (a *messageActor) tell(ctx *node.Context) error {
-	a.value += ctx.Request.Body[0]
-	return nil
 }
 
 func localRedis(t *testing.T) *redis.Client {
@@ -331,17 +329,7 @@ func TestActorServerAskTellAndActivation(t *testing.T) {
 	})
 
 	server := actor.NewServer()
-	if err := actor.RegAsk(server, system, 1001, (*messageActor).ask); err != nil {
-		t.Fatal(err)
-	}
-	if err := actor.RegTell(server, system, 1002, (*messageActor).tell); err != nil {
-		t.Fatal(err)
-	}
-	if err := actor.RegTell(server, system, 1001, func(*messageActor, *node.Context) error {
-		return nil
-	}); !errors.Is(err, actor.ErrMessageRouteRegistered) {
-		t.Fatalf("duplicate route error=%v", err)
-	}
+	actor.Reg(server, system, 1001, (*messageActor).handle)
 
 	key := actorDef.Key("uid-1001")
 	message := actor.Message{Route: 1001, Body: []byte{1}}
@@ -363,7 +351,7 @@ func TestActorServerAskTellAndActivation(t *testing.T) {
 		t.Fatalf("loads=%d", loads.Load())
 	}
 
-	if err = server.Tell(context.Background(), key, actor.ActivationRequire, actor.Message{Route: 1002, Body: []byte{2}}); err != nil {
+	if err = server.Tell(context.Background(), key, actor.ActivationRequire, actor.Message{Route: 1001, Body: []byte{2}}); err != nil {
 		t.Fatal(err)
 	}
 	body, handled, err = server.Ask(context.Background(), key, actor.ActivationRequire, actor.Message{Route: 1001, Body: []byte{0}})
@@ -386,11 +374,9 @@ func TestActorServerHandlerPanic(t *testing.T) {
 	})
 
 	server := actor.NewServer()
-	if err := actor.RegAsk(server, system, 1001, func(*messageActor, *node.Context) error {
+	actor.Reg(server, system, 1001, func(*messageActor, actorDef.PID, *node.Context) error {
 		panic("handler panic")
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
 	_, _, err := server.Ask(context.Background(), actorDef.Key("uid-1001"), actor.ActivationLoad, actor.Message{Route: 1001})
 	if !errors.Is(err, actor.ErrMessageHandlerPanic) {
 		t.Fatalf("handler error=%v", err)
@@ -409,19 +395,34 @@ func TestActorRouteGroup(t *testing.T) {
 
 	router := node.NewRouter()
 	server := actor.NewServer()
-	received := make(chan *node.Context, 1)
+	received := make(chan *node.Context, 4)
+	receivedPID := make(chan actorDef.PID, 4)
+	middlewareOrder := make(chan string, 16)
 	routes := actor.NewRouteGroup(router, server, system, actor.ActivationLoad, func(ctx *node.Context) actorDef.Key {
 		return actorDef.Key(ctx.Request.UID)
 	})
-	if err := routes.RegAsk(1001, func(actorValue *messageActor, ctx *node.Context) error {
+	routes.Use(func(next actor.Handler[*messageActor]) actor.Handler[*messageActor] {
+		return func(actorValue *messageActor, pid actorDef.PID, ctx *node.Context) error {
+			middlewareOrder <- "parent-before"
+			err := next(actorValue, pid, ctx)
+			middlewareOrder <- "parent-after"
+			return err
+		}
+	})
+	child := routes.Group()
+	child.Use(func(next actor.Handler[*messageActor]) actor.Handler[*messageActor] {
+		return func(actorValue *messageActor, pid actorDef.PID, ctx *node.Context) error {
+			middlewareOrder <- "child-before"
+			err := next(actorValue, pid, ctx)
+			middlewareOrder <- "child-after"
+			return err
+		}
+	})
+	child.Handle(1001, func(actorValue *messageActor, pid actorDef.PID, ctx *node.Context) error {
 		received <- ctx
-		return actorValue.ask(ctx)
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := routes.RegTell(1002, (*messageActor).tell); err != nil {
-		t.Fatal(err)
-	}
+		receivedPID <- pid
+		return actorValue.handle(pid, ctx)
+	})
 
 	var fallback atomic.Int32
 	if err := router.Handle(2001, func(*node.Context) error {
@@ -453,6 +454,14 @@ func TestActorRouteGroup(t *testing.T) {
 	if handledCtx := <-received; handledCtx != requestCtx {
 		t.Fatal("actor handler did not receive the original node context")
 	}
+	if pid := <-receivedPID; pid.Type != actorDef.Type(1) || pid.Key != actorDef.Key("uid-1001") {
+		t.Fatalf("actor pid=%+v", pid)
+	}
+	for index, want := range []string{"parent-before", "child-before", "child-after", "parent-after"} {
+		if got := <-middlewareOrder; got != want {
+			t.Fatalf("middleware[%d]=%s want=%s", index, got, want)
+		}
+	}
 	if requestCtx.App != nodeApp || requestCtx.Request.GateServiceName != "gate" || requestCtx.Request.GateInstanceID != "gate-1" {
 		t.Fatal("node context metadata was not preserved")
 	}
@@ -463,7 +472,7 @@ func TestActorRouteGroup(t *testing.T) {
 	tellCtx := &node.Context{
 		Context: context.Background(),
 		App:     nodeApp,
-		Request: &node.Request{Route: 1002, UID: "uid-1001", Body: []byte{2}},
+		Request: &node.Request{Route: 1001, UID: "uid-1001", Body: []byte{2}},
 	}
 	if err := router.Dispatch(tellCtx); err != nil {
 		t.Fatal(err)
@@ -477,6 +486,9 @@ func TestActorRouteGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-received
+	<-received
+	<-receivedPID
+	<-receivedPID
 	if body := checkCtx.ResponseBody(); len(body) != 1 || body[0] != 3 {
 		t.Fatalf("response body after tell=%v", body)
 	}
