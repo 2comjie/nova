@@ -37,34 +37,29 @@ func main() {
 	}
 }
 
-func onChatSend(ctx *node.Context) {
+func onChatSend(ctx *node.Context) error {
 	var request shared.ChatSendRequest
 	if err := json.Unmarshal(ctx.Request.Body, &request); err != nil {
-		replyChat(ctx, shared.ChatSendResponse{Error: "聊天请求格式错误"})
-		return
+		return replyChat(ctx, shared.ChatSendResponse{Error: "聊天请求格式错误"})
 	}
 	pushBody, err := json.Marshal(shared.ChatPush{
 		FromUID: ctx.Request.UID,
 		Text:    request.Text,
 	})
 	if err != nil {
-		replyChat(ctx, shared.ChatSendResponse{Error: err.Error()})
-		return
+		return replyChat(ctx, shared.ChatSendResponse{Error: err.Error()})
 	}
 	if err := ctx.App.Push(ctx, request.ToUID, shared.RouteChatPush, pushBody); err != nil {
-		replyChat(ctx, shared.ChatSendResponse{Error: err.Error()})
-		return
+		return replyChat(ctx, shared.ChatSendResponse{Error: err.Error()})
 	}
 	logx.Infof("聊天发送 from=%s to=%s text=%s", ctx.Request.UID, request.ToUID, request.Text)
-	replyChat(ctx, shared.ChatSendResponse{Success: true})
+	return replyChat(ctx, shared.ChatSendResponse{Success: true})
 }
 
-func replyChat(ctx *node.Context, response shared.ChatSendResponse) {
+func replyChat(ctx *node.Context, response shared.ChatSendResponse) error {
 	body, err := json.Marshal(response)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	if err := ctx.Reply(body); err != nil {
-		panic(err)
-	}
+	return ctx.Reply(body)
 }

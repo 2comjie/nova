@@ -81,22 +81,22 @@ func (s *playerStore) Shutdown(context.Context) error {
 	return nil
 }
 
-func (s *playerStore) onGet(ctx *node.Context) {
+func (s *playerStore) onGet(ctx *node.Context) error {
 	profile, err := s.profile(ctx, ctx.Request.UID)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	s.reply(ctx, profile)
+	return s.reply(ctx, profile)
 }
 
-func (s *playerStore) onAddExp(ctx *node.Context) {
+func (s *playerStore) onAddExp(ctx *node.Context) error {
 	var request shared.PlayerAddExpRequest
 	if err := json.Unmarshal(ctx.Request.Body, &request); err != nil {
-		panic(err)
+		return err
 	}
 	profile, err := s.profile(ctx, ctx.Request.UID)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	s.mutex.Lock()
@@ -108,7 +108,7 @@ func (s *playerStore) onAddExp(ctx *node.Context) {
 	}
 	s.profiles[profile.UID] = profile
 	s.mutex.Unlock()
-	s.reply(ctx, profile)
+	return s.reply(ctx, profile)
 }
 
 func (s *playerStore) profile(ctx context.Context, uid string) (shared.PlayerProfile, error) {
@@ -140,14 +140,12 @@ func (s *playerStore) profile(ctx context.Context, uid string) (shared.PlayerPro
 	return profile, nil
 }
 
-func (s *playerStore) reply(ctx *node.Context, profile shared.PlayerProfile) {
+func (s *playerStore) reply(ctx *node.Context, profile shared.PlayerProfile) error {
 	body, err := json.Marshal(profile)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	if err := ctx.Reply(body); err != nil {
-		panic(err)
-	}
+	return ctx.Reply(body)
 }
 
 func (s *playerStore) persistLoop(done <-chan struct{}) {

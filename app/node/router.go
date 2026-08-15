@@ -17,7 +17,7 @@ var (
 	ErrRouteNotFound   = errors.New("node: route不存在")
 )
 
-type Handler func(*Context)
+type Handler func(*Context) error
 
 type Middleware func(next Handler) Handler
 
@@ -100,8 +100,7 @@ func (r *Router) Dispatch(ctx *Context) error {
 	if !ok {
 		return fmt.Errorf("%w: %d", ErrRouteNotFound, ctx.Request.Route)
 	}
-	handler(ctx)
-	return nil
+	return handler(ctx)
 }
 
 func (r *Router) add(route uint32, handler Handler, group *RouteGroup) error {
