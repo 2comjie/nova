@@ -24,17 +24,8 @@ import (
 )
 
 var (
-	ErrInstanceRequired    = errors.New("node: 必须提供Node ServiceInstance")
-	ErrRouterRequired      = errors.New("node: 必须提供Router")
-	ErrNodeLocatorRequired = errors.New("node: 必须提供NodeLocator")
-	ErrGateLocatorRequired = errors.New("node: 必须提供GateLocator")
-	ErrGateClientRequired  = errors.New("node: 必须提供GateClient")
-	ErrRegistryRequired    = errors.New("node: 必须提供Registry")
-	ErrRPCServerRequired   = errors.New("node: 必须提供gRPC Server")
-	ErrRPCListenerRequired = errors.New("node: 必须提供gRPC Listener")
-	ErrStarted             = errors.New("node: Node已经启动")
-	ErrClosed              = errors.New("node: Node已经关闭")
-	ErrDiscoveryRequired   = errors.New("node: 必须提供Discovery")
+	ErrStarted = errors.New("node: Node已经启动")
+	ErrClosed  = errors.New("node: Node已经关闭")
 )
 
 type Config struct {
@@ -73,38 +64,36 @@ type Node struct {
 	wait              sync.WaitGroup
 }
 
-func New(config Config) (*Node, error) {
-	if config.Instance.ID == "" ||
-		config.Instance.ServiceName == "" ||
-		config.Instance.ServiceName == locator.GateName {
-		return nil, ErrInstanceRequired
+func New(config Config) *Node {
+	if config.Instance.ID == "" || config.Instance.ServiceName == "" || config.Instance.ServiceName == locator.GateName {
+		panic("node: 必须提供Node ServiceInstance")
 	}
 	if config.Router == nil {
-		return nil, ErrRouterRequired
+		panic("node: 必须提供Router")
 	}
 	if config.NodeLocator == nil {
-		return nil, ErrNodeLocatorRequired
+		panic("node: 必须提供NodeLocator")
 	}
 	if config.GateLocator == nil {
-		return nil, ErrGateLocatorRequired
+		panic("node: 必须提供GateLocator")
 	}
 	if config.GateClient == nil {
-		return nil, ErrGateClientRequired
+		panic("node: 必须提供GateClient")
 	}
 	if config.Registry == nil {
-		return nil, ErrRegistryRequired
+		panic("node: 必须提供Registry")
 	}
 	if config.RPCServer == nil {
-		return nil, ErrRPCServerRequired
+		panic("node: 必须提供gRPC Server")
 	}
 	if config.RPCListener == nil {
-		return nil, ErrRPCListenerRequired
+		panic("node: 必须提供gRPC Listener")
 	}
 	if config.Discovery == nil {
-		return nil, ErrDiscoveryRequired
+		panic("node: 必须提供Discovery")
 	}
 	if err := config.Router.Freeze(); err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -123,7 +112,7 @@ func New(config Config) (*Node, error) {
 		cancel:      cancel,
 	}
 	pbNode.RegisterNodeServer(config.RPCServer, node)
-	return node, nil
+	return node
 }
 
 func (n *Node) Start() error {

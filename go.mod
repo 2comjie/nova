@@ -3,6 +3,7 @@ module github.com/2comjie/wali
 go 1.24.3
 
 require (
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/clbanning/mxj v1.8.4
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gorilla/websocket v1.5.3
@@ -18,7 +19,6 @@ require (
 )
 
 require (
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/reedsolomon v1.14.0 // indirect

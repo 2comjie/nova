@@ -58,14 +58,18 @@ func New(instanceId string, rc redis.UniversalClient, opts ...Option) *Guard {
 	return guard
 }
 
-func (g *Guard) TryAcquire(runCtx context.Context, pid actorDef.PID) (*Lease, bool, error) {
+func (g *Guard) InstanceId() string {
+	return g.instanceId
+}
+
+func (g *Guard) TryAcquire(runCtx context.Context, pid actorDef.PID) (*Lease, string, bool, error) {
 	key := g.keyPrefix + pid.String()
-	acquired, err := acquireScriptSHA.Run(runCtx, g.rc, []string{key}, g.instanceId, g.ttl.Milliseconds()).Int64()
+	ownerInstanceId, err := acquireScriptSHA.Run(runCtx, g.rc, []string{key}, g.instanceId, g.ttl.Milliseconds()).Text()
 	if err != nil {
-		return nil, false, err
+		return nil, "", false, err
 	}
-	if acquired == 0 {
-		return nil, false, nil
+	if ownerInstanceId != g.instanceId {
+		return nil, ownerInstanceId, false, nil
 	}
 
 	renewCtx, stopRenew := context.WithCancel(context.Background())
@@ -77,7 +81,15 @@ func (g *Guard) TryAcquire(runCtx context.Context, pid actorDef.PID) (*Lease, bo
 		done:      make(chan struct{}),
 	}
 	help.SafeGo(lease.renew)
-	return lease, true, nil
+	return lease, ownerInstanceId, true, nil
+}
+
+func (g *Guard) Owner(ctx context.Context, pid actorDef.PID) (string, error) {
+	ownerInstanceId, err := g.rc.Get(ctx, g.keyPrefix+pid.String()).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", nil
+	}
+	return ownerInstanceId, err
 }
 
 type Lease struct {

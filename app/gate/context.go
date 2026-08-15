@@ -21,17 +21,19 @@ type Context struct {
 	Seq     uint64
 	Body    []byte
 
-	RouteID string
-	Target  Target
+	RouteID  string
+	Target   Target
+	ActorKey string
 
 	BindingKey      string
 	NodeServiceName string
 	NodeInstanceID  string
 
-	needReply    bool
-	replied      bool
-	responseBody []byte
-	forward      Handler
+	needReply        bool
+	replied          bool
+	responseBody     []byte
+	forward          Handler
+	actorKeyResolver ActorKeyResolver
 }
 
 func (c *Context) NeedReply() bool {

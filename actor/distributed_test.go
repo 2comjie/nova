@@ -15,7 +15,9 @@ import (
 	"github.com/2comjie/wali/actor/actorGuard"
 	actorSimple "github.com/2comjie/wali/actor/simple"
 	"github.com/2comjie/wali/app/node"
+	pbActor "github.com/2comjie/wali/internal/pb/transport/actor"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc"
 )
 
 type messageActor struct {
@@ -29,6 +31,11 @@ func (a *messageActor) handle(_ actorDef.PID, ctx *node.Context) error {
 		return nil
 	}
 	return ctx.Reply([]byte{a.value})
+}
+
+func (a *messageActor) rpc(_ actorDef.PID, _ context.Context, message actor.Message) ([]byte, error) {
+	a.value += message.Body[0]
+	return []byte{a.value}, nil
 }
 
 func localRedis(t *testing.T) *redis.Client {
@@ -64,7 +71,7 @@ func TestActorGuardAcrossInstances(t *testing.T) {
 	guardA := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(prefix))
 	guardB := actorGuard.New("player-2", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(prefix))
 
-	leaseA, acquired, err := guardA.TryAcquire(context.Background(), pid)
+	leaseA, _, acquired, err := guardA.TryAcquire(context.Background(), pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +79,7 @@ func TestActorGuardAcrossInstances(t *testing.T) {
 		t.Fatal("player-1 did not acquire actor guard")
 	}
 
-	if lease, acquired, err := guardB.TryAcquire(context.Background(), pid); err != nil {
+	if lease, _, acquired, err := guardB.TryAcquire(context.Background(), pid); err != nil {
 		t.Fatal(err)
 	} else if acquired {
 		_ = lease.Release()
@@ -82,7 +89,7 @@ func TestActorGuardAcrossInstances(t *testing.T) {
 	if err = leaseA.Release(); err != nil {
 		t.Fatal(err)
 	}
-	leaseB, acquired, err := guardB.TryAcquire(context.Background(), pid)
+	leaseB, _, acquired, err := guardB.TryAcquire(context.Background(), pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,14 +108,14 @@ func TestActorGuardReentrantOnSameInstance(t *testing.T) {
 	oldGuard := actorGuard.New("player-1", rc, actorGuard.WithTTL(600*time.Millisecond), actorGuard.WithKeyPrefix(prefix))
 	newGuard := actorGuard.New("player-1", rc, actorGuard.WithTTL(600*time.Millisecond), actorGuard.WithKeyPrefix(prefix))
 
-	oldLease, acquired, err := oldGuard.TryAcquire(context.Background(), pid)
+	oldLease, _, acquired, err := oldGuard.TryAcquire(context.Background(), pid)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !acquired {
 		t.Fatal("old player-1 did not acquire actor guard")
 	}
-	newLease, acquired, err := newGuard.TryAcquire(context.Background(), pid)
+	newLease, _, acquired, err := newGuard.TryAcquire(context.Background(), pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,6 +159,13 @@ func TestSystemDistributedSingleton(t *testing.T) {
 
 	if _, err := systemA.GetOrLoadActor(context.Background(), actorDef.Key("uid-1001")); err != nil {
 		t.Fatal(err)
+	}
+	for _, policy := range []actor.ActivationPolicy{actor.ActivationIgnore, actor.ActivationRequire} {
+		_, handled, err := systemB.ResolveActor(context.Background(), actorDef.Key("uid-1001"), policy)
+		var redirect actor.ActorRedirectError
+		if handled || !errors.As(err, &redirect) || redirect.RedirectInstanceId() != "player-1" {
+			t.Fatalf("policy=%d handled=%t error=%v", policy, handled, err)
+		}
 	}
 	if _, err := systemB.GetOrLoadActor(context.Background(), actorDef.Key("uid-1001")); !errors.Is(err, actor.ErrActorGuarded) {
 		t.Fatalf("player-2 load error=%v", err)
@@ -316,7 +330,7 @@ func TestSystemStopsActorAfterGuardLost(t *testing.T) {
 	}
 }
 
-func TestActorServerAskTellAndActivation(t *testing.T) {
+func TestActorRPCServerAskTellAndActivation(t *testing.T) {
 	rc := localRedis(t)
 	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(actorGuardPrefix()))
 	var loads atomic.Int32
@@ -324,62 +338,100 @@ func TestActorServerAskTellAndActivation(t *testing.T) {
 		loads.Add(1)
 		return &messageActor{}, nil
 	}, actor.RunnerConfig{UpdateDt: time.Hour})
+	server := actor.NewServer(grpc.NewServer())
+	actor.NewRPCRouteGroup(server, system).Handle(1001, (*messageActor).rpc)
 	t.Cleanup(func() {
-		_ = system.Stop()
+		_ = server.Shutdown(context.Background())
 	})
 
-	server := actor.NewServer()
-	actor.Reg(server, system, 1001, (*messageActor).handle)
-
-	key := actorDef.Key("uid-1001")
-	message := actor.Message{Route: 1001, Body: []byte{1}}
-	if _, handled, err := server.Ask(context.Background(), key, actor.ActivationIgnore, message); err != nil || handled {
-		t.Fatalf("ignore handled=%t error=%v", handled, err)
+	request := &pbActor.Request{ActorType: 1, ActorKey: "uid-1001", Activation: uint32(actor.ActivationIgnore), Route: 1001, Body: []byte{1}}
+	response, err := server.Ask(context.Background(), request)
+	if err != nil || response.Handled {
+		t.Fatalf("ignore handled=%t error=%v", response.Handled, err)
 	}
-	if _, _, err := server.Ask(context.Background(), key, actor.ActivationRequire, message); !errors.Is(err, actor.ErrActorNotActive) {
-		t.Fatalf("require error=%v", err)
-	}
-
-	body, handled, err := server.Ask(context.Background(), key, actor.ActivationLoad, message)
+	request.Activation = uint32(actor.ActivationRequire)
+	response, err = server.Ask(context.Background(), request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !handled || len(body) != 1 || body[0] != 1 {
-		t.Fatalf("handled=%t body=%v", handled, body)
+	if response.ErrorCode != actor.ErrorCodeActorNotActive {
+		t.Fatalf("require error code=%d", response.ErrorCode)
+	}
+
+	request.Activation = uint32(actor.ActivationLoad)
+	response, err = server.Ask(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !response.Handled || len(response.Body) != 1 || response.Body[0] != 1 {
+		t.Fatalf("handled=%t body=%v", response.Handled, response.Body)
 	}
 	if loads.Load() != 1 {
 		t.Fatalf("loads=%d", loads.Load())
 	}
 
-	if err = server.Tell(context.Background(), key, actor.ActivationRequire, actor.Message{Route: 1001, Body: []byte{2}}); err != nil {
+	request.Activation = uint32(actor.ActivationRequire)
+	request.Body = []byte{2}
+	if _, err = server.Tell(context.Background(), request); err != nil {
 		t.Fatal(err)
 	}
-	body, handled, err = server.Ask(context.Background(), key, actor.ActivationRequire, actor.Message{Route: 1001, Body: []byte{0}})
+	request.Body = []byte{0}
+	response, err = server.Ask(context.Background(), request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !handled || len(body) != 1 || body[0] != 3 {
-		t.Fatalf("handled=%t body=%v", handled, body)
+	if !response.Handled || len(response.Body) != 1 || response.Body[0] != 3 {
+		t.Fatalf("handled=%t body=%v", response.Handled, response.Body)
 	}
 }
 
-func TestActorServerHandlerPanic(t *testing.T) {
+func TestActorRPCServerHandlerPanic(t *testing.T) {
 	rc := localRedis(t)
 	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(actorGuardPrefix()))
 	system := actor.NewSystem(context.Background(), actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
 		return &messageActor{}, nil
 	}, actor.RunnerConfig{UpdateDt: time.Hour})
-	t.Cleanup(func() {
-		_ = system.Stop()
-	})
-
-	server := actor.NewServer()
-	actor.Reg(server, system, 1001, func(*messageActor, actorDef.PID, *node.Context) error {
+	server := actor.NewServer(grpc.NewServer())
+	actor.NewRPCRouteGroup(server, system).Handle(1001, func(*messageActor, actorDef.PID, context.Context, actor.Message) ([]byte, error) {
 		panic("handler panic")
 	})
-	_, _, err := server.Ask(context.Background(), actorDef.Key("uid-1001"), actor.ActivationLoad, actor.Message{Route: 1001})
-	if !errors.Is(err, actor.ErrMessageHandlerPanic) {
-		t.Fatalf("handler error=%v", err)
+	t.Cleanup(func() {
+		_ = server.Shutdown(context.Background())
+	})
+
+	response, err := server.Ask(context.Background(), &pbActor.Request{
+		ActorType: 1, ActorKey: "uid-1001", Activation: uint32(actor.ActivationLoad), Route: 1001,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.ErrorCode != actor.ErrorCodeExecutionFailed {
+		t.Fatalf("handler error code=%d", response.ErrorCode)
+	}
+}
+
+func TestActorRPCBusinessError(t *testing.T) {
+	rc := localRedis(t)
+	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(actorGuardPrefix()))
+	system := actor.NewSystem(context.Background(), actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
+		return &messageActor{}, nil
+	}, actor.RunnerConfig{UpdateDt: time.Hour})
+	server := actor.NewServer(grpc.NewServer())
+	actor.NewRPCRouteGroup(server, system).Handle(1001, func(*messageActor, actorDef.PID, context.Context, actor.Message) ([]byte, error) {
+		return nil, &actor.CallError{Code: 10001, Message: "coin not enough"}
+	})
+	t.Cleanup(func() {
+		_ = server.Shutdown(context.Background())
+	})
+
+	response, err := server.Ask(context.Background(), &pbActor.Request{
+		ActorType: 1, ActorKey: "uid-1001", Activation: uint32(actor.ActivationLoad), Route: 1001,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.ErrorCode != 10001 || response.ErrorMessage != "coin not enough" {
+		t.Fatalf("response=%+v", response)
 	}
 }
 
@@ -394,13 +446,10 @@ func TestActorRouteGroup(t *testing.T) {
 	})
 
 	router := node.NewRouter()
-	server := actor.NewServer()
 	received := make(chan *node.Context, 4)
 	receivedPID := make(chan actorDef.PID, 4)
 	middlewareOrder := make(chan string, 16)
-	routes := actor.NewRouteGroup(router, server, system, actor.ActivationLoad, func(ctx *node.Context) actorDef.Key {
-		return actorDef.Key(ctx.Request.UID)
-	})
+	routes := actor.NewRouteGroup(router, system, actor.ActivationLoad)
 	routes.Use(func(next actor.Handler[*messageActor]) actor.Handler[*messageActor] {
 		return func(actorValue *messageActor, pid actorDef.PID, ctx *node.Context) error {
 			middlewareOrder <- "parent-before"
@@ -445,6 +494,7 @@ func TestActorRouteGroup(t *testing.T) {
 			Body:            []byte{1},
 			GateServiceName: "gate",
 			GateInstanceID:  "gate-1",
+			ActorKey:        "uid-1001",
 			NeedReply:       true,
 		},
 	}
@@ -472,7 +522,7 @@ func TestActorRouteGroup(t *testing.T) {
 	tellCtx := &node.Context{
 		Context: context.Background(),
 		App:     nodeApp,
-		Request: &node.Request{Route: 1001, UID: "uid-1001", Body: []byte{2}},
+		Request: &node.Request{Route: 1001, UID: "uid-1001", ActorKey: "uid-1001", Body: []byte{2}},
 	}
 	if err := router.Dispatch(tellCtx); err != nil {
 		t.Fatal(err)
@@ -480,7 +530,7 @@ func TestActorRouteGroup(t *testing.T) {
 	checkCtx := &node.Context{
 		Context: context.Background(),
 		App:     nodeApp,
-		Request: &node.Request{Route: 1001, UID: "uid-1001", Body: []byte{0}, NeedReply: true},
+		Request: &node.Request{Route: 1001, UID: "uid-1001", ActorKey: "uid-1001", Body: []byte{0}, NeedReply: true},
 	}
 	if err := router.Dispatch(checkCtx); err != nil {
 		t.Fatal(err)

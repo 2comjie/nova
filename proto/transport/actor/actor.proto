@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package wali.transport.actor;
+
+option go_package = "github.com/2comjie/wali/internal/pb/transport/actor;actor";
+
+message Request {
+  int32 actor_type = 1;
+  string actor_key = 2;
+  uint32 activation = 3;
+  uint32 route = 4;
+  bytes body = 5;
+}
+
+message Response {
+  bool handled = 1;
+  bytes body = 2;
+  string redirect_instance_id = 3;
+  uint32 error_code = 4;
+  string error_message = 5;
+}
+
+service Actor {
+  rpc Ask(Request) returns (Response);
+  rpc Tell(Request) returns (Response);
+}

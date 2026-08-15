@@ -32,7 +32,7 @@ func Node(opts ...Option) (*NodeApp, error) {
 	if err != nil {
 		return nil, err
 	}
-	app, err := nodeapp.New(nodeapp.Config{
+	app := nodeapp.New(nodeapp.Config{
 		Instance:    instance,
 		Router:      options.nodeRouter,
 		NodeLocator: locator.NewNodeLocator(options.locator),
@@ -44,9 +44,6 @@ func Node(opts ...Option) (*NodeApp, error) {
 		Components:  options.components,
 		Discovery:   options.discover,
 	})
-	if err != nil {
-		return nil, errors.Join(err, resources.close())
-	}
 	return &NodeApp{
 		Node:      app,
 		instance:  instance,

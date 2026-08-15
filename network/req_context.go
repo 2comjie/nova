@@ -17,7 +17,8 @@ type ReqContext struct {
 
 func (c *ReqContext) Write(body []byte) error {
 	if !c.NeedReply {
-		return ErrTellNoResponse
+		// 不用写返回值
+		return nil
 	}
 	if !c.written.CompareAndSwap(false, true) {
 		return ErrResponseWritten

@@ -11,6 +11,7 @@ import (
 	"github.com/2comjie/wali/logx"
 	"github.com/2comjie/wali/registry"
 	"github.com/2comjie/wali/rpc/lx"
+	"github.com/cespare/xxhash/v2"
 	"google.golang.org/grpc"
 )
 
@@ -115,6 +116,22 @@ func (c *Client) Route(
 	return c.Node(ctx, serviceName, instanceID)
 }
 
+func (c *Client) Actor(ctx context.Context, serviceName string, actorKey string) (*grpc.ClientConn, error) {
+	instance, err := c.pickActor(ctx, serviceName, actorKey)
+	if err != nil {
+		return nil, err
+	}
+	return c.pool.Get(instance.RpcTarget())
+}
+
+func (c *Client) ActorInstanceId(ctx context.Context, serviceName string, actorKey string) (string, error) {
+	instance, err := c.pickActor(ctx, serviceName, actorKey)
+	if err != nil {
+		return "", err
+	}
+	return instance.ID, nil
+}
+
 func (c *Client) Conn(ctx context.Context) (*grpc.ClientConn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -134,11 +151,41 @@ func (c *Client) Conn(ctx context.Context) (*grpc.ClientConn, error) {
 		return c.pool.Get(instance.RpcTarget())
 	case lx.ModeSelect:
 		return c.Route(ctx, s.Service, s.Binding, s.Key)
+	case lx.ModeActor:
+		return c.Actor(ctx, s.Service, s.Key)
 	case lx.ModeBalance:
 		return c.Service(ctx, s.Service)
 	default:
 		return c.Service(ctx, s.Service)
 	}
+}
+
+func (c *Client) pickActor(ctx context.Context, serviceName string, actorKey string) (endpoint.ServiceInstance, error) {
+	if err := ctx.Err(); err != nil {
+		return endpoint.ServiceInstance{}, err
+	}
+	if serviceName == "" || actorKey == "" {
+		return endpoint.ServiceInstance{}, ErrInvalidTarget
+	}
+
+	c.mu.RLock()
+	instances := c.serviceMap[serviceName]
+	if len(instances) == 0 {
+		c.mu.RUnlock()
+		return endpoint.ServiceInstance{}, ErrNoAnyService
+	}
+	selected := instances[0]
+	selectedScore := xxhash.Sum64String(actorKey + "\x00" + selected.ID)
+	for index := 1; index < len(instances); index++ {
+		instance := instances[index]
+		score := xxhash.Sum64String(actorKey + "\x00" + instance.ID)
+		if score > selectedScore || score == selectedScore && instance.ID < selected.ID {
+			selected = instance
+			selectedScore = score
+		}
+	}
+	c.mu.RUnlock()
+	return selected, nil
 }
 
 func (c *Client) Close() {

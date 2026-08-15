@@ -16,6 +16,7 @@ type Request struct {
 	Body            []byte
 	GateServiceName string
 	GateInstanceID  string
+	ActorKey        string
 	NeedReply       bool
 }
 

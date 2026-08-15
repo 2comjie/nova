@@ -11,6 +11,7 @@ const (
 	ModeBalance = "balance"
 	ModeNode    = "node"
 	ModeSelect  = "select"
+	ModeActor   = "actor"
 )
 
 const (
@@ -49,6 +50,10 @@ func WithBalance(ctx context.Context, serviceName string, policies ...BalancePol
 
 func WithNode(ctx context.Context, nodeKey string) context.Context {
 	return WithStrategy(ctx, Strategy{Mode: ModeNode, Key: nodeKey})
+}
+
+func WithActor(ctx context.Context, serviceName string, actorKey string) context.Context {
+	return WithStrategy(ctx, Strategy{Mode: ModeActor, Service: serviceName, Key: actorKey})
 }
 
 func WithSelect(

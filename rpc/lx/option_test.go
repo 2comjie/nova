@@ -27,3 +27,11 @@ func TestSelectSeparatesServiceAndBinding(t *testing.T) {
 		t.Fatalf("strategy = %+v", strategy)
 	}
 }
+
+func TestActorStrategy(t *testing.T) {
+	ctx := WithActor(context.Background(), "player", "1:uid-1001")
+	strategy := GetStrategy(ctx)
+	if strategy.Mode != ModeActor || strategy.Service != "player" || strategy.Key != "1:uid-1001" {
+		t.Fatalf("strategy = %+v", strategy)
+	}
+}

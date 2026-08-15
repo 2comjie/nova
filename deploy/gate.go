@@ -28,7 +28,7 @@ func Gate(opts ...Option) (*GateApp, error) {
 	}
 	serviceName := strings.TrimSpace(options.serviceName)
 	if serviceName != "" && serviceName != locator.GateName {
-		return nil, gateapp.ErrInstanceRequired
+		panic("deploy: Gate service必须为gate")
 	}
 	if options.gateRouter == nil {
 		options.gateRouter = gateapp.NewRouter()
@@ -42,7 +42,7 @@ func Gate(opts ...Option) (*GateApp, error) {
 		return nil, errors.Join(err, resources.close())
 	}
 
-	app, err := gateapp.New(gateapp.Config{
+	app := gateapp.New(gateapp.Config{
 		Instance:       instance,
 		Router:         options.gateRouter,
 		NodeClient:     pbNode.NewNodeClient(resources.rpcClient),
@@ -56,9 +56,6 @@ func Gate(opts ...Option) (*GateApp, error) {
 		ErrorHandler:   options.errorHandler,
 		LocatorTimeout: options.locatorTimeout,
 	})
-	if err != nil {
-		return nil, errors.Join(err, resources.close())
-	}
 	return &GateApp{
 		Gate:      app,
 		instance:  instance,

@@ -12,7 +12,6 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -30,7 +29,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type NodeClient interface {
 	Call(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error)
-	Tell(ctx context.Context, in *Request, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Tell(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error)
 }
 
 type nodeClient struct {
@@ -55,13 +54,13 @@ func (c *nodeClient) Call(ctx context.Context, in *Request, opts ...grpc.CallOpt
 	return out, nil
 }
 
-func (c *nodeClient) Tell(ctx context.Context, in *Request, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *nodeClient) Tell(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	conn, err := c.cc.Conn(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := new(emptypb.Empty)
+	out := new(Response)
 	err = conn.Invoke(ctx, Node_Tell_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -74,7 +73,7 @@ func (c *nodeClient) Tell(ctx context.Context, in *Request, opts ...grpc.CallOpt
 // for forward compatibility.
 type NodeServer interface {
 	Call(context.Context, *Request) (*Response, error)
-	Tell(context.Context, *Request) (*emptypb.Empty, error)
+	Tell(context.Context, *Request) (*Response, error)
 	mustEmbedUnimplementedNodeServer()
 }
 
@@ -88,7 +87,7 @@ type UnimplementedNodeServer struct{}
 func (UnimplementedNodeServer) Call(context.Context, *Request) (*Response, error) {
 	return nil, status.Error(codes.Unimplemented, "method Call not implemented")
 }
-func (UnimplementedNodeServer) Tell(context.Context, *Request) (*emptypb.Empty, error) {
+func (UnimplementedNodeServer) Tell(context.Context, *Request) (*Response, error) {
 	return nil, status.Error(codes.Unimplemented, "method Tell not implemented")
 }
 func (UnimplementedNodeServer) mustEmbedUnimplementedNodeServer() {}

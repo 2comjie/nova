@@ -23,18 +23,10 @@ import (
 const defaultLocatorTimeout = 3 * time.Second
 
 var (
-	ErrInstanceRequired    = errors.New("gate: 必须提供Gate ServiceInstance")
-	ErrRouterRequired      = errors.New("gate: 必须提供Router")
-	ErrNodeClientRequired  = errors.New("gate: 必须提供NodeClient")
-	ErrGateClientRequired  = errors.New("gate: 必须提供GateClient")
-	ErrLocatorRequired     = errors.New("gate: 必须提供GateLocator")
-	ErrRegistryRequired    = errors.New("gate: 必须提供Registry")
-	ErrRPCServerRequired   = errors.New("gate: 必须提供gRPC Server")
-	ErrRPCListenerRequired = errors.New("gate: 必须提供gRPC Listener")
-	ErrStarted             = errors.New("gate: Gate已经启动")
-	ErrClosed              = errors.New("gate: Gate已经关闭")
-	ErrHandlerPanic        = errors.New("gate: Filter或Forward发生panic")
-	ErrInvalidNodeSource   = errors.New("gate: Node来源信息无效")
+	ErrStarted           = errors.New("gate: Gate已经启动")
+	ErrClosed            = errors.New("gate: Gate已经关闭")
+	ErrHandlerPanic      = errors.New("gate: Filter或Forward发生panic")
+	ErrInvalidNodeSource = errors.New("gate: Node来源信息无效")
 )
 
 type ErrorHandler func(ctx *Context, err error)
@@ -78,30 +70,30 @@ type Gate struct {
 	wait           sync.WaitGroup
 }
 
-func New(config Config) (*Gate, error) {
+func New(config Config) *Gate {
 	if config.Instance.ID == "" || config.Instance.ServiceName != locator.GateName {
-		return nil, ErrInstanceRequired
+		panic("gate: 必须提供Gate ServiceInstance")
 	}
 	if config.Router == nil {
-		return nil, ErrRouterRequired
+		panic("gate: 必须提供Router")
 	}
 	if config.NodeClient == nil {
-		return nil, ErrNodeClientRequired
+		panic("gate: 必须提供NodeClient")
 	}
 	if config.GateClient == nil {
-		return nil, ErrGateClientRequired
+		panic("gate: 必须提供GateClient")
 	}
 	if config.Locator == nil {
-		return nil, ErrLocatorRequired
+		panic("gate: 必须提供GateLocator")
 	}
 	if config.Registry == nil {
-		return nil, ErrRegistryRequired
+		panic("gate: 必须提供Registry")
 	}
 	if config.RPCServer == nil {
-		return nil, ErrRPCServerRequired
+		panic("gate: 必须提供gRPC Server")
 	}
 	if config.RPCListener == nil {
-		return nil, ErrRPCListenerRequired
+		panic("gate: 必须提供gRPC Listener")
 	}
 	if config.LocatorTimeout <= 0 {
 		config.LocatorTimeout = defaultLocatorTimeout
@@ -158,18 +150,15 @@ func New(config Config) (*Gate, error) {
 	}))
 	server, err := network.NewServer(options...)
 	if err != nil {
-		cancel()
-		return nil, err
+		panic(err)
 	}
 	g.server = server
 
 	if err := g.router.Freeze(); err != nil {
-		cancel()
-		_ = server.Shutdown(context.Background())
-		return nil, err
+		panic(err)
 	}
 	pbGate.RegisterGateServer(config.RPCServer, g)
-	return g, nil
+	return g
 }
 
 func (g *Gate) Start() error {
@@ -341,6 +330,12 @@ func (g *Gate) forward(ctx *Context) error {
 		rpcCtx = lx.WithBalance(rpcCtx, target.Service, target.Balance)
 	case RouteModeSelect:
 		rpcCtx = lx.WithSelect(rpcCtx, target.Service, target.Binding, ctx.BindingKey)
+	case RouteModeActor:
+		ctx.ActorKey = ctx.actorKeyResolver(ctx)
+		if ctx.ActorKey == "" {
+			return ErrInvalidTarget
+		}
+		rpcCtx = lx.WithActor(rpcCtx, target.Service, ctx.ActorKey)
 	case RouteModeNode:
 		rpcCtx = lx.WithNode(rpcCtx, target.NodeID)
 	}
@@ -351,15 +346,38 @@ func (g *Gate) forward(ctx *Context) error {
 		Body:            ctx.Body,
 		GateServiceName: g.instance.ServiceName,
 		GateInstanceId:  g.instance.ID,
+		ActorKey:        ctx.ActorKey,
 	}
 	if !ctx.NeedReply() {
-		_, err := g.nodeClient.Tell(rpcCtx, request)
-		return err
+		response, err := g.nodeClient.Tell(rpcCtx, request)
+		if err != nil {
+			return err
+		}
+		if response.RedirectInstanceId == "" {
+			return nil
+		}
+		response, err = g.nodeClient.Tell(lx.WithNode(ctx.Context, response.RedirectInstanceId), request)
+		if err != nil {
+			return err
+		}
+		if response.RedirectInstanceId != "" {
+			return ErrActorRedirect
+		}
+		return nil
 	}
 
 	response, err := g.nodeClient.Call(rpcCtx, request)
 	if err != nil {
 		return err
+	}
+	if response.RedirectInstanceId != "" {
+		response, err = g.nodeClient.Call(lx.WithNode(ctx.Context, response.RedirectInstanceId), request)
+		if err != nil {
+			return err
+		}
+	}
+	if response.RedirectInstanceId != "" {
+		return ErrActorRedirect
 	}
 	if response.NodeServiceName == "" || response.NodeInstanceId == "" {
 		return ErrInvalidNodeSource

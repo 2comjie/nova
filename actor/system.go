@@ -18,6 +18,20 @@ var (
 	ErrActorGuarded  = errors.New("actor guarded by another instance")
 )
 
+type ActorRedirectError string
+
+func (e ActorRedirectError) Error() string {
+	return "actor guarded by instance " + string(e)
+}
+
+func (e ActorRedirectError) Unwrap() error {
+	return ErrActorGuarded
+}
+
+func (e ActorRedirectError) RedirectInstanceId() string {
+	return string(e)
+}
+
 type activation[T actorDef.Actor] struct {
 	runner *Runner[T]
 	lease  *actorGuard.Lease
@@ -64,6 +78,9 @@ func (s *System[T]) TryGetActor(key actorDef.Key) (*Runner[T], bool) {
 	if activation == nil {
 		return nil, false
 	}
+	if !activation.runner.Running() {
+		return nil, false
+	}
 	select {
 	case <-activation.lease.Done():
 		return nil, false
@@ -75,6 +92,42 @@ func (s *System[T]) TryGetActor(key actorDef.Key) (*Runner[T], bool) {
 	default:
 	}
 	return activation.runner, true
+}
+
+func (s *System[T]) ResolveActor(ctx context.Context, key actorDef.Key, policy ActivationPolicy) (*Runner[T], bool, error) {
+	switch policy {
+	case ActivationLoad:
+		runner, err := s.GetOrLoadActor(ctx, key)
+		return runner, err == nil, err
+	case ActivationIgnore:
+		runner, exists := s.TryGetActor(key)
+		if exists {
+			return runner, true, nil
+		}
+		ownerInstanceId, err := s.guard.Owner(ctx, actorDef.PID{Type: s.actorType, Key: key})
+		if err != nil {
+			return nil, false, err
+		}
+		if ownerInstanceId != "" && ownerInstanceId != s.guard.InstanceId() {
+			return nil, false, ActorRedirectError(ownerInstanceId)
+		}
+		return nil, false, nil
+	case ActivationRequire:
+		runner, exists := s.TryGetActor(key)
+		if exists {
+			return runner, true, nil
+		}
+		ownerInstanceId, err := s.guard.Owner(ctx, actorDef.PID{Type: s.actorType, Key: key})
+		if err != nil {
+			return nil, false, err
+		}
+		if ownerInstanceId != "" && ownerInstanceId != s.guard.InstanceId() {
+			return nil, false, ActorRedirectError(ownerInstanceId)
+		}
+		return nil, false, ErrActorNotActive
+	default:
+		return nil, false, ErrInvalidActivationPolicy
+	}
 }
 
 func (s *System[T]) GetOrLoadActor(waitCtx context.Context, key actorDef.Key) (*Runner[T], error) {
@@ -113,12 +166,12 @@ func (s *System[T]) GetOrLoadActor(waitCtx context.Context, key actorDef.Key) (*
 		}
 
 		pid := actorDef.PID{Type: s.actorType, Key: key}
-		lease, acquired, err := s.guard.TryAcquire(s.runCtx, pid)
+		lease, ownerInstanceId, acquired, err := s.guard.TryAcquire(s.runCtx, pid)
 		if err != nil {
 			return nil, err
 		}
 		if !acquired {
-			return nil, ErrActorGuarded
+			return nil, ActorRedirectError(ownerInstanceId)
 		}
 
 		var actorValue T
@@ -214,6 +267,9 @@ func (s *System[T]) Stop() error {
 	}
 	s.mu.Unlock()
 
+	for _, activation := range activations {
+		activation.runner.RequestStop(actorDef.StopReasonShutdown)
+	}
 	s.stop()
 	s.loadWg.Wait()
 

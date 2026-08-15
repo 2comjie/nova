@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/2comjie/wali/core/endpoint"
@@ -129,6 +130,79 @@ func TestUnknownBalancer(t *testing.T) {
 	_, err := c.pickService(context.Background(), "game", "unknown")
 	if !errors.Is(err, ErrInvalidBalancePolicy) {
 		t.Fatalf("pick error = %v, want %v", err, ErrInvalidBalancePolicy)
+	}
+}
+
+func TestPickActorStableAcrossInstanceOrder(t *testing.T) {
+	c := newTestClient(t)
+	first, err := c.pickActor(context.Background(), "game", "1:uid-1001")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c.mu.Lock()
+	instances := c.serviceMap["game"]
+	c.serviceMap["game"] = []endpoint.ServiceInstance{instances[1], instances[0]}
+	c.mu.Unlock()
+
+	second, err := c.pickActor(context.Background(), "game", "1:uid-1001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ID != second.ID {
+		t.Fatalf("actor moved after reorder: %s -> %s", first.ID, second.ID)
+	}
+}
+
+func TestPickActorMovesSubsetWhenNodeAdded(t *testing.T) {
+	c := newTestClient(t)
+	before := make(map[string]string, 1000)
+	for index := range 1000 {
+		key := fmt.Sprintf("1:uid-%d", index)
+		instance, err := c.pickActor(context.Background(), "game", key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		before[key] = instance.ID
+	}
+
+	c.update(map[string]endpoint.ServiceInstance{
+		"node-1": {ID: "node-1", ServiceName: "game", RpcHost: "127.0.0.1", RpcPort: 9001, Status: endpoint.Working},
+		"node-2": {ID: "node-2", ServiceName: "game", RpcHost: "127.0.0.1", RpcPort: 9002, Status: endpoint.Working},
+		"node-3": {ID: "node-3", ServiceName: "game", RpcHost: "127.0.0.1", RpcPort: 9003, Status: endpoint.Working},
+	})
+
+	moved := 0
+	for key, previous := range before {
+		instance, err := c.pickActor(context.Background(), "game", key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if instance.ID != previous {
+			moved++
+			if instance.ID != "node-3" {
+				t.Fatalf("actor %s moved between existing nodes: %s -> %s", key, previous, instance.ID)
+			}
+		}
+	}
+	if moved < 200 || moved > 450 {
+		t.Fatalf("moved actors=%d", moved)
+	}
+}
+
+func TestActorConnection(t *testing.T) {
+	c := newTestClient(t)
+	instanceId, err := c.ActorInstanceId(context.Background(), "game", "1:uid-1001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := c.Actor(context.Background(), "game", "1:uid-1001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"node-1": "127.0.0.1:9001", "node-2": "127.0.0.1:9002"}[instanceId]
+	if conn.Target() != want {
+		t.Fatalf("target=%s want=%s", conn.Target(), want)
 	}
 }
 

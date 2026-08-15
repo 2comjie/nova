@@ -9,12 +9,18 @@ import (
 	"github.com/2comjie/wali/locator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func (n *Node) Call(ctx context.Context, request *pbNode.Request) (*pbNode.Response, error) {
 	nodeContext, err := n.handle(ctx, request, true)
 	if err != nil {
+		if redirectInstanceId := actorRedirectInstanceId(err); redirectInstanceId != "" {
+			return &pbNode.Response{
+				NodeServiceName:    n.instance.ServiceName,
+				NodeInstanceId:     n.instance.ID,
+				RedirectInstanceId: redirectInstanceId,
+			}, nil
+		}
 		return nil, err
 	}
 	return &pbNode.Response{
@@ -25,11 +31,18 @@ func (n *Node) Call(ctx context.Context, request *pbNode.Request) (*pbNode.Respo
 	}, nil
 }
 
-func (n *Node) Tell(ctx context.Context, request *pbNode.Request) (*emptypb.Empty, error) {
+func (n *Node) Tell(ctx context.Context, request *pbNode.Request) (*pbNode.Response, error) {
 	if _, err := n.handle(ctx, request, false); err != nil {
+		if redirectInstanceId := actorRedirectInstanceId(err); redirectInstanceId != "" {
+			return &pbNode.Response{
+				NodeServiceName:    n.instance.ServiceName,
+				NodeInstanceId:     n.instance.ID,
+				RedirectInstanceId: redirectInstanceId,
+			}, nil
+		}
 		return nil, err
 	}
-	return &emptypb.Empty{}, nil
+	return &pbNode.Response{NodeServiceName: n.instance.ServiceName, NodeInstanceId: n.instance.ID}, nil
 }
 
 func (n *Node) handle(ctx context.Context, request *pbNode.Request, needReply bool) (*Context, error) {
@@ -46,6 +59,7 @@ func (n *Node) handle(ctx context.Context, request *pbNode.Request, needReply bo
 			Body:            request.Body,
 			GateServiceName: request.GateServiceName,
 			GateInstanceID:  request.GateInstanceId,
+			ActorKey:        request.ActorKey,
 			NeedReply:       needReply,
 		},
 	}
@@ -60,10 +74,21 @@ func (n *Node) handle(ctx context.Context, request *pbNode.Request, needReply bo
 		return nil, status.Error(codes.Internal, "node: Handler执行失败")
 	}
 	if dispatchErr != nil {
+		if actorRedirectInstanceId(dispatchErr) != "" {
+			return nil, dispatchErr
+		}
 		if errors.Is(dispatchErr, ErrRouteNotFound) {
 			return nil, status.Error(codes.NotFound, "node: route不存在")
 		}
 		return nil, status.Error(codes.Internal, "node: 请求处理失败")
 	}
 	return nodeContext, nil
+}
+
+func actorRedirectInstanceId(err error) string {
+	var redirect interface{ RedirectInstanceId() string }
+	if errors.As(err, &redirect) {
+		return redirect.RedirectInstanceId()
+	}
+	return ""
 }

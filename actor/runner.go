@@ -206,7 +206,20 @@ func (r *Runner[T]) loop() {
 	for {
 		select {
 		case <-r.runCtx.Done():
-			return
+			r.markStopped()
+			if r.stopReason == actorDef.StopReasonLeaseLost {
+				return
+			}
+			for {
+				select {
+				case fn := <-r.queue:
+					help.SafeRun(func() {
+						fn(r.actor)
+					})
+				default:
+					return
+				}
+			}
 		case fn := <-r.queue:
 			lastActive = time.Now()
 			help.SafeRun(func() {
@@ -263,6 +276,12 @@ func (r *Runner[T]) markStopped() {
 
 func (r *Runner[T]) Done() <-chan struct{} {
 	return r.done
+}
+
+func (r *Runner[T]) Running() bool {
+	r.stateMu.Lock()
+	defer r.stateMu.Unlock()
+	return r.started && !r.stopped
 }
 
 func (r *Runner[T]) Err() error {
