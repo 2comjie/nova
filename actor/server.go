@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/2comjie/wali/actor/actorDef"
+	"github.com/2comjie/wali/app/node"
 	"github.com/2comjie/wali/core/help"
 	"github.com/2comjie/wali/logx"
 )
@@ -19,22 +20,18 @@ var (
 	ErrMessageHandlerPanic     = errors.New("actor message handler panic")
 )
 
-type AskHandler[T actorDef.Actor] func(ctx context.Context, actorValue T, message Message) ([]byte, error)
+type Handler[T actorDef.Actor] func(actorValue T, ctx *node.Context) error
 
-type TellHandler[T actorDef.Actor] func(ctx context.Context, actorValue T, message Message) error
-
-type askProcessor func(ctx context.Context, key actorDef.Key, policy ActivationPolicy, message Message) ([]byte, bool, error)
-
-type tellProcessor func(ctx context.Context, key actorDef.Key, policy ActivationPolicy, message Message) error
+type messageProcessor func(ctx *node.Context, key actorDef.Key, policy ActivationPolicy) (bool, error)
 
 type Server struct {
 	mu         sync.RWMutex
-	askRoutes  map[uint32]askProcessor
-	tellRoutes map[uint32]tellProcessor
+	askRoutes  map[uint32]messageProcessor
+	tellRoutes map[uint32]messageProcessor
 }
 
 func NewServer() *Server {
-	return &Server{askRoutes: make(map[uint32]askProcessor), tellRoutes: make(map[uint32]tellProcessor)}
+	return &Server{askRoutes: make(map[uint32]messageProcessor), tellRoutes: make(map[uint32]messageProcessor)}
 }
 
 func resolveActor[T actorDef.Actor](ctx context.Context, system *System[T], key actorDef.Key, policy ActivationPolicy) (*Runner[T], bool, error) {
@@ -65,66 +62,62 @@ func resolveActor[T actorDef.Actor](ctx context.Context, system *System[T], key 
 	return runner, true, nil
 }
 
-func RegAsk[T actorDef.Actor](server *Server, system *System[T], route uint32, handler AskHandler[T]) error {
+func RegAsk[T actorDef.Actor](server *Server, system *System[T], route uint32, handler Handler[T]) error {
 	server.mu.Lock()
 	defer server.mu.Unlock()
 	if server.askRoutes[route] != nil || server.tellRoutes[route] != nil {
 		return ErrMessageRouteRegistered
 	}
 
-	server.askRoutes[route] = func(ctx context.Context, key actorDef.Key, policy ActivationPolicy, message Message) ([]byte, bool, error) {
+	server.askRoutes[route] = func(ctx *node.Context, key actorDef.Key, policy ActivationPolicy) (bool, error) {
 		runner, handled, err := resolveActor(ctx, system, key, policy)
 		if err != nil || !handled {
-			return nil, handled, err
+			return handled, err
 		}
 
-		result := make(chan struct {
-			body []byte
-			err  error
-		}, 1)
+		handleErr := ErrMessageHandlerPanic
 		err = runner.WaitResultOnMainLoop(ctx, func(actorValue T) {
-			body := []byte(nil)
-			handleErr := ErrMessageHandlerPanic
 			help.SafeRun(func() {
-				body, handleErr = handler(ctx, actorValue, message)
+				handleErr = handler(actorValue, ctx)
 			})
-			result <- struct {
-				body []byte
-				err  error
-			}{body: body, err: handleErr}
 		})
 		if err != nil {
-			return nil, false, err
+			return false, err
 		}
-		handleResult := <-result
-		return handleResult.body, true, handleResult.err
+		return true, handleErr
 	}
 	return nil
 }
 
-func RegTell[T actorDef.Actor](server *Server, system *System[T], route uint32, handler TellHandler[T]) error {
+func RegTell[T actorDef.Actor](server *Server, system *System[T], route uint32, handler Handler[T]) error {
 	server.mu.Lock()
 	defer server.mu.Unlock()
 	if server.askRoutes[route] != nil || server.tellRoutes[route] != nil {
 		return ErrMessageRouteRegistered
 	}
 
-	server.tellRoutes[route] = func(ctx context.Context, key actorDef.Key, policy ActivationPolicy, message Message) error {
+	server.tellRoutes[route] = func(ctx *node.Context, key actorDef.Key, policy ActivationPolicy) (bool, error) {
 		runner, handled, err := resolveActor(ctx, system, key, policy)
 		if err != nil || !handled {
-			return err
+			return handled, err
 		}
 
-		message.Body = bytes.Clone(message.Body)
-		return runner.RunOnMainLoop(func(actorValue T) {
+		tellCtx := *ctx
+		request := *ctx.Request
+		request.Body = bytes.Clone(request.Body)
+		tellCtx.Context = runner.runCtx
+		tellCtx.Request = &request
+
+		err = runner.RunOnMainLoop(func(actorValue T) {
 			handleErr := ErrMessageHandlerPanic
 			help.SafeRun(func() {
-				handleErr = handler(runner.runCtx, actorValue, message)
+				handleErr = handler(actorValue, &tellCtx)
 			})
 			if handleErr != nil {
-				logx.Errorf("actor: Tell处理失败 route=%d key=%s err=%v", message.Route, key, handleErr)
+				logx.Errorf("actor: Tell处理失败 route=%d key=%s err=%v", request.Route, key, handleErr)
 			}
 		})
+		return err == nil, err
 	}
 	return nil
 }
@@ -137,6 +130,21 @@ func (s *Server) HasRoute(route uint32) bool {
 	return askProcessor != nil || tellProcessor != nil
 }
 
+func (s *Server) Handle(ctx *node.Context, key actorDef.Key, policy ActivationPolicy) error {
+	s.mu.RLock()
+	processor := s.tellRoutes[ctx.Request.Route]
+	if ctx.NeedReply() {
+		processor = s.askRoutes[ctx.Request.Route]
+	}
+	s.mu.RUnlock()
+	if processor == nil {
+		return ErrMessageRouteNotFound
+	}
+
+	_, err := processor(ctx, key, policy)
+	return err
+}
+
 func (s *Server) Ask(ctx context.Context, key actorDef.Key, policy ActivationPolicy, message Message) ([]byte, bool, error) {
 	s.mu.RLock()
 	processor := s.askRoutes[message.Route]
@@ -144,7 +152,13 @@ func (s *Server) Ask(ctx context.Context, key actorDef.Key, policy ActivationPol
 	if processor == nil {
 		return nil, false, ErrMessageRouteNotFound
 	}
-	return processor(ctx, key, policy, message)
+
+	nodeCtx := &node.Context{
+		Context: ctx,
+		Request: &node.Request{Route: message.Route, Body: message.Body, NeedReply: true},
+	}
+	handled, err := processor(nodeCtx, key, policy)
+	return nodeCtx.ResponseBody(), handled, err
 }
 
 func (s *Server) Tell(ctx context.Context, key actorDef.Key, policy ActivationPolicy, message Message) error {
@@ -154,5 +168,8 @@ func (s *Server) Tell(ctx context.Context, key actorDef.Key, policy ActivationPo
 	if processor == nil {
 		return ErrMessageRouteNotFound
 	}
-	return processor(ctx, key, policy, message)
+
+	nodeCtx := &node.Context{Context: ctx, Request: &node.Request{Route: message.Route, Body: message.Body}}
+	_, err := processor(nodeCtx, key, policy)
+	return err
 }

@@ -44,3 +44,7 @@ func (c *Context) Reply(body []byte) error {
 	c.responseBody = body
 	return nil
 }
+
+func (c *Context) ResponseBody() []byte {
+	return c.responseBody
+}

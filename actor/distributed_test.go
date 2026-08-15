@@ -14,12 +14,23 @@ import (
 	"github.com/2comjie/wali/actor/actorDef"
 	"github.com/2comjie/wali/actor/actorGuard"
 	actorSimple "github.com/2comjie/wali/actor/simple"
+	"github.com/2comjie/wali/app/node"
 	"github.com/redis/go-redis/v9"
 )
 
 type messageActor struct {
 	actorSimple.SimpleActor
 	value byte
+}
+
+func (a *messageActor) ask(ctx *node.Context) error {
+	a.value += ctx.Request.Body[0]
+	return ctx.Reply([]byte{a.value})
+}
+
+func (a *messageActor) tell(ctx *node.Context) error {
+	a.value += ctx.Request.Body[0]
+	return nil
 }
 
 func localRedis(t *testing.T) *redis.Client {
@@ -320,19 +331,13 @@ func TestActorServerAskTellAndActivation(t *testing.T) {
 	})
 
 	server := actor.NewServer()
-	if err := actor.RegAsk(server, system, 1001, func(_ context.Context, actorValue *messageActor, message actor.Message) ([]byte, error) {
-		actorValue.value += message.Body[0]
-		return []byte{actorValue.value}, nil
-	}); err != nil {
+	if err := actor.RegAsk(server, system, 1001, (*messageActor).ask); err != nil {
 		t.Fatal(err)
 	}
-	if err := actor.RegTell(server, system, 1002, func(_ context.Context, actorValue *messageActor, message actor.Message) error {
-		actorValue.value += message.Body[0]
-		return nil
-	}); err != nil {
+	if err := actor.RegTell(server, system, 1002, (*messageActor).tell); err != nil {
 		t.Fatal(err)
 	}
-	if err := actor.RegTell(server, system, 1001, func(context.Context, *messageActor, actor.Message) error {
+	if err := actor.RegTell(server, system, 1001, func(*messageActor, *node.Context) error {
 		return nil
 	}); !errors.Is(err, actor.ErrMessageRouteRegistered) {
 		t.Fatalf("duplicate route error=%v", err)
@@ -381,7 +386,7 @@ func TestActorServerHandlerPanic(t *testing.T) {
 	})
 
 	server := actor.NewServer()
-	if err := actor.RegAsk(server, system, 1001, func(context.Context, *messageActor, actor.Message) ([]byte, error) {
+	if err := actor.RegAsk(server, system, 1001, func(*messageActor, *node.Context) error {
 		panic("handler panic")
 	}); err != nil {
 		t.Fatal(err)
@@ -389,5 +394,66 @@ func TestActorServerHandlerPanic(t *testing.T) {
 	_, _, err := server.Ask(context.Background(), actorDef.Key("uid-1001"), actor.ActivationLoad, actor.Message{Route: 1001})
 	if !errors.Is(err, actor.ErrMessageHandlerPanic) {
 		t.Fatalf("handler error=%v", err)
+	}
+}
+
+func TestActorMiddlewarePassesNodeContext(t *testing.T) {
+	rc := localRedis(t)
+	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(actorGuardPrefix()))
+	system := actor.NewSystem(context.Background(), actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
+		return &messageActor{}, nil
+	}, actor.RunnerConfig{UpdateDt: time.Hour})
+	t.Cleanup(func() {
+		_ = system.Stop()
+	})
+
+	server := actor.NewServer()
+	received := make(chan *node.Context, 1)
+	if err := actor.RegAsk(server, system, 1001, func(actorValue *messageActor, ctx *node.Context) error {
+		received <- ctx
+		return actorValue.ask(ctx)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var fallback atomic.Int32
+	handler := actor.Middleware(server, actor.ActivationLoad, func(ctx *node.Context) actorDef.Key {
+		return actorDef.Key(ctx.Request.UID)
+	})(func(*node.Context) error {
+		fallback.Add(1)
+		return nil
+	})
+
+	nodeApp := &node.Node{}
+	requestCtx := &node.Context{
+		Context: context.Background(),
+		App:     nodeApp,
+		Request: &node.Request{
+			Route:           1001,
+			UID:             "uid-1001",
+			Body:            []byte{1},
+			GateServiceName: "gate",
+			GateInstanceID:  "gate-1",
+			NeedReply:       true,
+		},
+	}
+	if err := handler(requestCtx); err != nil {
+		t.Fatal(err)
+	}
+	if handledCtx := <-received; handledCtx != requestCtx {
+		t.Fatal("actor handler did not receive the original node context")
+	}
+	if requestCtx.App != nodeApp || requestCtx.Request.GateServiceName != "gate" || requestCtx.Request.GateInstanceID != "gate-1" {
+		t.Fatal("node context metadata was not preserved")
+	}
+	if body := requestCtx.ResponseBody(); len(body) != 1 || body[0] != 1 {
+		t.Fatalf("response body=%v", body)
+	}
+
+	if err := handler(&node.Context{Context: context.Background(), Request: &node.Request{Route: 2001}}); err != nil {
+		t.Fatal(err)
+	}
+	if fallback.Load() != 1 {
+		t.Fatalf("fallback calls=%d", fallback.Load())
 	}
 }
