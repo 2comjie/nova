@@ -2,11 +2,13 @@ package node
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/2comjie/wali/core/endpoint"
 	pbNode "github.com/2comjie/wali/internal/pb/transport/node"
 	"github.com/2comjie/wali/locator"
+	"github.com/2comjie/wali/rpc"
 )
 
 type redirectError string
@@ -15,8 +17,12 @@ func (e redirectError) Error() string {
 	return "redirect to " + string(e)
 }
 
-func (e redirectError) RedirectInstanceId() string {
-	return string(e)
+func (e redirectError) ErrorCode() uint32 {
+	return rpc.ErrorCodeRedirect
+}
+
+func (e redirectError) ErrorDetail() []byte {
+	return []byte(e)
 }
 
 func TestRPCReturnsActorRedirect(t *testing.T) {
@@ -45,19 +51,14 @@ func TestRPCReturnsActorRedirect(t *testing.T) {
 		ActorKey:        "player:uid-1001",
 	}
 
-	response, err := nodeApp.Call(context.Background(), request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response.RedirectInstanceId != "player-2" {
-		t.Fatalf("call redirect=%s", response.RedirectInstanceId)
+	_, err := nodeApp.Call(context.Background(), request)
+	var redirect redirectError
+	if !errors.As(err, &redirect) || redirect.ErrorCode() != rpc.ErrorCodeRedirect || string(redirect.ErrorDetail()) != "player-2" {
+		t.Fatalf("call error=%v", err)
 	}
 
-	response, err = nodeApp.Tell(context.Background(), request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response.RedirectInstanceId != "player-2" {
-		t.Fatalf("tell redirect=%s", response.RedirectInstanceId)
+	_, err = nodeApp.Tell(context.Background(), request)
+	if !errors.As(err, &redirect) || redirect.ErrorCode() != rpc.ErrorCodeRedirect || string(redirect.ErrorDetail()) != "player-2" {
+		t.Fatalf("tell error=%v", err)
 	}
 }

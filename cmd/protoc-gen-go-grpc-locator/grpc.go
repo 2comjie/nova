@@ -34,6 +34,7 @@ const (
 	codesPackage      = protogen.GoImportPath("google.golang.org/grpc/codes")
 	statusPackage     = protogen.GoImportPath("google.golang.org/grpc/status")
 	waliClientPackage = protogen.GoImportPath("github.com/2comjie/wali/rpc/client")
+	waliRPCPackage    = protogen.GoImportPath("github.com/2comjie/wali/rpc")
 )
 
 type serviceGenerateHelperInterface interface {
@@ -362,7 +363,7 @@ func genClientMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 	if !method.Desc.IsStreamingServer() && !method.Desc.IsStreamingClient() {
 		g.P("out := new(", method.Output.GoIdent, ")")
 		g.P(`err = conn.Invoke(ctx, `, fmSymbol, `, in, out, cOpts...)`)
-		g.P("if err != nil { return nil, err }")
+		g.P("if err != nil { return nil, ", waliRPCPackage.Ident("DecodeError"), "(err) }")
 		g.P("return out, nil")
 		g.P("}")
 		g.P()
@@ -373,8 +374,8 @@ func genClientMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 	streamImpl := g.QualifiedGoIdent(grpcPackage.Ident("GenericClientStream")) + "[" + typeParam + "]"
 	serviceDescVar := service.GoName + "_ServiceDesc"
 	g.P("stream, err := conn.NewStream(ctx, &", serviceDescVar, ".Streams[", index, `], `, fmSymbol, `, cOpts...)`)
-	g.P("if err != nil { return nil, err }")
-	g.P("x := &", streamImpl, "{ClientStream: stream}")
+	g.P("if err != nil { return nil, ", waliRPCPackage.Ident("DecodeError"), "(err) }")
+	g.P("x := &", streamImpl, "{ClientStream: ", waliRPCPackage.Ident("WrapClientStream"), "(stream)}")
 	if !method.Desc.IsStreamingClient() {
 		g.P("if err := x.ClientStream.SendMsg(in); err != nil { return nil, err }")
 		g.P("if err := x.ClientStream.CloseSend(); err != nil { return nil, err }")
@@ -466,7 +467,10 @@ func genServerMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 		g.P("func ", hnameFuncNameFormatter(hname), "(srv interface{}, ctx ", contextPackage.Ident("Context"), ", dec func(interface{}) error, interceptor ", grpcPackage.Ident("UnaryServerInterceptor"), ") (interface{}, error) {")
 		g.P("in := new(", method.Input.GoIdent, ")")
 		g.P("if err := dec(in); err != nil { return nil, err }")
-		g.P("if interceptor == nil { return srv.(", service.GoName, "Server).", method.GoName, "(ctx, in) }")
+		g.P("if interceptor == nil {")
+		g.P("response, err := srv.(", service.GoName, "Server).", method.GoName, "(ctx, in)")
+		g.P("return response, ", waliRPCPackage.Ident("EncodeError"), "(err)")
+		g.P("}")
 		g.P("info := &", grpcPackage.Ident("UnaryServerInfo"), "{")
 		g.P("Server: srv,")
 		fmSymbol := helper.formatFullMethodSymbol(service, method)
@@ -475,7 +479,8 @@ func genServerMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 		g.P("handler := func(ctx ", contextPackage.Ident("Context"), ", req interface{}) (interface{}, error) {")
 		g.P("return srv.(", service.GoName, "Server).", method.GoName, "(ctx, req.(*", method.Input.GoIdent, "))")
 		g.P("}")
-		g.P("return interceptor(ctx, in, info, handler)")
+		g.P("response, err := interceptor(ctx, in, info, handler)")
+		g.P("return response, ", waliRPCPackage.Ident("EncodeError"), "(err)")
 		g.P("}")
 		g.P()
 		return hname
@@ -488,10 +493,11 @@ func genServerMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 	if !method.Desc.IsStreamingClient() {
 		g.P("m := new(", method.Input.GoIdent, ")")
 		g.P("if err := stream.RecvMsg(m); err != nil { return err }")
-		g.P("return srv.(", service.GoName, "Server).", method.GoName, "(m, &", streamImpl, "{ServerStream: stream})")
+		g.P("err := srv.(", service.GoName, "Server).", method.GoName, "(m, &", streamImpl, "{ServerStream: stream})")
 	} else {
-		g.P("return srv.(", service.GoName, "Server).", method.GoName, "(&", streamImpl, "{ServerStream: stream})")
+		g.P("err := srv.(", service.GoName, "Server).", method.GoName, "(&", streamImpl, "{ServerStream: stream})")
 	}
+	g.P("return ", waliRPCPackage.Ident("EncodeError"), "(err)")
 	g.P("}")
 	g.P()
 

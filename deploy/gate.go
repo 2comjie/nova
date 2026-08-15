@@ -55,6 +55,7 @@ func Gate(opts ...Option) (*GateApp, error) {
 		Hooks:          options.hooks,
 		ErrorHandler:   options.errorHandler,
 		LocatorTimeout: options.locatorTimeout,
+		Components:     options.components,
 	})
 	return &GateApp{
 		Gate:      app,

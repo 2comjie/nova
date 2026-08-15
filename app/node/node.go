@@ -54,6 +54,7 @@ type Node struct {
 	rpcServer   *grpc.Server
 	rpcListener net.Listener
 	components  []app.Component
+	componentMu sync.Mutex
 
 	ctx               context.Context
 	cancel            context.CancelFunc
@@ -115,13 +116,30 @@ func New(config Config) *Node {
 	return node
 }
 
-func (n *Node) Start() error {
+func (n *Node) AddComponent(component app.Component) error {
+	n.componentMu.Lock()
+	defer n.componentMu.Unlock()
 	if n.closed.Load() {
 		return ErrClosed
 	}
-	if !n.started.CompareAndSwap(false, true) {
+	if n.started.Load() {
 		return ErrStarted
 	}
+	n.components = append(n.components, component)
+	return nil
+}
+
+func (n *Node) Start() error {
+	n.componentMu.Lock()
+	if n.closed.Load() {
+		n.componentMu.Unlock()
+		return ErrClosed
+	}
+	if !n.started.CompareAndSwap(false, true) {
+		n.componentMu.Unlock()
+		return ErrStarted
+	}
+	n.componentMu.Unlock()
 
 	for _, component := range n.components {
 		logx.Infof("node: 正在启动组件 name=%s", component.Name())

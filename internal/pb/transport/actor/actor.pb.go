@@ -98,14 +98,11 @@ func (x *Request) GetBody() []byte {
 }
 
 type Response struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Handled            bool                   `protobuf:"varint,1,opt,name=handled,proto3" json:"handled,omitempty"`
-	Body               []byte                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	RedirectInstanceId string                 `protobuf:"bytes,3,opt,name=redirect_instance_id,json=redirectInstanceId,proto3" json:"redirect_instance_id,omitempty"`
-	ErrorCode          uint32                 `protobuf:"varint,4,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
-	ErrorMessage       string                 `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Handled       bool                   `protobuf:"varint,1,opt,name=handled,proto3" json:"handled,omitempty"`
+	Body          []byte                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Response) Reset() {
@@ -152,27 +149,6 @@ func (x *Response) GetBody() []byte {
 	return nil
 }
 
-func (x *Response) GetRedirectInstanceId() string {
-	if x != nil {
-		return x.RedirectInstanceId
-	}
-	return ""
-}
-
-func (x *Response) GetErrorCode() uint32 {
-	if x != nil {
-		return x.ErrorCode
-	}
-	return 0
-}
-
-func (x *Response) GetErrorMessage() string {
-	if x != nil {
-		return x.ErrorMessage
-	}
-	return ""
-}
-
 var File_transport_actor_actor_proto protoreflect.FileDescriptor
 
 const file_transport_actor_actor_proto_rawDesc = "" +
@@ -186,14 +162,10 @@ const file_transport_actor_actor_proto_rawDesc = "" +
 	"activation\x18\x03 \x01(\rR\n" +
 	"activation\x12\x14\n" +
 	"\x05route\x18\x04 \x01(\rR\x05route\x12\x12\n" +
-	"\x04body\x18\x05 \x01(\fR\x04body\"\xae\x01\n" +
+	"\x04body\x18\x05 \x01(\fR\x04body\"8\n" +
 	"\bResponse\x12\x18\n" +
 	"\ahandled\x18\x01 \x01(\bR\ahandled\x12\x12\n" +
-	"\x04body\x18\x02 \x01(\fR\x04body\x120\n" +
-	"\x14redirect_instance_id\x18\x03 \x01(\tR\x12redirectInstanceId\x12\x1d\n" +
-	"\n" +
-	"error_code\x18\x04 \x01(\rR\terrorCode\x12#\n" +
-	"\rerror_message\x18\x05 \x01(\tR\ferrorMessage2\x94\x01\n" +
+	"\x04body\x18\x02 \x01(\fR\x04body2\x94\x01\n" +
 	"\x05Actor\x12D\n" +
 	"\x03Ask\x12\x1d.wali.transport.actor.Request\x1a\x1e.wali.transport.actor.Response\x12E\n" +
 	"\x04Tell\x12\x1d.wali.transport.actor.Request\x1a\x1e.wali.transport.actor.ResponseB;Z9github.com/2comjie/wali/internal/pb/transport/actor;actorb\x06proto3"

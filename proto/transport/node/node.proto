@@ -19,7 +19,6 @@ message Response {
   bytes body = 2; // 返回值。
   string node_service_name = 3;
   string node_instance_id = 4;
-  string redirect_instance_id = 5;
 }
 
 service Node {

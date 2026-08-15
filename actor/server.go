@@ -83,29 +83,7 @@ func (s *Server) process(ctx context.Context, request *pbActor.Request, needRepl
 		needReply,
 	)
 	if err != nil {
-		var redirect interface{ RedirectInstanceId() string }
-		if errors.As(err, &redirect) {
-			return &pbActor.Response{RedirectInstanceId: redirect.RedirectInstanceId()}, nil
-		}
-		return errorResponse(err), nil
+		return nil, err
 	}
 	return &pbActor.Response{Handled: handled, Body: body}, nil
-}
-
-func errorResponse(err error) *pbActor.Response {
-	var actorError interface{ ActorErrorCode() uint32 }
-	if errors.As(err, &actorError) {
-		return &pbActor.Response{ErrorCode: actorError.ActorErrorCode(), ErrorMessage: err.Error()}
-	}
-
-	code := ErrorCodeExecutionFailed
-	switch {
-	case errors.Is(err, ErrActorNotActive):
-		code = ErrorCodeActorNotActive
-	case errors.Is(err, ErrInvalidActivationPolicy):
-		code = ErrorCodeInvalidActivationPolicy
-	case errors.Is(err, ErrSystemStopped):
-		code = ErrorCodeSystemStopped
-	}
-	return &pbActor.Response{ErrorCode: code, ErrorMessage: err.Error()}
 }

@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package wali.rpc;
+
+option go_package = "github.com/2comjie/wali/rpc;rpc";
+
+message ErrorDetail {
+  uint32 code = 1;
+  bytes detail = 2;
+}

@@ -3,11 +3,13 @@ package gate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/2comjie/wali/app"
 	"github.com/2comjie/wali/core/endpoint"
 	"github.com/2comjie/wali/core/help"
 	pbGate "github.com/2comjie/wali/internal/pb/transport/gate"
@@ -16,6 +18,7 @@ import (
 	"github.com/2comjie/wali/logx"
 	"github.com/2comjie/wali/network"
 	"github.com/2comjie/wali/registry"
+	"github.com/2comjie/wali/rpc"
 	"github.com/2comjie/wali/rpc/lx"
 	"google.golang.org/grpc"
 )
@@ -44,6 +47,7 @@ type Config struct {
 	Hooks          network.Hooks
 	ErrorHandler   ErrorHandler
 	LocatorTimeout time.Duration
+	Components     []app.Component
 }
 
 type Gate struct {
@@ -59,15 +63,18 @@ type Gate struct {
 	errorHandler ErrorHandler
 	rpcServer    *grpc.Server
 	rpcListener  net.Listener
+	components   []app.Component
+	componentMu  sync.Mutex
 
-	ctx            context.Context
-	cancel         context.CancelFunc
-	locatorTimeout time.Duration
-	sessions       sync.Map
-	started        atomic.Bool
-	closed         atomic.Bool
-	serverWait     sync.WaitGroup
-	wait           sync.WaitGroup
+	ctx               context.Context
+	cancel            context.CancelFunc
+	locatorTimeout    time.Duration
+	sessions          sync.Map
+	started           atomic.Bool
+	closed            atomic.Bool
+	startedComponents atomic.Int64
+	serverWait        sync.WaitGroup
+	wait              sync.WaitGroup
 }
 
 func New(config Config) *Gate {
@@ -110,6 +117,7 @@ func New(config Config) *Gate {
 		errorHandler:   config.ErrorHandler,
 		rpcServer:      config.RPCServer,
 		rpcListener:    config.RPCListener,
+		components:     append([]app.Component(nil), config.Components...),
 		ctx:            ctx,
 		cancel:         cancel,
 		locatorTimeout: config.LocatorTimeout,
@@ -161,12 +169,52 @@ func New(config Config) *Gate {
 	return g
 }
 
-func (g *Gate) Start() error {
+func (g *Gate) AddComponent(component app.Component) error {
+	g.componentMu.Lock()
+	defer g.componentMu.Unlock()
 	if g.closed.Load() {
 		return ErrClosed
 	}
-	if !g.started.CompareAndSwap(false, true) {
+	if g.started.Load() {
 		return ErrStarted
+	}
+	g.components = append(g.components, component)
+	return nil
+}
+
+func (g *Gate) Start() error {
+	g.componentMu.Lock()
+	if g.closed.Load() {
+		g.componentMu.Unlock()
+		return ErrClosed
+	}
+	if !g.started.CompareAndSwap(false, true) {
+		g.componentMu.Unlock()
+		return ErrStarted
+	}
+	g.componentMu.Unlock()
+
+	for _, component := range g.components {
+		logx.Infof("gate: 正在启动组件 name=%s", component.Name())
+		if err := component.Start(); err != nil {
+			var errs []error
+			errs = append(errs, fmt.Errorf("gate: 启动组件失败 name=%s: %w", component.Name(), err))
+			g.cancel()
+			_ = g.server.Shutdown(context.Background())
+			g.rpcServer.Stop()
+			for index := int(g.startedComponents.Load()) - 1; index >= 0; index-- {
+				startedComponent := g.components[index]
+				logx.Infof("gate: 正在回滚组件 name=%s", startedComponent.Name())
+				if shutdownErr := startedComponent.Shutdown(context.Background()); shutdownErr != nil {
+					errs = append(errs, fmt.Errorf("gate: 回滚组件失败 name=%s: %w", startedComponent.Name(), shutdownErr))
+				}
+			}
+			g.Wait()
+			g.closed.Store(true)
+			return errors.Join(errs...)
+		}
+		g.startedComponents.Add(1)
+		logx.Infof("gate: 组件启动完成 name=%s", component.Name())
 	}
 	g.serverWait.Add(1)
 	help.SafeGo(func() {
@@ -180,6 +228,13 @@ func (g *Gate) Start() error {
 		_ = g.server.Shutdown(context.Background())
 		g.rpcServer.Stop()
 		g.serverWait.Wait()
+		for index := int(g.startedComponents.Load()) - 1; index >= 0; index-- {
+			component := g.components[index]
+			logx.Infof("gate: 正在回滚组件 name=%s", component.Name())
+			if shutdownErr := component.Shutdown(context.Background()); shutdownErr != nil {
+				err = errors.Join(err, fmt.Errorf("gate: 回滚组件失败 name=%s: %w", component.Name(), shutdownErr))
+			}
+		}
 		g.Wait()
 		g.closed.Store(true)
 		return err
@@ -190,6 +245,13 @@ func (g *Gate) Start() error {
 		_ = g.server.Shutdown(context.Background())
 		g.rpcServer.Stop()
 		g.serverWait.Wait()
+		for index := int(g.startedComponents.Load()) - 1; index >= 0; index-- {
+			component := g.components[index]
+			logx.Infof("gate: 正在回滚组件 name=%s", component.Name())
+			if shutdownErr := component.Shutdown(context.Background()); shutdownErr != nil {
+				err = errors.Join(err, fmt.Errorf("gate: 回滚组件失败 name=%s: %w", component.Name(), shutdownErr))
+			}
+		}
 		g.Wait()
 		g.closed.Store(true)
 		return err
@@ -226,6 +288,16 @@ func (g *Gate) Shutdown(ctx context.Context) error {
 	}
 	g.serverWait.Wait()
 	g.cancel()
+
+	for index := int(g.startedComponents.Load()) - 1; index >= 0; index-- {
+		component := g.components[index]
+		logx.Infof("gate: 正在关闭组件 name=%s", component.Name())
+		if err := component.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("gate: 关闭组件失败 name=%s: %w", component.Name(), err))
+			continue
+		}
+		logx.Infof("gate: 组件关闭完成 name=%s", component.Name())
+	}
 
 	waitDone := make(chan struct{})
 	help.SafeGo(func() {
@@ -349,35 +421,21 @@ func (g *Gate) forward(ctx *Context) error {
 		ActorKey:        ctx.ActorKey,
 	}
 	if !ctx.NeedReply() {
-		response, err := g.nodeClient.Tell(rpcCtx, request)
-		if err != nil {
-			return err
+		_, err := g.nodeClient.Tell(rpcCtx, request)
+		var rpcError *rpc.Error
+		if errors.As(err, &rpcError) && rpcError.Code == rpc.ErrorCodeRedirect {
+			_, err = g.nodeClient.Tell(lx.WithNode(ctx.Context, string(rpcError.Detail)), request)
 		}
-		if response.RedirectInstanceId == "" {
-			return nil
-		}
-		response, err = g.nodeClient.Tell(lx.WithNode(ctx.Context, response.RedirectInstanceId), request)
-		if err != nil {
-			return err
-		}
-		if response.RedirectInstanceId != "" {
-			return ErrActorRedirect
-		}
-		return nil
+		return err
 	}
 
 	response, err := g.nodeClient.Call(rpcCtx, request)
+	var rpcError *rpc.Error
+	if errors.As(err, &rpcError) && rpcError.Code == rpc.ErrorCodeRedirect {
+		response, err = g.nodeClient.Call(lx.WithNode(ctx.Context, string(rpcError.Detail)), request)
+	}
 	if err != nil {
 		return err
-	}
-	if response.RedirectInstanceId != "" {
-		response, err = g.nodeClient.Call(lx.WithNode(ctx.Context, response.RedirectInstanceId), request)
-		if err != nil {
-			return err
-		}
-	}
-	if response.RedirectInstanceId != "" {
-		return ErrActorRedirect
 	}
 	if response.NodeServiceName == "" || response.NodeInstanceId == "" {
 		return ErrInvalidNodeSource

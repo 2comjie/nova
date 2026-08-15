@@ -7,6 +7,7 @@ import (
 
 	"github.com/2comjie/wali/actor/actorDef"
 	pbActor "github.com/2comjie/wali/internal/pb/transport/actor"
+	waliRPC "github.com/2comjie/wali/rpc"
 	"github.com/2comjie/wali/rpc/lx"
 	"google.golang.org/grpc"
 )
@@ -25,10 +26,10 @@ type fakeActorClient struct {
 func (c *fakeActorClient) Ask(ctx context.Context, _ *pbActor.Request, _ ...grpc.CallOption) (*pbActor.Response, error) {
 	c.calls = append(c.calls, clientCall{method: "ask", strategy: lx.GetStrategy(ctx)})
 	if len(c.calls) == 1 || c.secondRedirect {
-		return &pbActor.Response{RedirectInstanceId: "player-2"}, nil
+		return nil, waliRPC.NewErrorWithDetail(ErrorCodeActorRedirect, "actor redirect", []byte("player-2"))
 	}
 	if c.errorCode != 0 {
-		return &pbActor.Response{ErrorCode: c.errorCode, ErrorMessage: "coin not enough"}, nil
+		return nil, waliRPC.NewError(c.errorCode, "coin not enough")
 	}
 	return &pbActor.Response{Handled: true, Body: []byte{7}}, nil
 }
@@ -36,7 +37,7 @@ func (c *fakeActorClient) Ask(ctx context.Context, _ *pbActor.Request, _ ...grpc
 func (c *fakeActorClient) Tell(ctx context.Context, _ *pbActor.Request, _ ...grpc.CallOption) (*pbActor.Response, error) {
 	c.calls = append(c.calls, clientCall{method: "tell", strategy: lx.GetStrategy(ctx)})
 	if len(c.calls) == 1 || c.secondRedirect {
-		return &pbActor.Response{RedirectInstanceId: "player-2"}, nil
+		return nil, waliRPC.NewErrorWithDetail(ErrorCodeActorRedirect, "actor redirect", []byte("player-2"))
 	}
 	return &pbActor.Response{}, nil
 }
@@ -85,7 +86,8 @@ func TestRefStopsAfterSecondRedirect(t *testing.T) {
 	}
 
 	_, _, err := ref.Ask(context.Background(), Message{Route: 1001})
-	if !errors.Is(err, ErrActorGuarded) {
+	var rpcError *waliRPC.Error
+	if !errors.As(err, &rpcError) || rpcError.Code != ErrorCodeActorRedirect || string(rpcError.Detail) != "player-2" {
 		t.Fatalf("ask error=%v", err)
 	}
 	assertActorRetry(t, rpc.calls)
@@ -101,8 +103,8 @@ func TestRefReturnsBusinessError(t *testing.T) {
 	}
 
 	_, _, err := ref.Ask(context.Background(), Message{Route: 1001})
-	var callErr *CallError
-	if !errors.As(err, &callErr) || callErr.Code != 10001 || callErr.Message != "coin not enough" {
+	var rpcError *waliRPC.Error
+	if !errors.As(err, &rpcError) || rpcError.Code != 10001 || rpcError.Message != "coin not enough" {
 		t.Fatalf("ask error=%v", err)
 	}
 }

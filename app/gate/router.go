@@ -37,7 +37,6 @@ var (
 	ErrInvalidFilterName          = errors.New("gate: Filter名称不能为空")
 	ErrInvalidRouteID             = errors.New("gate: Route ID不能为空")
 	ErrRouteWithoutMatchers       = errors.New("gate: Route没有配置数字route")
-	ErrActorRedirect              = errors.New("gate: Actor重定向失败")
 )
 
 type Handler func(*Context) error

@@ -15,9 +15,6 @@ message Request {
 message Response {
   bool handled = 1;
   bytes body = 2;
-  string redirect_instance_id = 3;
-  uint32 error_code = 4;
-  string error_message = 5;
 }
 
 service Actor {

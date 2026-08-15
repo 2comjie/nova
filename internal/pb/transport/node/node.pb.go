@@ -106,14 +106,13 @@ func (x *Request) GetActorKey() string {
 }
 
 type Response struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Replied            bool                   `protobuf:"varint,1,opt,name=replied,proto3" json:"replied,omitempty"` // 是否有写rsp 为true时才给客户端写值。
-	Body               []byte                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`        // 返回值。
-	NodeServiceName    string                 `protobuf:"bytes,3,opt,name=node_service_name,json=nodeServiceName,proto3" json:"node_service_name,omitempty"`
-	NodeInstanceId     string                 `protobuf:"bytes,4,opt,name=node_instance_id,json=nodeInstanceId,proto3" json:"node_instance_id,omitempty"`
-	RedirectInstanceId string                 `protobuf:"bytes,5,opt,name=redirect_instance_id,json=redirectInstanceId,proto3" json:"redirect_instance_id,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Replied         bool                   `protobuf:"varint,1,opt,name=replied,proto3" json:"replied,omitempty"` // 是否有写rsp 为true时才给客户端写值。
+	Body            []byte                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`        // 返回值。
+	NodeServiceName string                 `protobuf:"bytes,3,opt,name=node_service_name,json=nodeServiceName,proto3" json:"node_service_name,omitempty"`
+	NodeInstanceId  string                 `protobuf:"bytes,4,opt,name=node_instance_id,json=nodeInstanceId,proto3" json:"node_instance_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Response) Reset() {
@@ -174,13 +173,6 @@ func (x *Response) GetNodeInstanceId() string {
 	return ""
 }
 
-func (x *Response) GetRedirectInstanceId() string {
-	if x != nil {
-		return x.RedirectInstanceId
-	}
-	return ""
-}
-
 var File_transport_node_node_proto protoreflect.FileDescriptor
 
 const file_transport_node_node_proto_rawDesc = "" +
@@ -192,13 +184,12 @@ const file_transport_node_node_proto_rawDesc = "" +
 	"\x04body\x18\x03 \x01(\fR\x04body\x12*\n" +
 	"\x11gate_service_name\x18\x04 \x01(\tR\x0fgateServiceName\x12(\n" +
 	"\x10gate_instance_id\x18\x05 \x01(\tR\x0egateInstanceId\x12\x1b\n" +
-	"\tactor_key\x18\x06 \x01(\tR\bactorKey\"\xc0\x01\n" +
+	"\tactor_key\x18\x06 \x01(\tR\bactorKey\"\x8e\x01\n" +
 	"\bResponse\x12\x18\n" +
 	"\areplied\x18\x01 \x01(\bR\areplied\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\fR\x04body\x12*\n" +
 	"\x11node_service_name\x18\x03 \x01(\tR\x0fnodeServiceName\x12(\n" +
-	"\x10node_instance_id\x18\x04 \x01(\tR\x0enodeInstanceId\x120\n" +
-	"\x14redirect_instance_id\x18\x05 \x01(\tR\x12redirectInstanceId2\x90\x01\n" +
+	"\x10node_instance_id\x18\x04 \x01(\tR\x0enodeInstanceId2\x90\x01\n" +
 	"\x04Node\x12C\n" +
 	"\x04Call\x12\x1c.wali.transport.node.Request\x1a\x1d.wali.transport.node.Response\x12C\n" +
 	"\x04Tell\x12\x1c.wali.transport.node.Request\x1a\x1d.wali.transport.node.ResponseB9Z7github.com/2comjie/wali/internal/pb/transport/node;nodeb\x06proto3"

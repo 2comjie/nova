@@ -7,6 +7,7 @@ import (
 
 	"github.com/2comjie/wali/core/endpoint"
 	pbNode "github.com/2comjie/wali/internal/pb/transport/node"
+	"github.com/2comjie/wali/rpc"
 	"github.com/2comjie/wali/rpc/lx"
 	"google.golang.org/grpc"
 )
@@ -29,7 +30,7 @@ func (c *actorRouteNodeClient) Call(ctx context.Context, request *pbNode.Request
 	c.calls = append(c.calls, lx.GetStrategy(ctx))
 	c.requests = append(c.requests, request)
 	if len(c.calls) == 1 {
-		return &pbNode.Response{RedirectInstanceId: "player-2"}, nil
+		return nil, rpc.NewErrorWithDetail(rpc.ErrorCodeRedirect, "actor redirect", []byte("player-2"))
 	}
 	return &pbNode.Response{NodeServiceName: "player", NodeInstanceId: "player-2", Replied: true, Body: []byte{7}}, nil
 }
@@ -38,7 +39,7 @@ func (c *actorRouteNodeClient) Tell(ctx context.Context, request *pbNode.Request
 	c.calls = append(c.calls, lx.GetStrategy(ctx))
 	c.requests = append(c.requests, request)
 	if len(c.calls) == 1 {
-		return &pbNode.Response{RedirectInstanceId: "player-2"}, nil
+		return nil, rpc.NewErrorWithDetail(rpc.ErrorCodeRedirect, "actor redirect", []byte("player-2"))
 	}
 	return &pbNode.Response{}, nil
 }

@@ -16,6 +16,7 @@ import (
 	actorSimple "github.com/2comjie/wali/actor/simple"
 	"github.com/2comjie/wali/app/node"
 	pbActor "github.com/2comjie/wali/internal/pb/transport/actor"
+	"github.com/2comjie/wali/rpc"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 )
@@ -351,11 +352,9 @@ func TestActorRPCServerAskTellAndActivation(t *testing.T) {
 	}
 	request.Activation = uint32(actor.ActivationRequire)
 	response, err = server.Ask(context.Background(), request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response.ErrorCode != actor.ErrorCodeActorNotActive {
-		t.Fatalf("require error code=%d", response.ErrorCode)
+	var rpcError *rpc.Error
+	if !errors.As(err, &rpcError) || rpcError.Code != actor.ErrorCodeActorNotActive {
+		t.Fatalf("require error=%v", err)
 	}
 
 	request.Activation = uint32(actor.ActivationLoad)
@@ -399,14 +398,12 @@ func TestActorRPCServerHandlerPanic(t *testing.T) {
 		_ = server.Shutdown(context.Background())
 	})
 
-	response, err := server.Ask(context.Background(), &pbActor.Request{
+	_, err := server.Ask(context.Background(), &pbActor.Request{
 		ActorType: 1, ActorKey: "uid-1001", Activation: uint32(actor.ActivationLoad), Route: 1001,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response.ErrorCode != actor.ErrorCodeExecutionFailed {
-		t.Fatalf("handler error code=%d", response.ErrorCode)
+	var rpcError *rpc.Error
+	if !errors.As(err, &rpcError) || rpcError.Code != actor.ErrorCodeExecutionFailed {
+		t.Fatalf("handler error=%v", err)
 	}
 }
 
@@ -418,20 +415,18 @@ func TestActorRPCBusinessError(t *testing.T) {
 	}, actor.RunnerConfig{UpdateDt: time.Hour})
 	server := actor.NewServer(grpc.NewServer())
 	actor.NewRPCRouteGroup(server, system).Handle(1001, func(*messageActor, actorDef.PID, context.Context, actor.Message) ([]byte, error) {
-		return nil, &actor.CallError{Code: 10001, Message: "coin not enough"}
+		return nil, rpc.NewError(10001, "coin not enough")
 	})
 	t.Cleanup(func() {
 		_ = server.Shutdown(context.Background())
 	})
 
-	response, err := server.Ask(context.Background(), &pbActor.Request{
+	_, err := server.Ask(context.Background(), &pbActor.Request{
 		ActorType: 1, ActorKey: "uid-1001", Activation: uint32(actor.ActivationLoad), Route: 1001,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response.ErrorCode != 10001 || response.ErrorMessage != "coin not enough" {
-		t.Fatalf("response=%+v", response)
+	var rpcError *rpc.Error
+	if !errors.As(err, &rpcError) || rpcError.Code != 10001 || rpcError.Message != "coin not enough" {
+		t.Fatalf("error=%v", err)
 	}
 }
 

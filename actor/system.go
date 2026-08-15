@@ -14,8 +14,7 @@ import (
 type Loader[T actorDef.Actor] func(runCtx context.Context, pid actorDef.PID) (T, error)
 
 var (
-	ErrSystemStopped = errors.New("actor system stopped")
-	ErrActorGuarded  = errors.New("actor guarded by another instance")
+	ErrActorGuarded = errors.New("actor guarded by another instance")
 )
 
 type ActorRedirectError string
@@ -30,6 +29,14 @@ func (e ActorRedirectError) Unwrap() error {
 
 func (e ActorRedirectError) RedirectInstanceId() string {
 	return string(e)
+}
+
+func (e ActorRedirectError) ErrorCode() uint32 {
+	return ErrorCodeActorRedirect
+}
+
+func (e ActorRedirectError) ErrorDetail() []byte {
+	return []byte(e)
 }
 
 type activation[T actorDef.Actor] struct {

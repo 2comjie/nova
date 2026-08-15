@@ -48,7 +48,7 @@ func (g *RouteGroup[T]) Handle(route uint32, handler Handler[T]) {
 			return err
 		}
 
-		handleErr := ErrMessageHandlerPanic
+		var handleErr error = ErrMessageHandlerPanic
 		err = runner.WaitResultOnMainLoop(ctx, func(actorValue T) {
 			help.SafeRun(func() {
 				handleErr = handler(actorValue, runner.self, ctx)

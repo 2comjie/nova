@@ -56,7 +56,7 @@ func (g *RPCRouteGroup[T]) Handle(route uint32, handler RPCHandler[T]) {
 		if !needReply {
 			message.Body = bytes.Clone(message.Body)
 			err = runner.RunOnMainLoop(func(actorValue T) {
-				handleErr := ErrMessageHandlerPanic
+				var handleErr error = ErrMessageHandlerPanic
 				help.SafeRun(func() {
 					_, handleErr = handler(actorValue, runner.self, context.WithoutCancel(runner.runCtx), message)
 				})
@@ -68,7 +68,7 @@ func (g *RPCRouteGroup[T]) Handle(route uint32, handler RPCHandler[T]) {
 		}
 
 		var body []byte
-		handleErr := ErrMessageHandlerPanic
+		var handleErr error = ErrMessageHandlerPanic
 		err = runner.WaitResultOnMainLoop(ctx, func(actorValue T) {
 			help.SafeRun(func() {
 				body, handleErr = handler(actorValue, runner.self, ctx, message)

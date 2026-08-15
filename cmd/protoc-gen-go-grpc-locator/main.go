@@ -18,11 +18,11 @@
 
 // protoc-gen-go-grpc-locator is a fork of protoc-gen-go-grpc (v1.6.2).
 //
-// The only difference from the upstream generator is on the client side: each
-// generated client method resolves the target *grpc.ClientConn through wali's
+// Generated clients resolve the target *grpc.ClientConn through wali's
 // rpc/client.Client.Conn(ctx), which dispatches according to the lx strategy
 // carried in the context (lx.WithDirect / WithBalance / WithNode / WithSelect).
-// The server side, ServiceDesc and FullMethodName constants are unchanged.
+// Generated clients and servers also decode and encode wali RPC errors at the
+// gRPC boundary.
 //
 // Install it by building this program and making it accessible within your
 // PATH with the name:
@@ -49,7 +49,7 @@ import (
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
-const version = "1.0.0"
+const version = "1.1.0"
 
 var requireUnimplemented *bool
 
