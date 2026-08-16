@@ -29,7 +29,7 @@ type Logger struct {
 }
 
 func NewDefaultLog() logdef.ILogger {
-	lg := log.New(os.Stdout, "", log.Lshortfile|log.LstdFlags|log.Lmicroseconds)
+	lg := log.New(os.Stdout, "", log.Llongfile|log.LstdFlags|log.Lmicroseconds)
 	l := &Logger{
 		logger: lg,
 		skip:   3,

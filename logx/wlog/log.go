@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"runtime"
 	"strconv"
 	"strings"
@@ -252,14 +251,13 @@ func (l Logger) deepClone() Logger {
 // skip default is 4
 func getCallInfoN(skip int) (string, string) {
 	pc, file, line, _ := runtime.Caller(skip)
-	_, fileName := path.Split(file)
 	funcName := runtime.FuncForPC(pc).Name()
 	ss := strings.Split(funcName, "/")
 	sLen := len(ss)
 	if sLen > 0 {
 		funcName = ss[sLen-1]
 	}
-	return fileName + ":" + strconv.Itoa(line), funcName
+	return file + ":" + strconv.Itoa(line), funcName
 }
 func (l Logger) print(level logdef.Level, msg string) {
 	caller, fname := getCallInfoN(l.skip + 1)
