@@ -35,6 +35,7 @@ const (
 	statusPackage     = protogen.GoImportPath("google.golang.org/grpc/status")
 	waliClientPackage = protogen.GoImportPath("github.com/2comjie/wali/rpc/client")
 	waliRPCPackage    = protogen.GoImportPath("github.com/2comjie/wali/rpc")
+	waliRPCErrPackage = protogen.GoImportPath("github.com/2comjie/wali/rpc/rpcerr")
 )
 
 type serviceGenerateHelperInterface interface {
@@ -332,7 +333,7 @@ func clientSignature(g *protogen.GeneratedFile, method *protogen.Method) string 
 	} else {
 		s += clientStreamInterface(g, method)
 	}
-	s += ", error)"
+	s += ", " + g.QualifiedGoIdent(waliRPCErrPackage.Ident("Err")) + ")"
 	return s
 }
 
@@ -359,11 +360,11 @@ func genClientMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 	// Resolve the target connection through wali's rpc/client.Client, which
 	// dispatches according to the lx strategy carried in ctx.
 	g.P("conn, err := c.cc.Conn(ctx)")
-	g.P("if err != nil { return nil, err }")
+	g.P("if err != nil { return nil, ", waliRPCPackage.Ident("DecodeErr"), "(err) }")
 	if !method.Desc.IsStreamingServer() && !method.Desc.IsStreamingClient() {
 		g.P("out := new(", method.Output.GoIdent, ")")
 		g.P(`err = conn.Invoke(ctx, `, fmSymbol, `, in, out, cOpts...)`)
-		g.P("if err != nil { return nil, ", waliRPCPackage.Ident("DecodeError"), "(err) }")
+		g.P("if err != nil { return nil, ", waliRPCPackage.Ident("DecodeErr"), "(err) }")
 		g.P("return out, nil")
 		g.P("}")
 		g.P()
@@ -374,11 +375,11 @@ func genClientMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 	streamImpl := g.QualifiedGoIdent(grpcPackage.Ident("GenericClientStream")) + "[" + typeParam + "]"
 	serviceDescVar := service.GoName + "_ServiceDesc"
 	g.P("stream, err := conn.NewStream(ctx, &", serviceDescVar, ".Streams[", index, `], `, fmSymbol, `, cOpts...)`)
-	g.P("if err != nil { return nil, ", waliRPCPackage.Ident("DecodeError"), "(err) }")
+	g.P("if err != nil { return nil, ", waliRPCPackage.Ident("DecodeErr"), "(err) }")
 	g.P("x := &", streamImpl, "{ClientStream: ", waliRPCPackage.Ident("WrapClientStream"), "(stream)}")
 	if !method.Desc.IsStreamingClient() {
-		g.P("if err := x.ClientStream.SendMsg(in); err != nil { return nil, err }")
-		g.P("if err := x.ClientStream.CloseSend(); err != nil { return nil, err }")
+		g.P("if err := x.ClientStream.SendMsg(in); err != nil { return nil, ", waliRPCPackage.Ident("DecodeErr"), "(err) }")
+		g.P("if err := x.ClientStream.CloseSend(); err != nil { return nil, ", waliRPCPackage.Ident("DecodeErr"), "(err) }")
 	}
 	g.P("return x, nil")
 	g.P("}")

@@ -13,13 +13,13 @@ type Middleware[T actorDef.Actor] func(next Handler[T]) Handler[T]
 type RouteGroup[T actorDef.Actor] struct {
 	router     *node.RouteGroup
 	parent     *RouteGroup[T]
-	system     *System[T]
+	actors     *Manager[T]
 	policy     ActivationPolicy
 	middleware []Middleware[T]
 }
 
-func NewRouteGroup[T actorDef.Actor](router *node.Router, system *System[T], policy ActivationPolicy) *RouteGroup[T] {
-	return &RouteGroup[T]{router: router.Group(), system: system, policy: policy}
+func NewRouteGroup[T actorDef.Actor](router *node.Router, actors *Manager[T], policy ActivationPolicy) *RouteGroup[T] {
+	return &RouteGroup[T]{router: router.Group(), actors: actors, policy: policy}
 }
 
 func (g *RouteGroup[T]) Use(middlewares ...Middleware[T]) {
@@ -27,7 +27,7 @@ func (g *RouteGroup[T]) Use(middlewares ...Middleware[T]) {
 }
 
 func (g *RouteGroup[T]) Group() *RouteGroup[T] {
-	return &RouteGroup[T]{router: g.router.Group(), parent: g, system: g.system, policy: g.policy}
+	return &RouteGroup[T]{router: g.router.Group(), parent: g, actors: g.actors, policy: g.policy}
 }
 
 func (g *RouteGroup[T]) Handle(route uint32, handler Handler[T]) {
@@ -43,7 +43,7 @@ func (g *RouteGroup[T]) Handle(route uint32, handler Handler[T]) {
 	}
 
 	if err := g.router.Handle(route, func(ctx *node.Context) error {
-		runner, handled, err := g.system.ResolveActor(ctx, actorDef.Key(ctx.Request.ActorKey), g.policy)
+		runner, handled, err := g.actors.ResolveActor(ctx, actorDef.Key(ctx.Request.ActorKey), g.policy)
 		if err != nil || !handled {
 			return err
 		}

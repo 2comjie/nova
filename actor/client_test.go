@@ -2,13 +2,12 @@ package actor
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/2comjie/wali/actor/actorDef"
 	pbActor "github.com/2comjie/wali/internal/pb/transport/actor"
-	waliRPC "github.com/2comjie/wali/rpc"
 	"github.com/2comjie/wali/rpc/lx"
+	"github.com/2comjie/wali/rpc/rpcerr"
 	"google.golang.org/grpc"
 )
 
@@ -23,21 +22,21 @@ type fakeActorClient struct {
 	errorCode      uint32
 }
 
-func (c *fakeActorClient) Ask(ctx context.Context, _ *pbActor.Request, _ ...grpc.CallOption) (*pbActor.Response, error) {
+func (c *fakeActorClient) Ask(ctx context.Context, _ *pbActor.Request, _ ...grpc.CallOption) (*pbActor.Response, rpcerr.Err) {
 	c.calls = append(c.calls, clientCall{method: "ask", strategy: lx.GetStrategy(ctx)})
 	if len(c.calls) == 1 || c.secondRedirect {
-		return nil, waliRPC.NewErrorWithDetail(ErrorCodeActorRedirect, "actor redirect", []byte("player-2"))
+		return nil, rpcerr.NewWithDetail(ErrorCodeActorRedirect, "actor redirect", []byte("player-2"))
 	}
 	if c.errorCode != 0 {
-		return nil, waliRPC.NewError(c.errorCode, "coin not enough")
+		return nil, rpcerr.New(c.errorCode, "coin not enough")
 	}
 	return &pbActor.Response{Handled: true, Body: []byte{7}}, nil
 }
 
-func (c *fakeActorClient) Tell(ctx context.Context, _ *pbActor.Request, _ ...grpc.CallOption) (*pbActor.Response, error) {
+func (c *fakeActorClient) Tell(ctx context.Context, _ *pbActor.Request, _ ...grpc.CallOption) (*pbActor.Response, rpcerr.Err) {
 	c.calls = append(c.calls, clientCall{method: "tell", strategy: lx.GetStrategy(ctx)})
 	if len(c.calls) == 1 || c.secondRedirect {
-		return nil, waliRPC.NewErrorWithDetail(ErrorCodeActorRedirect, "actor redirect", []byte("player-2"))
+		return nil, rpcerr.NewWithDetail(ErrorCodeActorRedirect, "actor redirect", []byte("player-2"))
 	}
 	return &pbActor.Response{}, nil
 }
@@ -86,8 +85,7 @@ func TestRefStopsAfterSecondRedirect(t *testing.T) {
 	}
 
 	_, _, err := ref.Ask(context.Background(), Message{Route: 1001})
-	var rpcError *waliRPC.Error
-	if !errors.As(err, &rpcError) || rpcError.Code != ErrorCodeActorRedirect || string(rpcError.Detail) != "player-2" {
+	if err == nil || err.Code() != ErrorCodeActorRedirect || string(err.Detail()) != "player-2" {
 		t.Fatalf("ask error=%v", err)
 	}
 	assertActorRetry(t, rpc.calls)
@@ -103,8 +101,7 @@ func TestRefReturnsBusinessError(t *testing.T) {
 	}
 
 	_, _, err := ref.Ask(context.Background(), Message{Route: 1001})
-	var rpcError *waliRPC.Error
-	if !errors.As(err, &rpcError) || rpcError.Code != 10001 || rpcError.Message != "coin not enough" {
+	if err == nil || err.Code() != 10001 || err.Message() != "coin not enough" {
 		t.Fatalf("ask error=%v", err)
 	}
 }

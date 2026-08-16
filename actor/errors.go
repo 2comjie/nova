@@ -1,6 +1,9 @@
 package actor
 
-import "github.com/2comjie/wali/rpc"
+import (
+	"github.com/2comjie/wali/rpc"
+	"github.com/2comjie/wali/rpc/rpcerr"
+)
 
 const (
 	ErrorCodeActorNotActive          uint32 = 1
@@ -11,8 +14,8 @@ const (
 )
 
 var (
-	ErrActorNotActive          = rpc.NewError(ErrorCodeActorNotActive, "actor not active")
-	ErrInvalidActivationPolicy = rpc.NewError(ErrorCodeInvalidActivationPolicy, "invalid actor activation policy")
-	ErrSystemStopped           = rpc.NewError(ErrorCodeSystemStopped, "actor system stopped")
-	ErrMessageHandlerPanic     = rpc.NewError(ErrorCodeExecutionFailed, "actor message handler panic")
+	ErrActorNotActive          = rpcerr.New(ErrorCodeActorNotActive, "actor not active")
+	ErrInvalidActivationPolicy = rpcerr.New(ErrorCodeInvalidActivationPolicy, "invalid actor activation policy")
+	ErrSystemStopped           = rpcerr.New(ErrorCodeSystemStopped, "actor system stopped")
+	ErrMessageHandlerPanic     = rpcerr.New(ErrorCodeExecutionFailed, "actor message handler panic")
 )

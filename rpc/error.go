@@ -3,6 +3,7 @@ package rpc
 import (
 	"errors"
 
+	"github.com/2comjie/wali/rpc/rpcerr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -74,20 +75,24 @@ func EncodeError(err error) error {
 }
 
 func DecodeError(err error) error {
+	return DecodeErr(err)
+}
+
+func DecodeErr(err error) rpcerr.Err {
 	if err == nil {
 		return nil
 	}
 
 	statusValue, ok := status.FromError(err)
 	if !ok {
-		return err
+		return rpcerr.Wrap(err)
 	}
 	for _, detail := range statusValue.Details() {
 		if errorDetail, ok := detail.(*ErrorDetail); ok {
-			return &Error{Code: errorDetail.Code, Message: statusValue.Message(), Detail: errorDetail.Detail}
+			return rpcerr.NewWithDetail(errorDetail.Code, statusValue.Message(), errorDetail.Detail)
 		}
 	}
-	return err
+	return rpcerr.Wrap(err)
 }
 
 type clientStream struct {

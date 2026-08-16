@@ -6,284 +6,157 @@ import (
 	"sync"
 
 	"github.com/2comjie/wali/actor/actorDef"
-	"github.com/2comjie/wali/actor/actorGuard"
-	"github.com/2comjie/wali/core/help"
-	"golang.org/x/sync/singleflight"
+	pbActor "github.com/2comjie/wali/internal/pb/transport/actor"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-type Loader[T actorDef.Actor] func(runCtx context.Context, pid actorDef.PID) (T, error)
+type rpcProcessor func(ctx context.Context, key actorDef.Key, policy ActivationPolicy, message Message, needReply bool) ([]byte, bool, error)
 
-var (
-	ErrActorGuarded = errors.New("actor guarded by another instance")
-)
-
-type ActorRedirectError string
-
-func (e ActorRedirectError) Error() string {
-	return "actor guarded by instance " + string(e)
-}
-
-func (e ActorRedirectError) Unwrap() error {
-	return ErrActorGuarded
-}
-
-func (e ActorRedirectError) RedirectInstanceId() string {
-	return string(e)
-}
-
-func (e ActorRedirectError) ErrorCode() uint32 {
-	return ErrorCodeActorRedirect
-}
-
-func (e ActorRedirectError) ErrorDetail() []byte {
-	return []byte(e)
-}
-
-type activation[T actorDef.Actor] struct {
-	runner *Runner[T]
-	lease  *actorGuard.Lease
-	done   chan struct{}
-	err    error
-}
-
-type System[T actorDef.Actor] struct {
-	actorType    actorDef.Type
-	loader       Loader[T]
-	guard        *actorGuard.Guard
-	runnerConfig RunnerConfig
+type System struct {
+	pbActor.UnimplementedActorServer
 
 	runCtx context.Context
 	stop   context.CancelFunc
+	done   chan struct{}
 
-	mu      sync.RWMutex
-	actors  map[actorDef.Key]*activation[T]
-	loads   singleflight.Group
-	loadWg  sync.WaitGroup
-	stopped bool
+	mu         sync.RWMutex
+	routes     map[actorDef.Type]map[uint32]rpcProcessor
+	actorTypes map[actorDef.Type]struct{}
+
+	lifecycleMu sync.Mutex
+	stopping    bool
+	tasks       sync.WaitGroup
+	stopOnce    sync.Once
+
+	errMu sync.Mutex
+	err   error
 }
 
-func NewSystem[T actorDef.Actor](parentCtx context.Context, actorType actorDef.Type, guard *actorGuard.Guard, loader Loader[T], runnerConfig RunnerConfig) *System[T] {
-	runCtx, stop := context.WithCancel(parentCtx)
-	return &System[T]{
-		actorType:    actorType,
-		loader:       loader,
-		guard:        guard,
-		runnerConfig: runnerConfig,
-		runCtx:       runCtx,
-		stop:         stop,
-		actors:       make(map[actorDef.Key]*activation[T]),
+func NewSystem(registrar grpc.ServiceRegistrar) *System {
+	runCtx, stop := context.WithCancel(context.Background())
+	system := &System{
+		runCtx:     runCtx,
+		stop:       stop,
+		done:       make(chan struct{}),
+		routes:     make(map[actorDef.Type]map[uint32]rpcProcessor),
+		actorTypes: make(map[actorDef.Type]struct{}),
 	}
+	pbActor.RegisterActorServer(registrar, system)
+	return system
 }
 
-func (s *System[T]) TryGetActor(key actorDef.Key) (*Runner[T], bool) {
-	if s.runCtx.Err() != nil {
-		return nil, false
-	}
-	s.mu.RLock()
-	activation := s.actors[key]
-	s.mu.RUnlock()
-	if activation == nil {
-		return nil, false
-	}
-	if !activation.runner.Running() {
-		return nil, false
-	}
-	select {
-	case <-activation.lease.Done():
-		return nil, false
-	default:
-	}
-	select {
-	case <-activation.runner.Done():
-		return nil, false
-	default:
-	}
-	return activation.runner, true
+func (s *System) Name() string {
+	return "actor"
 }
 
-func (s *System[T]) ResolveActor(ctx context.Context, key actorDef.Key, policy ActivationPolicy) (*Runner[T], bool, error) {
-	switch policy {
-	case ActivationLoad:
-		runner, err := s.GetOrLoadActor(ctx, key)
-		return runner, err == nil, err
-	case ActivationIgnore:
-		runner, exists := s.TryGetActor(key)
-		if exists {
-			return runner, true, nil
-		}
-		ownerInstanceId, err := s.guard.Owner(ctx, actorDef.PID{Type: s.actorType, Key: key})
-		if err != nil {
-			return nil, false, err
-		}
-		if ownerInstanceId != "" && ownerInstanceId != s.guard.InstanceId() {
-			return nil, false, ActorRedirectError(ownerInstanceId)
-		}
-		return nil, false, nil
-	case ActivationRequire:
-		runner, exists := s.TryGetActor(key)
-		if exists {
-			return runner, true, nil
-		}
-		ownerInstanceId, err := s.guard.Owner(ctx, actorDef.PID{Type: s.actorType, Key: key})
-		if err != nil {
-			return nil, false, err
-		}
-		if ownerInstanceId != "" && ownerInstanceId != s.guard.InstanceId() {
-			return nil, false, ActorRedirectError(ownerInstanceId)
-		}
-		return nil, false, ErrActorNotActive
-	default:
-		return nil, false, ErrInvalidActivationPolicy
-	}
+func (s *System) Start() error {
+	return nil
 }
 
-func (s *System[T]) GetOrLoadActor(waitCtx context.Context, key actorDef.Key) (*Runner[T], error) {
-	if s.runCtx.Err() != nil {
-		return nil, ErrSystemStopped
-	}
-	if runner, ok := s.TryGetActor(key); ok {
-		return runner, nil
-	}
+func (s *System) Shutdown(ctx context.Context) error {
+	s.stopOnce.Do(func() {
+		s.lifecycleMu.Lock()
+		s.stopping = true
+		s.stop()
+		s.lifecycleMu.Unlock()
 
-	resultCh := s.loads.DoChan(string(key), func() (any, error) {
-		s.mu.RLock()
-		if s.stopped {
-			s.mu.RUnlock()
-			return nil, ErrSystemStopped
-		}
-		s.loadWg.Add(1)
-		s.mu.RUnlock()
-		defer s.loadWg.Done()
-
-		if runner, ok := s.TryGetActor(key); ok {
-			return runner, nil
-		}
-		s.mu.RLock()
-		previous := s.actors[key]
-		s.mu.RUnlock()
-		if previous != nil {
-			select {
-			case <-previous.done:
-			case <-s.runCtx.Done():
-				return nil, ErrSystemStopped
-			}
-		}
-		if s.runCtx.Err() != nil {
-			return nil, ErrSystemStopped
-		}
-
-		pid := actorDef.PID{Type: s.actorType, Key: key}
-		lease, ownerInstanceId, acquired, err := s.guard.TryAcquire(s.runCtx, pid)
-		if err != nil {
-			return nil, err
-		}
-		if !acquired {
-			return nil, ActorRedirectError(ownerInstanceId)
-		}
-
-		var actorValue T
-		var loadErr error
-
-		help.SafeRun(func() {
-			actorValue, loadErr = s.loader(s.runCtx, pid)
-		})
-		if loadErr != nil {
-			return nil, errors.Join(loadErr, lease.Release())
-		}
-		if s.runCtx.Err() != nil {
-			return nil, errors.Join(ErrSystemStopped, lease.Release())
-		}
-		if lease.Err() != nil {
-			return nil, lease.Err()
-		}
-
-		runner := NewRunner(s.runCtx, pid, actorValue, s.runnerConfig)
-		if err = runner.Start(); err != nil {
-			return nil, errors.Join(err, lease.Release())
-		}
-		if lease.Err() != nil {
-			_ = runner.Stop(actorDef.StopReasonLeaseLost)
-			return nil, errors.Join(lease.Err(), runner.Err())
-		}
-		current := &activation[T]{runner: runner, lease: lease, done: make(chan struct{})}
-
-		s.mu.Lock()
-		if s.stopped {
-			s.mu.Unlock()
-			_ = runner.Stop(actorDef.StopReasonShutdown)
-			return nil, errors.Join(ErrSystemStopped, lease.Release())
-		}
-		s.actors[key] = current
-		s.mu.Unlock()
-
-		help.SafeGo(func() {
-			select {
-			case <-lease.Done():
-				runner.RequestStop(actorDef.StopReasonLeaseLost)
-			case <-runner.Done():
-			}
-			<-runner.Done()
-
-			leaseErr := lease.Err()
-			if leaseErr == nil {
-				leaseErr = lease.Release()
-			}
-			current.err = errors.Join(runner.Err(), leaseErr)
-
-			s.mu.Lock()
-			if s.actors[key] == current {
-				delete(s.actors, key)
-			}
-			s.mu.Unlock()
-			close(current.done)
-		})
-
-		return runner, nil
+		go func() {
+			s.tasks.Wait()
+			close(s.done)
+		}()
 	})
 
 	select {
-	case res := <-resultCh:
-		if res.Err != nil {
-			return nil, res.Err
-		}
-		return res.Val.(*Runner[T]), nil
-
-	case <-waitCtx.Done():
-		return nil, waitCtx.Err()
+	case <-s.done:
+		return s.Err()
+	case <-ctx.Done():
+		return errors.Join(ctx.Err(), s.Err())
 	}
 }
 
-func (s *System[T]) UnloadActor(key actorDef.Key) error {
+func (s *System) Ask(ctx context.Context, request *pbActor.Request) (*pbActor.Response, error) {
+	return s.process(ctx, request, true)
+}
+
+func (s *System) Tell(ctx context.Context, request *pbActor.Request) (*pbActor.Response, error) {
+	return s.process(ctx, request, false)
+}
+
+func (s *System) process(ctx context.Context, request *pbActor.Request, needReply bool) (*pbActor.Response, error) {
+	if request == nil || request.ActorKey == "" || request.Route == 0 {
+		return nil, status.Error(codes.InvalidArgument, "actor: RPC请求无效")
+	}
+
 	s.mu.RLock()
-	activation := s.actors[key]
+	processor := s.routes[actorDef.Type(request.ActorType)][request.Route]
 	s.mu.RUnlock()
-	if activation == nil {
-		return nil
+	if processor == nil {
+		return nil, status.Error(codes.NotFound, "actor: RPC route不存在")
 	}
-	activation.runner.RequestStop(actorDef.StopReasonUnload)
-	<-activation.done
-	return activation.err
+
+	body, handled, err := processor(ctx, actorDef.Key(request.ActorKey), ActivationPolicy(request.Activation), Message{Route: request.Route, Body: request.Body}, needReply)
+	if err != nil {
+		return nil, err
+	}
+	return &pbActor.Response{Handled: handled, Body: body}, nil
 }
 
-func (s *System[T]) Stop() error {
+func (s *System) registerActorType(actorType actorDef.Type) {
 	s.mu.Lock()
-	s.stopped = true
-	activations := make([]*activation[T], 0, len(s.actors))
-	for _, activation := range s.actors {
-		activations = append(activations, activation)
+	defer s.mu.Unlock()
+	if _, exists := s.actorTypes[actorType]; exists {
+		panic("actor: ActorType已经注册")
 	}
-	s.mu.Unlock()
+	s.actorTypes[actorType] = struct{}{}
+}
 
-	for _, activation := range activations {
-		activation.runner.RequestStop(actorDef.StopReasonShutdown)
+func (s *System) registerRoute(actorType actorDef.Type, route uint32, processor rpcProcessor) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	routes := s.routes[actorType]
+	if routes == nil {
+		routes = make(map[uint32]rpcProcessor)
+		s.routes[actorType] = routes
 	}
-	s.stop()
-	s.loadWg.Wait()
+	if routes[route] != nil {
+		panic("actor: RPC route已经注册")
+	}
+	routes[route] = processor
+}
 
-	var stopErr error
-	for _, activation := range activations {
-		<-activation.done
-		stopErr = errors.Join(stopErr, activation.err)
+func (s *System) beginTask() bool {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.stopping {
+		return false
 	}
-	return stopErr
+	s.tasks.Add(1)
+	return true
+}
+
+func (s *System) endTask() {
+	s.tasks.Done()
+}
+
+func (s *System) isStopping() bool {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	return s.stopping
+}
+
+func (s *System) addErr(err error) {
+	if err == nil {
+		return
+	}
+	s.errMu.Lock()
+	s.err = errors.Join(s.err, err)
+	s.errMu.Unlock()
+}
+
+func (s *System) Err() error {
+	s.errMu.Lock()
+	defer s.errMu.Unlock()
+	return s.err
 }

@@ -2,25 +2,25 @@ package actor
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/2comjie/wali/actor/actorDef"
 	pbActor "github.com/2comjie/wali/internal/pb/transport/actor"
+	"github.com/2comjie/wali/rpc/rpcerr"
 	"google.golang.org/grpc"
 )
 
-func TestServerReturnsActorRedirectCode(t *testing.T) {
-	server := NewServer(grpc.NewServer())
-	server.routes[1] = map[uint32]rpcProcessor{
+func TestSystemReturnsActorRedirectCode(t *testing.T) {
+	system := NewSystem(grpc.NewServer())
+	system.routes[1] = map[uint32]rpcProcessor{
 		1001: func(context.Context, actorDef.Key, ActivationPolicy, Message, bool) ([]byte, bool, error) {
-			return nil, false, ActorRedirectError("player-2")
+			return nil, false, rpcerr.NewWithDetail(ErrorCodeActorRedirect, "actor guarded by instance player-2", []byte("player-2"))
 		},
 	}
 
-	_, err := server.Ask(context.Background(), &pbActor.Request{ActorType: 1, ActorKey: "uid-1001", Route: 1001})
-	var redirect ActorRedirectError
-	if !errors.As(err, &redirect) || redirect.ErrorCode() != ErrorCodeActorRedirect || redirect.RedirectInstanceId() != "player-2" {
+	_, err := system.Ask(context.Background(), &pbActor.Request{ActorType: 1, ActorKey: "uid-1001", Route: 1001})
+	redirect, ok := err.(rpcerr.Err)
+	if !ok || redirect.Code() != ErrorCodeActorRedirect || string(redirect.Detail()) != "player-2" {
 		t.Fatalf("error=%v", err)
 	}
 }

@@ -16,7 +16,7 @@ import (
 	actorSimple "github.com/2comjie/wali/actor/simple"
 	"github.com/2comjie/wali/app/node"
 	pbActor "github.com/2comjie/wali/internal/pb/transport/actor"
-	"github.com/2comjie/wali/rpc"
+	"github.com/2comjie/wali/rpc/rpcerr"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 )
@@ -145,40 +145,42 @@ func TestSystemDistributedSingleton(t *testing.T) {
 	var loadA atomic.Int32
 	var loadB atomic.Int32
 
-	systemA := actor.NewSystem(context.Background(), actorDef.Type(1), guardA, func(context.Context, actorDef.PID) (*actorSimple.SimpleActor, error) {
+	systemA := actor.NewSystem(grpc.NewServer())
+	actorsA := actor.Register(systemA, actorDef.Type(1), guardA, func(context.Context, actorDef.PID) (*actorSimple.SimpleActor, error) {
 		loadA.Add(1)
 		return &actorSimple.SimpleActor{}, nil
 	}, actor.RunnerConfig{UpdateDt: time.Hour})
-	systemB := actor.NewSystem(context.Background(), actorDef.Type(1), guardB, func(context.Context, actorDef.PID) (*actorSimple.SimpleActor, error) {
+	systemB := actor.NewSystem(grpc.NewServer())
+	actorsB := actor.Register(systemB, actorDef.Type(1), guardB, func(context.Context, actorDef.PID) (*actorSimple.SimpleActor, error) {
 		loadB.Add(1)
 		return &actorSimple.SimpleActor{}, nil
 	}, actor.RunnerConfig{UpdateDt: time.Hour})
 	t.Cleanup(func() {
-		_ = systemA.Stop()
-		_ = systemB.Stop()
+		_ = systemA.Shutdown(context.Background())
+		_ = systemB.Shutdown(context.Background())
 	})
 
-	if _, err := systemA.GetOrLoadActor(context.Background(), actorDef.Key("uid-1001")); err != nil {
+	if _, err := actorsA.GetOrLoadActor(context.Background(), actorDef.Key("uid-1001")); err != nil {
 		t.Fatal(err)
 	}
 	for _, policy := range []actor.ActivationPolicy{actor.ActivationIgnore, actor.ActivationRequire} {
-		_, handled, err := systemB.ResolveActor(context.Background(), actorDef.Key("uid-1001"), policy)
-		var redirect actor.ActorRedirectError
-		if handled || !errors.As(err, &redirect) || redirect.RedirectInstanceId() != "player-1" {
+		_, handled, err := actorsB.ResolveActor(context.Background(), actorDef.Key("uid-1001"), policy)
+		redirect, ok := err.(rpcerr.Err)
+		if handled || !ok || redirect.Code() != actor.ErrorCodeActorRedirect || string(redirect.Detail()) != "player-1" {
 			t.Fatalf("policy=%d handled=%t error=%v", policy, handled, err)
 		}
 	}
-	if _, err := systemB.GetOrLoadActor(context.Background(), actorDef.Key("uid-1001")); !errors.Is(err, actor.ErrActorGuarded) {
+	if _, err := actorsB.GetOrLoadActor(context.Background(), actorDef.Key("uid-1001")); err == nil || err.(rpcerr.Err).Code() != actor.ErrorCodeActorRedirect {
 		t.Fatalf("player-2 load error=%v", err)
 	}
 	if loadA.Load() != 1 || loadB.Load() != 0 {
 		t.Fatalf("load count player-1=%d player-2=%d", loadA.Load(), loadB.Load())
 	}
 
-	if err := systemA.UnloadActor(actorDef.Key("uid-1001")); err != nil {
+	if err := actorsA.UnloadActor(actorDef.Key("uid-1001")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := systemB.GetOrLoadActor(context.Background(), actorDef.Key("uid-1001")); err != nil {
+	if _, err := actorsB.GetOrLoadActor(context.Background(), actorDef.Key("uid-1001")); err != nil {
 		t.Fatal(err)
 	}
 	if loadB.Load() != 1 {
@@ -210,8 +212,10 @@ func TestSystemDistributedSingletonUnderContention(t *testing.T) {
 			},
 		}, nil
 	}
-	systemA := actor.NewSystem(context.Background(), actorDef.Type(1), actorGuard.New("player-1", rc, actorGuard.WithTTL(600*time.Millisecond), actorGuard.WithKeyPrefix(prefix)), loader, actor.RunnerConfig{UpdateDt: time.Hour})
-	systemB := actor.NewSystem(context.Background(), actorDef.Type(1), actorGuard.New("player-2", rc, actorGuard.WithTTL(600*time.Millisecond), actorGuard.WithKeyPrefix(prefix)), loader, actor.RunnerConfig{UpdateDt: time.Hour})
+	systemA := actor.NewSystem(grpc.NewServer())
+	actorsA := actor.Register(systemA, actorDef.Type(1), actorGuard.New("player-1", rc, actorGuard.WithTTL(600*time.Millisecond), actorGuard.WithKeyPrefix(prefix)), loader, actor.RunnerConfig{UpdateDt: time.Hour})
+	systemB := actor.NewSystem(grpc.NewServer())
+	actorsB := actor.Register(systemB, actorDef.Type(1), actorGuard.New("player-2", rc, actorGuard.WithTTL(600*time.Millisecond), actorGuard.WithKeyPrefix(prefix)), loader, actor.RunnerConfig{UpdateDt: time.Hour})
 
 	runCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -219,12 +223,12 @@ func TestSystemDistributedSingletonUnderContention(t *testing.T) {
 	start := make(chan struct{})
 	var workers sync.WaitGroup
 
-	run := func(system *actor.System[*actorSimple.SimpleActor]) {
+	run := func(actors *actor.Manager[*actorSimple.SimpleActor]) {
 		defer workers.Done()
 		<-start
 		for runCtx.Err() == nil {
-			runner, err := system.GetOrLoadActor(runCtx, key)
-			if errors.Is(err, actor.ErrActorGuarded) {
+			runner, err := actors.GetOrLoadActor(runCtx, key)
+			if redirect, ok := err.(rpcerr.Err); ok && redirect.Code() == actor.ErrorCodeActorRedirect {
 				time.Sleep(time.Millisecond)
 				continue
 			}
@@ -250,7 +254,7 @@ func TestSystemDistributedSingletonUnderContention(t *testing.T) {
 				}
 				return
 			}
-			if err = system.UnloadActor(key); err != nil {
+			if err = actors.UnloadActor(key); err != nil {
 				select {
 				case errCh <- err:
 				default:
@@ -263,14 +267,14 @@ func TestSystemDistributedSingletonUnderContention(t *testing.T) {
 	}
 
 	workers.Add(2)
-	go run(systemA)
-	go run(systemB)
+	go run(actorsA)
+	go run(actorsB)
 	close(start)
 	workers.Wait()
-	if err := systemA.Stop(); err != nil {
+	if err := systemA.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if err := systemB.Stop(); err != nil {
+	if err := systemB.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -296,7 +300,8 @@ func TestSystemStopsActorAfterGuardLost(t *testing.T) {
 	pid := actorDef.PID{Type: actorDef.Type(1), Key: actorDef.Key("uid-1001")}
 	stopReason := make(chan actorDef.StopReason, 1)
 	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(600*time.Millisecond), actorGuard.WithKeyPrefix(prefix))
-	system := actor.NewSystem(context.Background(), pid.Type, guard, func(context.Context, actorDef.PID) (*actorSimple.SimpleActor, error) {
+	system := actor.NewSystem(grpc.NewServer())
+	actors := actor.Register(system, pid.Type, guard, func(context.Context, actorDef.PID) (*actorSimple.SimpleActor, error) {
 		return &actorSimple.SimpleActor{
 			MStop: func(ctx actorDef.ActorStopCtx) error {
 				stopReason <- ctx.Reason
@@ -305,7 +310,7 @@ func TestSystemStopsActorAfterGuardLost(t *testing.T) {
 		}, nil
 	}, actor.RunnerConfig{UpdateDt: time.Hour})
 
-	runner, err := system.GetOrLoadActor(context.Background(), pid.Key)
+	runner, err := actors.GetOrLoadActor(context.Background(), pid.Key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +326,7 @@ func TestSystemStopsActorAfterGuardLost(t *testing.T) {
 	if reason := <-stopReason; reason != actorDef.StopReasonLeaseLost {
 		t.Fatalf("stop reason=%d", reason)
 	}
-	_ = system.Stop()
+	_ = system.Shutdown(context.Background())
 	owner, err := rc.Get(context.Background(), guardKey).Result()
 	if err != nil {
 		t.Fatal(err)
@@ -331,34 +336,59 @@ func TestSystemStopsActorAfterGuardLost(t *testing.T) {
 	}
 }
 
+func TestSystemShutdownStopsActorWithoutRPCRoutes(t *testing.T) {
+	rc := localRedis(t)
+	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(actorGuardPrefix()))
+	stopped := make(chan actorDef.StopReason, 1)
+	system := actor.NewSystem(grpc.NewServer())
+	actors := actor.Register(system, actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*actorSimple.SimpleActor, error) {
+		return &actorSimple.SimpleActor{
+			MStop: func(ctx actorDef.ActorStopCtx) error {
+				stopped <- ctx.Reason
+				return nil
+			},
+		}, nil
+	}, actor.RunnerConfig{UpdateDt: time.Hour})
+
+	if _, err := actors.GetOrLoadActor(context.Background(), actorDef.Key("uid-1001")); err != nil {
+		t.Fatal(err)
+	}
+	if err := system.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if reason := <-stopped; reason != actorDef.StopReasonShutdown {
+		t.Fatalf("stop reason=%d", reason)
+	}
+}
+
 func TestActorRPCServerAskTellAndActivation(t *testing.T) {
 	rc := localRedis(t)
 	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(actorGuardPrefix()))
 	var loads atomic.Int32
-	system := actor.NewSystem(context.Background(), actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
+	system := actor.NewSystem(grpc.NewServer())
+	actors := actor.Register(system, actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
 		loads.Add(1)
 		return &messageActor{}, nil
 	}, actor.RunnerConfig{UpdateDt: time.Hour})
-	server := actor.NewServer(grpc.NewServer())
-	actor.NewRPCRouteGroup(server, system).Handle(1001, (*messageActor).rpc)
+	actors.RPC().Handle(1001, (*messageActor).rpc)
 	t.Cleanup(func() {
-		_ = server.Shutdown(context.Background())
+		_ = system.Shutdown(context.Background())
 	})
 
 	request := &pbActor.Request{ActorType: 1, ActorKey: "uid-1001", Activation: uint32(actor.ActivationIgnore), Route: 1001, Body: []byte{1}}
-	response, err := server.Ask(context.Background(), request)
+	response, err := system.Ask(context.Background(), request)
 	if err != nil || response.Handled {
 		t.Fatalf("ignore handled=%t error=%v", response.Handled, err)
 	}
 	request.Activation = uint32(actor.ActivationRequire)
-	response, err = server.Ask(context.Background(), request)
-	var rpcError *rpc.Error
-	if !errors.As(err, &rpcError) || rpcError.Code != actor.ErrorCodeActorNotActive {
+	response, err = system.Ask(context.Background(), request)
+	rpcError, ok := err.(rpcerr.Err)
+	if !ok || rpcError.Code() != actor.ErrorCodeActorNotActive {
 		t.Fatalf("require error=%v", err)
 	}
 
 	request.Activation = uint32(actor.ActivationLoad)
-	response, err = server.Ask(context.Background(), request)
+	response, err = system.Ask(context.Background(), request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,11 +401,11 @@ func TestActorRPCServerAskTellAndActivation(t *testing.T) {
 
 	request.Activation = uint32(actor.ActivationRequire)
 	request.Body = []byte{2}
-	if _, err = server.Tell(context.Background(), request); err != nil {
+	if _, err = system.Tell(context.Background(), request); err != nil {
 		t.Fatal(err)
 	}
 	request.Body = []byte{0}
-	response, err = server.Ask(context.Background(), request)
+	response, err = system.Ask(context.Background(), request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -387,22 +417,22 @@ func TestActorRPCServerAskTellAndActivation(t *testing.T) {
 func TestActorRPCServerHandlerPanic(t *testing.T) {
 	rc := localRedis(t)
 	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(actorGuardPrefix()))
-	system := actor.NewSystem(context.Background(), actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
+	system := actor.NewSystem(grpc.NewServer())
+	actors := actor.Register(system, actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
 		return &messageActor{}, nil
 	}, actor.RunnerConfig{UpdateDt: time.Hour})
-	server := actor.NewServer(grpc.NewServer())
-	actor.NewRPCRouteGroup(server, system).Handle(1001, func(*messageActor, actorDef.PID, context.Context, actor.Message) ([]byte, error) {
+	actors.RPC().Handle(1001, func(*messageActor, actorDef.PID, context.Context, actor.Message) ([]byte, error) {
 		panic("handler panic")
 	})
 	t.Cleanup(func() {
-		_ = server.Shutdown(context.Background())
+		_ = system.Shutdown(context.Background())
 	})
 
-	_, err := server.Ask(context.Background(), &pbActor.Request{
+	_, err := system.Ask(context.Background(), &pbActor.Request{
 		ActorType: 1, ActorKey: "uid-1001", Activation: uint32(actor.ActivationLoad), Route: 1001,
 	})
-	var rpcError *rpc.Error
-	if !errors.As(err, &rpcError) || rpcError.Code != actor.ErrorCodeExecutionFailed {
+	rpcError, ok := err.(rpcerr.Err)
+	if !ok || rpcError.Code() != actor.ErrorCodeExecutionFailed {
 		t.Fatalf("handler error=%v", err)
 	}
 }
@@ -410,22 +440,22 @@ func TestActorRPCServerHandlerPanic(t *testing.T) {
 func TestActorRPCBusinessError(t *testing.T) {
 	rc := localRedis(t)
 	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(actorGuardPrefix()))
-	system := actor.NewSystem(context.Background(), actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
+	system := actor.NewSystem(grpc.NewServer())
+	actors := actor.Register(system, actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
 		return &messageActor{}, nil
 	}, actor.RunnerConfig{UpdateDt: time.Hour})
-	server := actor.NewServer(grpc.NewServer())
-	actor.NewRPCRouteGroup(server, system).Handle(1001, func(*messageActor, actorDef.PID, context.Context, actor.Message) ([]byte, error) {
-		return nil, rpc.NewError(10001, "coin not enough")
+	actors.RPC().Handle(1001, func(*messageActor, actorDef.PID, context.Context, actor.Message) ([]byte, error) {
+		return nil, rpcerr.New(10001, "coin not enough")
 	})
 	t.Cleanup(func() {
-		_ = server.Shutdown(context.Background())
+		_ = system.Shutdown(context.Background())
 	})
 
-	_, err := server.Ask(context.Background(), &pbActor.Request{
+	_, err := system.Ask(context.Background(), &pbActor.Request{
 		ActorType: 1, ActorKey: "uid-1001", Activation: uint32(actor.ActivationLoad), Route: 1001,
 	})
-	var rpcError *rpc.Error
-	if !errors.As(err, &rpcError) || rpcError.Code != 10001 || rpcError.Message != "coin not enough" {
+	rpcError, ok := err.(rpcerr.Err)
+	if !ok || rpcError.Code() != 10001 || rpcError.Message() != "coin not enough" {
 		t.Fatalf("error=%v", err)
 	}
 }
@@ -433,18 +463,19 @@ func TestActorRPCBusinessError(t *testing.T) {
 func TestActorRouteGroup(t *testing.T) {
 	rc := localRedis(t)
 	guard := actorGuard.New("player-1", rc, actorGuard.WithTTL(time.Second), actorGuard.WithKeyPrefix(actorGuardPrefix()))
-	system := actor.NewSystem(context.Background(), actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
+	system := actor.NewSystem(grpc.NewServer())
+	actors := actor.Register(system, actorDef.Type(1), guard, func(context.Context, actorDef.PID) (*messageActor, error) {
 		return &messageActor{}, nil
 	}, actor.RunnerConfig{UpdateDt: time.Hour})
 	t.Cleanup(func() {
-		_ = system.Stop()
+		_ = system.Shutdown(context.Background())
 	})
 
 	router := node.NewRouter()
 	received := make(chan *node.Context, 4)
 	receivedPID := make(chan actorDef.PID, 4)
 	middlewareOrder := make(chan string, 16)
-	routes := actor.NewRouteGroup(router, system, actor.ActivationLoad)
+	routes := actor.NewRouteGroup(router, actors, actor.ActivationLoad)
 	routes.Use(func(next actor.Handler[*messageActor]) actor.Handler[*messageActor] {
 		return func(actorValue *messageActor, pid actorDef.PID, ctx *node.Context) error {
 			middlewareOrder <- "parent-before"

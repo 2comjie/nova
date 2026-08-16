@@ -2,13 +2,12 @@ package actor
 
 import (
 	"context"
-	"errors"
 
 	"github.com/2comjie/wali/actor/actorDef"
 	pbActor "github.com/2comjie/wali/internal/pb/transport/actor"
-	"github.com/2comjie/wali/rpc"
 	rpcClient "github.com/2comjie/wali/rpc/client"
 	"github.com/2comjie/wali/rpc/lx"
+	"github.com/2comjie/wali/rpc/rpcerr"
 )
 
 type Client struct {
@@ -30,7 +29,7 @@ func (c *Client) Ref(service string, pid actorDef.PID, policy ActivationPolicy) 
 	return Ref{client: c, service: service, pid: pid, policy: policy}
 }
 
-func (r Ref) Ask(ctx context.Context, message Message) ([]byte, bool, error) {
+func (r Ref) Ask(ctx context.Context, message Message) ([]byte, bool, rpcerr.Err) {
 	request := &pbActor.Request{
 		ActorType:  int32(r.pid.Type),
 		ActorKey:   string(r.pid.Key),
@@ -39,9 +38,8 @@ func (r Ref) Ask(ctx context.Context, message Message) ([]byte, bool, error) {
 		Body:       message.Body,
 	}
 	response, err := r.client.rpc.Ask(lx.WithActor(ctx, r.service, string(r.pid.Key)), request)
-	var rpcError *rpc.Error
-	if errors.As(err, &rpcError) && rpcError.Code == ErrorCodeActorRedirect {
-		response, err = r.client.rpc.Ask(lx.WithNode(ctx, string(rpcError.Detail)), request)
+	if err != nil && err.Code() == ErrorCodeActorRedirect {
+		response, err = r.client.rpc.Ask(lx.WithNode(ctx, string(err.Detail())), request)
 	}
 	if err != nil {
 		return nil, false, err
@@ -49,7 +47,7 @@ func (r Ref) Ask(ctx context.Context, message Message) ([]byte, bool, error) {
 	return response.Body, response.Handled, nil
 }
 
-func (r Ref) Tell(ctx context.Context, message Message) error {
+func (r Ref) Tell(ctx context.Context, message Message) rpcerr.Err {
 	request := &pbActor.Request{
 		ActorType:  int32(r.pid.Type),
 		ActorKey:   string(r.pid.Key),
@@ -58,9 +56,8 @@ func (r Ref) Tell(ctx context.Context, message Message) error {
 		Body:       message.Body,
 	}
 	_, err := r.client.rpc.Tell(lx.WithActor(ctx, r.service, string(r.pid.Key)), request)
-	var rpcError *rpc.Error
-	if errors.As(err, &rpcError) && rpcError.Code == ErrorCodeActorRedirect {
-		_, err = r.client.rpc.Tell(lx.WithNode(ctx, string(rpcError.Detail)), request)
+	if err != nil && err.Code() == ErrorCodeActorRedirect {
+		_, err = r.client.rpc.Tell(lx.WithNode(ctx, string(err.Detail())), request)
 	}
 	return err
 }

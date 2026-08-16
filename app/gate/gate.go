@@ -428,17 +428,15 @@ func (g *Gate) forward(ctx *Context) error {
 	}
 	if !ctx.NeedReply() {
 		_, err := g.nodeClient.Tell(rpcCtx, request)
-		var rpcError *rpc.Error
-		if errors.As(err, &rpcError) && rpcError.Code == rpc.ErrorCodeRedirect {
-			_, err = g.nodeClient.Tell(lx.WithNode(ctx.Context, string(rpcError.Detail)), request)
+		if err != nil && err.Code() == rpc.ErrorCodeRedirect {
+			_, err = g.nodeClient.Tell(lx.WithNode(ctx.Context, string(err.Detail())), request)
 		}
 		return err
 	}
 
 	response, err := g.nodeClient.Call(rpcCtx, request)
-	var rpcError *rpc.Error
-	if errors.As(err, &rpcError) && rpcError.Code == rpc.ErrorCodeRedirect {
-		response, err = g.nodeClient.Call(lx.WithNode(ctx.Context, string(rpcError.Detail)), request)
+	if err != nil && err.Code() == rpc.ErrorCodeRedirect {
+		response, err = g.nodeClient.Call(lx.WithNode(ctx.Context, string(err.Detail())), request)
 	}
 	if err != nil {
 		return err
