@@ -177,7 +177,7 @@ var File_transport_node_node_proto protoreflect.FileDescriptor
 
 const file_transport_node_node_proto_rawDesc = "" +
 	"\n" +
-	"\x19transport/node/node.proto\x12\x13wali.transport.node\"\xb8\x01\n" +
+	"\x19transport/node/node.proto\x12\x13nova.transport.node\"\xb8\x01\n" +
 	"\aRequest\x12\x10\n" +
 	"\x03uid\x18\x01 \x01(\tR\x03uid\x12\x14\n" +
 	"\x05route\x18\x02 \x01(\rR\x05route\x12\x12\n" +
@@ -191,8 +191,8 @@ const file_transport_node_node_proto_rawDesc = "" +
 	"\x11node_service_name\x18\x03 \x01(\tR\x0fnodeServiceName\x12(\n" +
 	"\x10node_instance_id\x18\x04 \x01(\tR\x0enodeInstanceId2\x90\x01\n" +
 	"\x04Node\x12C\n" +
-	"\x04Call\x12\x1c.wali.transport.node.Request\x1a\x1d.wali.transport.node.Response\x12C\n" +
-	"\x04Tell\x12\x1c.wali.transport.node.Request\x1a\x1d.wali.transport.node.ResponseB9Z7github.com/2comjie/wali/internal/pb/transport/node;nodeb\x06proto3"
+	"\x04Call\x12\x1c.nova.transport.node.Request\x1a\x1d.nova.transport.node.Response\x12C\n" +
+	"\x04Tell\x12\x1c.nova.transport.node.Request\x1a\x1d.nova.transport.node.ResponseB9Z7github.com/2comjie/nova/internal/pb/transport/node;nodeb\x06proto3"
 
 var (
 	file_transport_node_node_proto_rawDescOnce sync.Once
@@ -208,14 +208,14 @@ func file_transport_node_node_proto_rawDescGZIP() []byte {
 
 var file_transport_node_node_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_transport_node_node_proto_goTypes = []any{
-	(*Request)(nil),  // 0: wali.transport.node.Request
-	(*Response)(nil), // 1: wali.transport.node.Response
+	(*Request)(nil),  // 0: nova.transport.node.Request
+	(*Response)(nil), // 1: nova.transport.node.Response
 }
 var file_transport_node_node_proto_depIdxs = []int32{
-	0, // 0: wali.transport.node.Node.Call:input_type -> wali.transport.node.Request
-	0, // 1: wali.transport.node.Node.Tell:input_type -> wali.transport.node.Request
-	1, // 2: wali.transport.node.Node.Call:output_type -> wali.transport.node.Response
-	1, // 3: wali.transport.node.Node.Tell:output_type -> wali.transport.node.Response
+	0, // 0: nova.transport.node.Node.Call:input_type -> nova.transport.node.Request
+	0, // 1: nova.transport.node.Node.Tell:input_type -> nova.transport.node.Request
+	1, // 2: nova.transport.node.Node.Call:output_type -> nova.transport.node.Response
+	1, // 3: nova.transport.node.Node.Tell:output_type -> nova.transport.node.Response
 	2, // [2:4] is the sub-list for method output_type
 	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name

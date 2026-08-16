@@ -3,7 +3,7 @@ package network
 import (
 	"fmt"
 
-	"github.com/2comjie/wali/packet"
+	"github.com/2comjie/nova/packet"
 )
 
 func encodeBody(options options, messageType packet.Type, route uint32, seq uint64, body []byte) ([]byte, error) {

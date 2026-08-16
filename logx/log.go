@@ -1,8 +1,8 @@
 package logx
 
 import (
-	"github.com/2comjie/wali/logx/logdef"
-	"github.com/2comjie/wali/logx/stdlog"
+	"github.com/2comjie/nova/logx/logdef"
+	"github.com/2comjie/nova/logx/stdlog"
 )
 
 var _globalLog logdef.ILogger = nil

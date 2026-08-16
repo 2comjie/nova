@@ -5,11 +5,11 @@ import (
 	"errors"
 	"maps"
 
-	nodeapp "github.com/2comjie/wali/app/node"
-	"github.com/2comjie/wali/config"
-	"github.com/2comjie/wali/core/endpoint"
-	pbGate "github.com/2comjie/wali/internal/pb/transport/gate"
-	"github.com/2comjie/wali/locator"
+	nodeapp "github.com/2comjie/nova/app/node"
+	"github.com/2comjie/nova/config"
+	"github.com/2comjie/nova/core/endpoint"
+	pbGate "github.com/2comjie/nova/internal/pb/transport/gate"
+	"github.com/2comjie/nova/locator"
 )
 
 type NodeApp struct {

@@ -4,7 +4,7 @@ import "testing"
 
 func TestXmlCodecUnmarshalMap(t *testing.T) {
 	var got map[string]any
-	data := []byte(`<?xml version="1.0" encoding="UTF-8"?><root><name>wali</name><port>8080</port></root>`)
+	data := []byte(`<?xml version="1.0" encoding="UTF-8"?><root><name>nova</name><port>8080</port></root>`)
 
 	if err := (&XmlCodec{}).Unmarshal(data, &got); err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
@@ -14,8 +14,8 @@ func TestXmlCodecUnmarshalMap(t *testing.T) {
 	if !ok {
 		t.Fatalf("got root = %#v, want map[string]any", got["root"])
 	}
-	if root["name"] != "wali" {
-		t.Fatalf("got root.name = %#v, want %q", root["name"], "wali")
+	if root["name"] != "nova" {
+		t.Fatalf("got root.name = %#v, want %q", root["name"], "nova")
 	}
 	if root["port"] != "8080" {
 		t.Fatalf("got root.port = %#v, want %q", root["port"], "8080")

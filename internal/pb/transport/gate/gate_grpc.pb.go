@@ -8,9 +8,9 @@ package gate
 
 import (
 	context "context"
-	rpc "github.com/2comjie/wali/rpc"
-	client "github.com/2comjie/wali/rpc/client"
-	rpcerr "github.com/2comjie/wali/rpc/rpcerr"
+	rpc "github.com/2comjie/nova/rpc"
+	client "github.com/2comjie/nova/rpc/client"
+	rpcerr "github.com/2comjie/nova/rpc/rpcerr"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
@@ -22,11 +22,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Gate_Push_FullMethodName      = "/wali.transport.gate.Gate/Push"
-	Gate_Kick_FullMethodName      = "/wali.transport.gate.Gate/Kick"
-	Gate_Broadcast_FullMethodName = "/wali.transport.gate.Gate/Broadcast"
-	Gate_MultiPush_FullMethodName = "/wali.transport.gate.Gate/MultiPush"
-	Gate_MockCall_FullMethodName  = "/wali.transport.gate.Gate/MockCall"
+	Gate_Push_FullMethodName      = "/nova.transport.gate.Gate/Push"
+	Gate_Kick_FullMethodName      = "/nova.transport.gate.Gate/Kick"
+	Gate_Broadcast_FullMethodName = "/nova.transport.gate.Gate/Broadcast"
+	Gate_MultiPush_FullMethodName = "/nova.transport.gate.Gate/MultiPush"
+	Gate_MockCall_FullMethodName  = "/nova.transport.gate.Gate/MockCall"
 )
 
 // GateClient is the client API for Gate service.
@@ -277,7 +277,7 @@ func _Gate_MockCall_Handler(srv interface{}, ctx context.Context, dec func(inter
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Gate_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "wali.transport.gate.Gate",
+	ServiceName: "nova.transport.gate.Gate",
 	HandlerType: (*GateServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

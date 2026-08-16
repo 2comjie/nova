@@ -1,6 +1,6 @@
 package help
 
-import "github.com/2comjie/wali/logx"
+import "github.com/2comjie/nova/logx"
 
 func SafeRun(f func()) {
 	defer func() {

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/2comjie/wali/core/util"
+	"github.com/2comjie/nova/core/util"
 )
 
 type Bytes struct {

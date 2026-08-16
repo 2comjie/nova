@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package wali.transport.gate;
+package nova.transport.gate;
 
-option go_package = "github.com/2comjie/wali/internal/pb/transport/gate;gate";
+option go_package = "github.com/2comjie/nova/internal/pb/transport/gate;gate";
 
 import "google/protobuf/empty.proto";
 

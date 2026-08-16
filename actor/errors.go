@@ -1,8 +1,8 @@
 package actor
 
 import (
-	"github.com/2comjie/wali/rpc"
-	"github.com/2comjie/wali/rpc/rpcerr"
+	"github.com/2comjie/nova/rpc"
+	"github.com/2comjie/nova/rpc/rpcerr"
 )
 
 const (

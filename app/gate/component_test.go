@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/2comjie/wali/app"
+	"github.com/2comjie/nova/app"
 )
 
 func TestAddComponentBeforeStart(t *testing.T) {

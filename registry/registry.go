@@ -3,7 +3,7 @@ package registry
 import (
 	"context"
 
-	"github.com/2comjie/wali/core/endpoint"
+	"github.com/2comjie/nova/core/endpoint"
 )
 
 type Registry interface {

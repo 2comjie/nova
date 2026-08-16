@@ -3,15 +3,15 @@ package main
 import (
 	"errors"
 
-	"github.com/2comjie/wali/config"
-	"github.com/2comjie/wali/config/file"
-	"github.com/2comjie/wali/deploy"
-	"github.com/2comjie/wali/examples/game/shared"
-	"github.com/2comjie/wali/flag"
-	"github.com/2comjie/wali/locator"
-	"github.com/2comjie/wali/logx"
-	"github.com/2comjie/wali/network"
-	nettcp "github.com/2comjie/wali/network/transport/tcp"
+	"github.com/2comjie/nova/config"
+	"github.com/2comjie/nova/config/file"
+	"github.com/2comjie/nova/deploy"
+	"github.com/2comjie/nova/examples/game/shared"
+	"github.com/2comjie/nova/flag"
+	"github.com/2comjie/nova/locator"
+	"github.com/2comjie/nova/logx"
+	"github.com/2comjie/nova/network"
+	nettcp "github.com/2comjie/nova/network/transport/tcp"
 )
 
 func main() {

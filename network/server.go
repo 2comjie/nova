@@ -7,10 +7,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/2comjie/wali/core/help"
-	"github.com/2comjie/wali/network/protocol"
-	"github.com/2comjie/wali/network/transport"
-	"github.com/2comjie/wali/packet"
+	"github.com/2comjie/nova/core/help"
+	"github.com/2comjie/nova/network/protocol"
+	"github.com/2comjie/nova/network/transport"
+	"github.com/2comjie/nova/packet"
 	"google.golang.org/protobuf/proto"
 )
 

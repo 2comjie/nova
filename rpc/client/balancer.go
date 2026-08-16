@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/2comjie/wali/core/endpoint"
+	"github.com/2comjie/nova/core/endpoint"
 )
 
 // Balancer 从当前服务的可用实例中选择一个实例。

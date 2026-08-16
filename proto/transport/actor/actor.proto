@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package wali.transport.actor;
+package nova.transport.actor;
 
-option go_package = "github.com/2comjie/wali/internal/pb/transport/actor;actor";
+option go_package = "github.com/2comjie/nova/internal/pb/transport/actor;actor";
 
 message Request {
   int32 actor_type = 1;

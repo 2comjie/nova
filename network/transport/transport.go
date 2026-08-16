@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net"
 
-	"github.com/2comjie/wali/packet"
+	"github.com/2comjie/nova/packet"
 )
 
 type Type string

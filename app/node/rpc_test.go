@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/2comjie/wali/core/endpoint"
-	pbNode "github.com/2comjie/wali/internal/pb/transport/node"
-	"github.com/2comjie/wali/locator"
-	"github.com/2comjie/wali/rpc"
+	"github.com/2comjie/nova/core/endpoint"
+	pbNode "github.com/2comjie/nova/internal/pb/transport/node"
+	"github.com/2comjie/nova/locator"
+	"github.com/2comjie/nova/rpc"
 )
 
 type redirectError string

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/2comjie/wali/config"
+	"github.com/2comjie/nova/config"
 )
 
 type source struct {

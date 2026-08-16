@@ -8,9 +8,9 @@ package node
 
 import (
 	context "context"
-	rpc "github.com/2comjie/wali/rpc"
-	client "github.com/2comjie/wali/rpc/client"
-	rpcerr "github.com/2comjie/wali/rpc/rpcerr"
+	rpc "github.com/2comjie/nova/rpc"
+	client "github.com/2comjie/nova/rpc/client"
+	rpcerr "github.com/2comjie/nova/rpc/rpcerr"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 )
@@ -21,8 +21,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Node_Call_FullMethodName = "/wali.transport.node.Node/Call"
-	Node_Tell_FullMethodName = "/wali.transport.node.Node/Tell"
+	Node_Call_FullMethodName = "/nova.transport.node.Node/Call"
+	Node_Tell_FullMethodName = "/nova.transport.node.Node/Tell"
 )
 
 // NodeClient is the client API for Node service.
@@ -156,7 +156,7 @@ func _Node_Tell_Handler(srv interface{}, ctx context.Context, dec func(interface
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Node_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "wali.transport.node.Node",
+	ServiceName: "nova.transport.node.Node",
 	HandlerType: (*NodeServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

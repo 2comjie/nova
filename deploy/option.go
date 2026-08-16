@@ -4,14 +4,14 @@ import (
 	"net"
 	"time"
 
-	"github.com/2comjie/wali/app"
-	"github.com/2comjie/wali/app/gate"
-	"github.com/2comjie/wali/app/node"
-	"github.com/2comjie/wali/config"
-	"github.com/2comjie/wali/locator"
-	"github.com/2comjie/wali/network"
-	"github.com/2comjie/wali/registry"
-	rpcclient "github.com/2comjie/wali/rpc/client"
+	"github.com/2comjie/nova/app"
+	"github.com/2comjie/nova/app/gate"
+	"github.com/2comjie/nova/app/node"
+	"github.com/2comjie/nova/config"
+	"github.com/2comjie/nova/locator"
+	"github.com/2comjie/nova/network"
+	"github.com/2comjie/nova/registry"
+	rpcclient "github.com/2comjie/nova/rpc/client"
 	"google.golang.org/grpc"
 )
 

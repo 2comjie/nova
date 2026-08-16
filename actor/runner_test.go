@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/2comjie/wali/actor/actorDef"
-	actorSimple "github.com/2comjie/wali/actor/simple"
+	"github.com/2comjie/nova/actor/actorDef"
+	actorSimple "github.com/2comjie/nova/actor/simple"
 )
 
 func TestRunnerDrainsAcceptedMessagesBeforeUnload(t *testing.T) {

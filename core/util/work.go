@@ -3,7 +3,7 @@ package util
 import (
 	"sync"
 
-	"github.com/2comjie/wali/core/help"
+	"github.com/2comjie/nova/core/help"
 )
 
 func Shard[T, R any](workerCount int, worker func(workerID int) (T, bool), initial R, merge func(result R, value T) R) R {

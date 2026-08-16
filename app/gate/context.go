@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/2comjie/wali/network"
+	"github.com/2comjie/nova/network"
 )
 
 var (

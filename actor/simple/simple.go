@@ -3,7 +3,7 @@ package actorSimple
 import (
 	"time"
 
-	"github.com/2comjie/wali/actor/actorDef"
+	"github.com/2comjie/nova/actor/actorDef"
 )
 
 type SimpleActor struct {

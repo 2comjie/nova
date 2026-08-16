@@ -8,9 +8,9 @@ package actor
 
 import (
 	context "context"
-	rpc "github.com/2comjie/wali/rpc"
-	client "github.com/2comjie/wali/rpc/client"
-	rpcerr "github.com/2comjie/wali/rpc/rpcerr"
+	rpc "github.com/2comjie/nova/rpc"
+	client "github.com/2comjie/nova/rpc/client"
+	rpcerr "github.com/2comjie/nova/rpc/rpcerr"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 )
@@ -21,8 +21,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Actor_Ask_FullMethodName  = "/wali.transport.actor.Actor/Ask"
-	Actor_Tell_FullMethodName = "/wali.transport.actor.Actor/Tell"
+	Actor_Ask_FullMethodName  = "/nova.transport.actor.Actor/Ask"
+	Actor_Tell_FullMethodName = "/nova.transport.actor.Actor/Tell"
 )
 
 // ActorClient is the client API for Actor service.
@@ -156,7 +156,7 @@ func _Actor_Tell_Handler(srv interface{}, ctx context.Context, dec func(interfac
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Actor_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "wali.transport.actor.Actor",
+	ServiceName: "nova.transport.actor.Actor",
 	HandlerType: (*ActorServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

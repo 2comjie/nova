@@ -1,11 +1,11 @@
-module github.com/2comjie/wali/examples
+module github.com/2comjie/nova/examples
 
 go 1.24.3
 
 require (
-	github.com/2comjie/wali v0.1.2
-	github.com/2comjie/wali/locator/redis v0.1.2
-	github.com/2comjie/wali/registry/redis v0.1.2
+	github.com/2comjie/nova v0.2.0
+	github.com/2comjie/nova/locator/redis v0.2.0
+	github.com/2comjie/nova/registry/redis v0.2.0
 	github.com/redis/go-redis/v9 v9.19.0
 )
 

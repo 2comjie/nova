@@ -3,7 +3,7 @@ package rpc
 import (
 	"errors"
 
-	"github.com/2comjie/wali/rpc/rpcerr"
+	"github.com/2comjie/nova/rpc/rpcerr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

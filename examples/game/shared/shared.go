@@ -1,11 +1,11 @@
 package shared
 
 import (
-	"github.com/2comjie/wali/deploy"
-	"github.com/2comjie/wali/locator"
-	redisLocator "github.com/2comjie/wali/locator/redis"
-	"github.com/2comjie/wali/registry"
-	redisRegistry "github.com/2comjie/wali/registry/redis"
+	"github.com/2comjie/nova/deploy"
+	"github.com/2comjie/nova/locator"
+	redisLocator "github.com/2comjie/nova/locator/redis"
+	"github.com/2comjie/nova/registry"
+	redisRegistry "github.com/2comjie/nova/registry/redis"
 	"github.com/redis/go-redis/v9"
 )
 

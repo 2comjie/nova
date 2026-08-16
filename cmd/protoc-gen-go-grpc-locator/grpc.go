@@ -32,9 +32,9 @@ const (
 	contextPackage    = protogen.GoImportPath("context")
 	grpcPackage       = protogen.GoImportPath("google.golang.org/grpc")
 	codesPackage      = protogen.GoImportPath("google.golang.org/grpc/codes")
-	waliClientPackage = protogen.GoImportPath("github.com/2comjie/wali/rpc/client")
-	waliRPCPackage    = protogen.GoImportPath("github.com/2comjie/wali/rpc")
-	waliRPCErrPackage = protogen.GoImportPath("github.com/2comjie/wali/rpc/rpcerr")
+	novaClientPackage = protogen.GoImportPath("github.com/2comjie/nova/rpc/client")
+	novaRPCPackage    = protogen.GoImportPath("github.com/2comjie/nova/rpc")
+	novaRPCErrPackage = protogen.GoImportPath("github.com/2comjie/nova/rpc/rpcerr")
 )
 
 type serviceGenerateHelperInterface interface {
@@ -70,7 +70,7 @@ func (serviceGenerateHelper) genFullMethods(g *protogen.GeneratedFile, service *
 
 func (serviceGenerateHelper) generateClientStruct(g *protogen.GeneratedFile, clientName string) {
 	g.P("type ", unexport(clientName), " struct {")
-	g.P("cc *", waliClientPackage.Ident("Client"))
+	g.P("cc *", novaClientPackage.Ident("Client"))
 	g.P("}")
 	g.P()
 }
@@ -99,7 +99,7 @@ func (serviceGenerateHelper) generateUnimplementedServerType(_ *protogen.Plugin,
 			nilArg = "nil,"
 		}
 		g.P("func (Unimplemented", serverType, ") ", serverSignature(g, method), "{")
-		g.P("return ", nilArg, waliRPCErrPackage.Ident("NewGRPC"), "(", codesPackage.Ident("Unimplemented"), `, "method `, method.GoName, ` not implemented")`)
+		g.P("return ", nilArg, novaRPCErrPackage.Ident("NewGRPC"), "(", codesPackage.Ident("Unimplemented"), `, "method `, method.GoName, ` not implemented")`)
 		g.P("}")
 	}
 	if *requireUnimplemented {
@@ -237,7 +237,7 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
 		g.P(deprecationComment)
 	}
-	g.P("func New", clientName, " (cc *", waliClientPackage.Ident("Client"), ") ", clientName, " {")
+	g.P("func New", clientName, " (cc *", novaClientPackage.Ident("Client"), ") ", clientName, " {")
 	helper.generateNewClientDefinitions(g, service, clientName)
 	g.P("}")
 	g.P()
@@ -332,7 +332,7 @@ func clientSignature(g *protogen.GeneratedFile, method *protogen.Method) string 
 	} else {
 		s += clientStreamInterface(g, method)
 	}
-	s += ", " + g.QualifiedGoIdent(waliRPCErrPackage.Ident("Err")) + ")"
+	s += ", " + g.QualifiedGoIdent(novaRPCErrPackage.Ident("Err")) + ")"
 	return s
 }
 
@@ -356,14 +356,14 @@ func genClientMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 	}
 	g.P("func (c *", unexport(service.GoName), "Client) ", clientSignature(g, method), "{")
 	g.P("cOpts := append([]", grpcPackage.Ident("CallOption"), "{", grpcPackage.Ident("StaticMethod()"), "}, opts...)")
-	// Resolve the target connection through wali's rpc/client.Client, which
+	// Resolve the target connection through nova's rpc/client.Client, which
 	// dispatches according to the lx strategy carried in ctx.
 	g.P("conn, err := c.cc.Conn(ctx)")
-	g.P("if err != nil { return nil, ", waliRPCPackage.Ident("DecodeErr"), "(err) }")
+	g.P("if err != nil { return nil, ", novaRPCPackage.Ident("DecodeErr"), "(err) }")
 	if !method.Desc.IsStreamingServer() && !method.Desc.IsStreamingClient() {
 		g.P("out := new(", method.Output.GoIdent, ")")
 		g.P(`err = conn.Invoke(ctx, `, fmSymbol, `, in, out, cOpts...)`)
-		g.P("if err != nil { return nil, ", waliRPCPackage.Ident("DecodeErr"), "(err) }")
+		g.P("if err != nil { return nil, ", novaRPCPackage.Ident("DecodeErr"), "(err) }")
 		g.P("return out, nil")
 		g.P("}")
 		g.P()
@@ -374,11 +374,11 @@ func genClientMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 	streamImpl := g.QualifiedGoIdent(grpcPackage.Ident("GenericClientStream")) + "[" + typeParam + "]"
 	serviceDescVar := service.GoName + "_ServiceDesc"
 	g.P("stream, err := conn.NewStream(ctx, &", serviceDescVar, ".Streams[", index, `], `, fmSymbol, `, cOpts...)`)
-	g.P("if err != nil { return nil, ", waliRPCPackage.Ident("DecodeErr"), "(err) }")
-	g.P("x := &", streamImpl, "{ClientStream: ", waliRPCPackage.Ident("WrapClientStream"), "(stream)}")
+	g.P("if err != nil { return nil, ", novaRPCPackage.Ident("DecodeErr"), "(err) }")
+	g.P("x := &", streamImpl, "{ClientStream: ", novaRPCPackage.Ident("WrapClientStream"), "(stream)}")
 	if !method.Desc.IsStreamingClient() {
-		g.P("if err := x.ClientStream.SendMsg(in); err != nil { return nil, ", waliRPCPackage.Ident("DecodeErr"), "(err) }")
-		g.P("if err := x.ClientStream.CloseSend(); err != nil { return nil, ", waliRPCPackage.Ident("DecodeErr"), "(err) }")
+		g.P("if err := x.ClientStream.SendMsg(in); err != nil { return nil, ", novaRPCPackage.Ident("DecodeErr"), "(err) }")
+		g.P("if err := x.ClientStream.CloseSend(); err != nil { return nil, ", novaRPCPackage.Ident("DecodeErr"), "(err) }")
 	}
 	g.P("return x, nil")
 	g.P("}")
@@ -392,10 +392,10 @@ func genClientMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 
 func serverSignature(g *protogen.GeneratedFile, method *protogen.Method) string {
 	var reqArgs []string
-	ret := g.QualifiedGoIdent(waliRPCErrPackage.Ident("Err"))
+	ret := g.QualifiedGoIdent(novaRPCErrPackage.Ident("Err"))
 	if !method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer() {
 		reqArgs = append(reqArgs, g.QualifiedGoIdent(contextPackage.Ident("Context")))
-		ret = "(*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", " + g.QualifiedGoIdent(waliRPCErrPackage.Ident("Err")) + ")"
+		ret = "(*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", " + g.QualifiedGoIdent(novaRPCErrPackage.Ident("Err")) + ")"
 	}
 	if !method.Desc.IsStreamingClient() {
 		reqArgs = append(reqArgs, "*"+g.QualifiedGoIdent(method.Input.GoIdent))
@@ -469,7 +469,7 @@ func genServerMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 		g.P("if err := dec(in); err != nil { return nil, err }")
 		g.P("if interceptor == nil {")
 		g.P("response, err := srv.(", service.GoName, "Server).", method.GoName, "(ctx, in)")
-		g.P("return response, ", waliRPCPackage.Ident("EncodeError"), "(err)")
+		g.P("return response, ", novaRPCPackage.Ident("EncodeError"), "(err)")
 		g.P("}")
 		g.P("info := &", grpcPackage.Ident("UnaryServerInfo"), "{")
 		g.P("Server: srv,")
@@ -480,7 +480,7 @@ func genServerMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 		g.P("return srv.(", service.GoName, "Server).", method.GoName, "(ctx, req.(*", method.Input.GoIdent, "))")
 		g.P("}")
 		g.P("response, err := interceptor(ctx, in, info, handler)")
-		g.P("return response, ", waliRPCPackage.Ident("EncodeError"), "(err)")
+		g.P("return response, ", novaRPCPackage.Ident("EncodeError"), "(err)")
 		g.P("}")
 		g.P()
 		return hname
@@ -497,7 +497,7 @@ func genServerMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 	} else {
 		g.P("err := srv.(", service.GoName, "Server).", method.GoName, "(&", streamImpl, "{ServerStream: stream})")
 	}
-	g.P("return ", waliRPCPackage.Ident("EncodeError"), "(err)")
+	g.P("return ", novaRPCPackage.Ident("EncodeError"), "(err)")
 	g.P("}")
 	g.P()
 

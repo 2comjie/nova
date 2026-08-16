@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package wali.rpc;
+package nova.rpc;
 
-option go_package = "github.com/2comjie/wali/rpc;rpc";
+option go_package = "github.com/2comjie/nova/rpc;rpc";
 
 message ErrorDetail {
   uint32 code = 1;

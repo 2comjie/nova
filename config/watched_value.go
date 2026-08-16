@@ -5,7 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/2comjie/wali/logx"
+	"github.com/2comjie/nova/logx"
 )
 
 // WatchedValue 保存指定配置键的类型化只读快照，并在配置变化时原子替换。

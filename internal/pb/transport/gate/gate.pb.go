@@ -530,7 +530,7 @@ var File_transport_gate_gate_proto protoreflect.FileDescriptor
 
 const file_transport_gate_gate_proto_rawDesc = "" +
 	"\n" +
-	"\x19transport/gate/gate.proto\x12\x13wali.transport.gate\x1a\x1bgoogle/protobuf/empty.proto\"\x9f\x01\n" +
+	"\x19transport/gate/gate.proto\x12\x13nova.transport.gate\x1a\x1bgoogle/protobuf/empty.proto\"\x9f\x01\n" +
 	"\vPushRequest\x12\x10\n" +
 	"\x03uid\x18\x01 \x01(\tR\x03uid\x12\x14\n" +
 	"\x05route\x18\x02 \x01(\rR\x05route\x12\x12\n" +
@@ -568,11 +568,11 @@ const file_transport_gate_gate_proto_rawDesc = "" +
 	"\areplied\x18\x01 \x01(\bR\areplied\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\fR\x04body2\x9b\x03\n" +
 	"\x04Gate\x12@\n" +
-	"\x04Push\x12 .wali.transport.gate.PushRequest\x1a\x16.google.protobuf.Empty\x12@\n" +
-	"\x04Kick\x12 .wali.transport.gate.KickRequest\x1a\x16.google.protobuf.Empty\x12Z\n" +
-	"\tBroadcast\x12%.wali.transport.gate.BroadcastRequest\x1a&.wali.transport.gate.BroadcastResponse\x12Z\n" +
-	"\tMultiPush\x12%.wali.transport.gate.MultiPushRequest\x1a&.wali.transport.gate.MultiPushResponse\x12W\n" +
-	"\bMockCall\x12$.wali.transport.gate.MockCallRequest\x1a%.wali.transport.gate.MockCallResponseB9Z7github.com/2comjie/wali/internal/pb/transport/gate;gateb\x06proto3"
+	"\x04Push\x12 .nova.transport.gate.PushRequest\x1a\x16.google.protobuf.Empty\x12@\n" +
+	"\x04Kick\x12 .nova.transport.gate.KickRequest\x1a\x16.google.protobuf.Empty\x12Z\n" +
+	"\tBroadcast\x12%.nova.transport.gate.BroadcastRequest\x1a&.nova.transport.gate.BroadcastResponse\x12Z\n" +
+	"\tMultiPush\x12%.nova.transport.gate.MultiPushRequest\x1a&.nova.transport.gate.MultiPushResponse\x12W\n" +
+	"\bMockCall\x12$.nova.transport.gate.MockCallRequest\x1a%.nova.transport.gate.MockCallResponseB9Z7github.com/2comjie/nova/internal/pb/transport/gate;gateb\x06proto3"
 
 var (
 	file_transport_gate_gate_proto_rawDescOnce sync.Once
@@ -588,27 +588,27 @@ func file_transport_gate_gate_proto_rawDescGZIP() []byte {
 
 var file_transport_gate_gate_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_transport_gate_gate_proto_goTypes = []any{
-	(*PushRequest)(nil),       // 0: wali.transport.gate.PushRequest
-	(*KickRequest)(nil),       // 1: wali.transport.gate.KickRequest
-	(*BroadcastRequest)(nil),  // 2: wali.transport.gate.BroadcastRequest
-	(*BroadcastResponse)(nil), // 3: wali.transport.gate.BroadcastResponse
-	(*MultiPushRequest)(nil),  // 4: wali.transport.gate.MultiPushRequest
-	(*MultiPushResponse)(nil), // 5: wali.transport.gate.MultiPushResponse
-	(*MockCallRequest)(nil),   // 6: wali.transport.gate.MockCallRequest
-	(*MockCallResponse)(nil),  // 7: wali.transport.gate.MockCallResponse
+	(*PushRequest)(nil),       // 0: nova.transport.gate.PushRequest
+	(*KickRequest)(nil),       // 1: nova.transport.gate.KickRequest
+	(*BroadcastRequest)(nil),  // 2: nova.transport.gate.BroadcastRequest
+	(*BroadcastResponse)(nil), // 3: nova.transport.gate.BroadcastResponse
+	(*MultiPushRequest)(nil),  // 4: nova.transport.gate.MultiPushRequest
+	(*MultiPushResponse)(nil), // 5: nova.transport.gate.MultiPushResponse
+	(*MockCallRequest)(nil),   // 6: nova.transport.gate.MockCallRequest
+	(*MockCallResponse)(nil),  // 7: nova.transport.gate.MockCallResponse
 	(*emptypb.Empty)(nil),     // 8: google.protobuf.Empty
 }
 var file_transport_gate_gate_proto_depIdxs = []int32{
-	0, // 0: wali.transport.gate.Gate.Push:input_type -> wali.transport.gate.PushRequest
-	1, // 1: wali.transport.gate.Gate.Kick:input_type -> wali.transport.gate.KickRequest
-	2, // 2: wali.transport.gate.Gate.Broadcast:input_type -> wali.transport.gate.BroadcastRequest
-	4, // 3: wali.transport.gate.Gate.MultiPush:input_type -> wali.transport.gate.MultiPushRequest
-	6, // 4: wali.transport.gate.Gate.MockCall:input_type -> wali.transport.gate.MockCallRequest
-	8, // 5: wali.transport.gate.Gate.Push:output_type -> google.protobuf.Empty
-	8, // 6: wali.transport.gate.Gate.Kick:output_type -> google.protobuf.Empty
-	3, // 7: wali.transport.gate.Gate.Broadcast:output_type -> wali.transport.gate.BroadcastResponse
-	5, // 8: wali.transport.gate.Gate.MultiPush:output_type -> wali.transport.gate.MultiPushResponse
-	7, // 9: wali.transport.gate.Gate.MockCall:output_type -> wali.transport.gate.MockCallResponse
+	0, // 0: nova.transport.gate.Gate.Push:input_type -> nova.transport.gate.PushRequest
+	1, // 1: nova.transport.gate.Gate.Kick:input_type -> nova.transport.gate.KickRequest
+	2, // 2: nova.transport.gate.Gate.Broadcast:input_type -> nova.transport.gate.BroadcastRequest
+	4, // 3: nova.transport.gate.Gate.MultiPush:input_type -> nova.transport.gate.MultiPushRequest
+	6, // 4: nova.transport.gate.Gate.MockCall:input_type -> nova.transport.gate.MockCallRequest
+	8, // 5: nova.transport.gate.Gate.Push:output_type -> google.protobuf.Empty
+	8, // 6: nova.transport.gate.Gate.Kick:output_type -> google.protobuf.Empty
+	3, // 7: nova.transport.gate.Gate.Broadcast:output_type -> nova.transport.gate.BroadcastResponse
+	5, // 8: nova.transport.gate.Gate.MultiPush:output_type -> nova.transport.gate.MultiPushResponse
+	7, // 9: nova.transport.gate.Gate.MockCall:output_type -> nova.transport.gate.MockCallResponse
 	5, // [5:10] is the sub-list for method output_type
 	0, // [0:5] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name

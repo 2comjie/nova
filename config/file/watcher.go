@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/2comjie/wali/config"
+	"github.com/2comjie/nova/config"
 	"github.com/fsnotify/fsnotify"
 )
 

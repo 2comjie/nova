@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/2comjie/wali/core/buffer"
+	"github.com/2comjie/nova/core/buffer"
 )
 
 const (

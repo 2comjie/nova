@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/2comjie/wali/actor/actorDef"
-	pbActor "github.com/2comjie/wali/internal/pb/transport/actor"
-	"github.com/2comjie/wali/rpc/rpcerr"
+	"github.com/2comjie/nova/actor/actorDef"
+	pbActor "github.com/2comjie/nova/internal/pb/transport/actor"
+	"github.com/2comjie/nova/rpc/rpcerr"
 	"google.golang.org/grpc"
 )
 

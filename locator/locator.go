@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/2comjie/wali/registry"
+	"github.com/2comjie/nova/registry"
 )
 
 const GateName = "gate"

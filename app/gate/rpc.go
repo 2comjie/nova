@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	pbGate "github.com/2comjie/wali/internal/pb/transport/gate"
-	"github.com/2comjie/wali/network"
-	"github.com/2comjie/wali/rpc/rpcerr"
+	pbGate "github.com/2comjie/nova/internal/pb/transport/gate"
+	"github.com/2comjie/nova/network"
+	"github.com/2comjie/nova/rpc/rpcerr"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/emptypb"
 )

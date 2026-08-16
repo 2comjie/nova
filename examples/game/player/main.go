@@ -7,16 +7,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/2comjie/wali/app/node"
-	"github.com/2comjie/wali/core/help"
-	"github.com/2comjie/wali/deploy"
-	"github.com/2comjie/wali/examples/game/shared"
-	"github.com/2comjie/wali/flag"
-	"github.com/2comjie/wali/logx"
+	"github.com/2comjie/nova/app/node"
+	"github.com/2comjie/nova/core/help"
+	"github.com/2comjie/nova/deploy"
+	"github.com/2comjie/nova/examples/game/shared"
+	"github.com/2comjie/nova/flag"
+	"github.com/2comjie/nova/logx"
 	"github.com/redis/go-redis/v9"
 )
 
-const playerDataKey = "wali:demo:players"
+const playerDataKey = "nova:demo:players"
 
 func main() {
 	infrastructure := shared.NewInfrastructure(

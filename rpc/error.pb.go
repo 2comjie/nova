@@ -77,10 +77,10 @@ var File_rpc_error_proto protoreflect.FileDescriptor
 
 const file_rpc_error_proto_rawDesc = "" +
 	"\n" +
-	"\x0frpc/error.proto\x12\bwali.rpc\"9\n" +
+	"\x0frpc/error.proto\x12\bnova.rpc\"9\n" +
 	"\vErrorDetail\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\rR\x04code\x12\x16\n" +
-	"\x06detail\x18\x02 \x01(\fR\x06detailB!Z\x1fgithub.com/2comjie/wali/rpc;rpcb\x06proto3"
+	"\x06detail\x18\x02 \x01(\fR\x06detailB!Z\x1fgithub.com/2comjie/nova/rpc;rpcb\x06proto3"
 
 var (
 	file_rpc_error_proto_rawDescOnce sync.Once
@@ -96,7 +96,7 @@ func file_rpc_error_proto_rawDescGZIP() []byte {
 
 var file_rpc_error_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_rpc_error_proto_goTypes = []any{
-	(*ErrorDetail)(nil), // 0: wali.rpc.ErrorDetail
+	(*ErrorDetail)(nil), // 0: nova.rpc.ErrorDetail
 }
 var file_rpc_error_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type

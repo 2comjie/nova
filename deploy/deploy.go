@@ -9,14 +9,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/2comjie/wali/config"
-	"github.com/2comjie/wali/config/file"
-	"github.com/2comjie/wali/core/endpoint"
-	"github.com/2comjie/wali/core/util"
-	waliflag "github.com/2comjie/wali/flag"
-	"github.com/2comjie/wali/locator"
-	"github.com/2comjie/wali/registry"
-	rpcclient "github.com/2comjie/wali/rpc/client"
+	"github.com/2comjie/nova/config"
+	"github.com/2comjie/nova/config/file"
+	"github.com/2comjie/nova/core/endpoint"
+	"github.com/2comjie/nova/core/util"
+	novaflag "github.com/2comjie/nova/flag"
+	"github.com/2comjie/nova/locator"
+	"github.com/2comjie/nova/registry"
+	rpcclient "github.com/2comjie/nova/rpc/client"
 	"github.com/spf13/cast"
 	"google.golang.org/grpc"
 )
@@ -164,19 +164,19 @@ func rpcEndpoint(listener net.Listener, configuredHost string) (string, int, err
 
 func defaultOptions() options {
 	var configCenter config.Config
-	if path := waliflag.String("config"); path != "" {
+	if path := novaflag.String("config"); path != "" {
 		configCenter = config.New(config.WithSource(file.NewSource(path)))
 	} else {
 		configCenter = config.New()
 	}
 	return options{
-		serviceName: waliflag.String("service"),
-		instanceID:  waliflag.String("id"),
-		rpcListen:   waliflag.String("rpc-listen", "127.0.0.1:0"),
-		rpcHost:     waliflag.String("rpc-host"),
-		weight:      waliflag.Int("weight", 1),
+		serviceName: novaflag.String("service"),
+		instanceID:  novaflag.String("id"),
+		rpcListen:   novaflag.String("rpc-listen", "127.0.0.1:0"),
+		rpcHost:     novaflag.String("rpc-host"),
+		weight:      novaflag.Int("weight", 1),
 		config:      configCenter,
-		shutdownTimeout: waliflag.Duration(
+		shutdownTimeout: novaflag.Duration(
 			"shutdown-timeout",
 			defaultShutdownTimeout,
 		),

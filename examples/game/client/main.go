@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/2comjie/wali/core/util"
-	"github.com/2comjie/wali/examples/game/shared"
-	"github.com/2comjie/wali/flag"
-	"github.com/2comjie/wali/logx"
-	"github.com/2comjie/wali/network"
-	nettcp "github.com/2comjie/wali/network/transport/tcp"
+	"github.com/2comjie/nova/core/util"
+	"github.com/2comjie/nova/examples/game/shared"
+	"github.com/2comjie/nova/flag"
+	"github.com/2comjie/nova/logx"
+	"github.com/2comjie/nova/network"
+	nettcp "github.com/2comjie/nova/network/transport/tcp"
 )
 
 func main() {

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/2comjie/wali/logx/logdef"
+	"github.com/2comjie/nova/logx/logdef"
 )
 
 var builderPool sync.Pool

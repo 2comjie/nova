@@ -1,7 +1,7 @@
 package client
 
 import (
-	"github.com/2comjie/wali/rpc/lx"
+	"github.com/2comjie/nova/rpc/lx"
 	"google.golang.org/grpc"
 )
 

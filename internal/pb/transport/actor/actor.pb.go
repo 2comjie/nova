@@ -153,7 +153,7 @@ var File_transport_actor_actor_proto protoreflect.FileDescriptor
 
 const file_transport_actor_actor_proto_rawDesc = "" +
 	"\n" +
-	"\x1btransport/actor/actor.proto\x12\x14wali.transport.actor\"\x8f\x01\n" +
+	"\x1btransport/actor/actor.proto\x12\x14nova.transport.actor\"\x8f\x01\n" +
 	"\aRequest\x12\x1d\n" +
 	"\n" +
 	"actor_type\x18\x01 \x01(\x05R\tactorType\x12\x1b\n" +
@@ -167,8 +167,8 @@ const file_transport_actor_actor_proto_rawDesc = "" +
 	"\ahandled\x18\x01 \x01(\bR\ahandled\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\fR\x04body2\x94\x01\n" +
 	"\x05Actor\x12D\n" +
-	"\x03Ask\x12\x1d.wali.transport.actor.Request\x1a\x1e.wali.transport.actor.Response\x12E\n" +
-	"\x04Tell\x12\x1d.wali.transport.actor.Request\x1a\x1e.wali.transport.actor.ResponseB;Z9github.com/2comjie/wali/internal/pb/transport/actor;actorb\x06proto3"
+	"\x03Ask\x12\x1d.nova.transport.actor.Request\x1a\x1e.nova.transport.actor.Response\x12E\n" +
+	"\x04Tell\x12\x1d.nova.transport.actor.Request\x1a\x1e.nova.transport.actor.ResponseB;Z9github.com/2comjie/nova/internal/pb/transport/actor;actorb\x06proto3"
 
 var (
 	file_transport_actor_actor_proto_rawDescOnce sync.Once
@@ -184,14 +184,14 @@ func file_transport_actor_actor_proto_rawDescGZIP() []byte {
 
 var file_transport_actor_actor_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_transport_actor_actor_proto_goTypes = []any{
-	(*Request)(nil),  // 0: wali.transport.actor.Request
-	(*Response)(nil), // 1: wali.transport.actor.Response
+	(*Request)(nil),  // 0: nova.transport.actor.Request
+	(*Response)(nil), // 1: nova.transport.actor.Response
 }
 var file_transport_actor_actor_proto_depIdxs = []int32{
-	0, // 0: wali.transport.actor.Actor.Ask:input_type -> wali.transport.actor.Request
-	0, // 1: wali.transport.actor.Actor.Tell:input_type -> wali.transport.actor.Request
-	1, // 2: wali.transport.actor.Actor.Ask:output_type -> wali.transport.actor.Response
-	1, // 3: wali.transport.actor.Actor.Tell:output_type -> wali.transport.actor.Response
+	0, // 0: nova.transport.actor.Actor.Ask:input_type -> nova.transport.actor.Request
+	0, // 1: nova.transport.actor.Actor.Tell:input_type -> nova.transport.actor.Request
+	1, // 2: nova.transport.actor.Actor.Ask:output_type -> nova.transport.actor.Response
+	1, // 3: nova.transport.actor.Actor.Tell:output_type -> nova.transport.actor.Response
 	2, // [2:4] is the sub-list for method output_type
 	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name

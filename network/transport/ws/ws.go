@@ -13,9 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/2comjie/wali/core/help"
-	"github.com/2comjie/wali/network/transport"
-	"github.com/2comjie/wali/packet"
+	"github.com/2comjie/nova/core/help"
+	"github.com/2comjie/nova/network/transport"
+	"github.com/2comjie/nova/packet"
 	"github.com/gorilla/websocket"
 )
 
@@ -138,7 +138,7 @@ func (l *listener) Accept() (transport.Conn, error) {
 	l.startOnce.Do(func() {
 		upgrader := websocket.Upgrader{
 			EnableCompression: false,
-			Subprotocols:      []string{"wali"},
+			Subprotocols:      []string{"nova"},
 			CheckOrigin: func(request *http.Request) bool {
 				if l.options.originCheck != nil {
 					return l.options.originCheck(request)
@@ -256,7 +256,7 @@ func (d *dialer) DialContext(ctx context.Context) (transport.Conn, error) {
 
 	dialer := websocket.Dialer{
 		TLSClientConfig:   d.options.tlsConfig,
-		Subprotocols:      []string{"wali"},
+		Subprotocols:      []string{"nova"},
 		EnableCompression: false,
 	}
 	conn, response, err := dialer.DialContext(ctx, d.address, d.options.header)

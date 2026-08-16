@@ -3,11 +3,11 @@ package encoding
 import (
 	"strings"
 
-	"github.com/2comjie/wali/encoding/gob"
-	"github.com/2comjie/wali/encoding/json"
-	"github.com/2comjie/wali/encoding/proto"
-	"github.com/2comjie/wali/encoding/xml"
-	"github.com/2comjie/wali/encoding/yml"
+	"github.com/2comjie/nova/encoding/gob"
+	"github.com/2comjie/nova/encoding/json"
+	"github.com/2comjie/nova/encoding/proto"
+	"github.com/2comjie/nova/encoding/xml"
+	"github.com/2comjie/nova/encoding/yml"
 )
 
 func init() {

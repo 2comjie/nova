@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 
-	"github.com/2comjie/wali/app/node"
-	"github.com/2comjie/wali/deploy"
-	"github.com/2comjie/wali/examples/game/shared"
-	"github.com/2comjie/wali/flag"
-	"github.com/2comjie/wali/logx"
+	"github.com/2comjie/nova/app/node"
+	"github.com/2comjie/nova/deploy"
+	"github.com/2comjie/nova/examples/game/shared"
+	"github.com/2comjie/nova/flag"
+	"github.com/2comjie/nova/logx"
 )
 
 func main() {

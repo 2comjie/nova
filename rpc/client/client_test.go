@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/2comjie/wali/core/endpoint"
-	"github.com/2comjie/wali/rpc/lx"
+	"github.com/2comjie/nova/core/endpoint"
+	"github.com/2comjie/nova/rpc/lx"
 )
 
 type fakeDiscover struct {

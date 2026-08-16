@@ -18,10 +18,10 @@
 
 // protoc-gen-go-grpc-locator is a fork of protoc-gen-go-grpc (v1.6.2).
 //
-// Generated clients resolve the target *grpc.ClientConn through wali's
+// Generated clients resolve the target *grpc.ClientConn through nova's
 // rpc/client.Client.Conn(ctx), which dispatches according to the lx strategy
 // carried in the context (lx.WithDirect / WithBalance / WithNode / WithSelect).
-// Generated clients and servers also decode and encode wali RPC errors at the
+// Generated clients and servers also decode and encode nova RPC errors at the
 // gRPC boundary.
 //
 // Install it by building this program and making it accessible within your

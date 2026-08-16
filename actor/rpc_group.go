@@ -3,8 +3,8 @@ package actor
 import (
 	"context"
 
-	"github.com/2comjie/wali/actor/actorDef"
-	"github.com/2comjie/wali/core/help"
+	"github.com/2comjie/nova/actor/actorDef"
+	"github.com/2comjie/nova/core/help"
 )
 
 type RPCHandler[T actorDef.Actor] func(actorValue T, pid actorDef.PID, ctx context.Context, message Message) ([]byte, error)

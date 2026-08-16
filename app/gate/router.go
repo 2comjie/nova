@@ -8,7 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/2comjie/wali/rpc/lx"
+	"github.com/2comjie/nova/rpc/lx"
 )
 
 type RouteMode string

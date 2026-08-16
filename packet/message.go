@@ -1,6 +1,6 @@
 package packet
 
-import "github.com/2comjie/wali/core/buffer"
+import "github.com/2comjie/nova/core/buffer"
 
 // Type 表示网络包类型。
 type Type uint16

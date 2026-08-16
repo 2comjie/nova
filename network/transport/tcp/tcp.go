@@ -7,9 +7,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/2comjie/wali/network/transport"
-	"github.com/2comjie/wali/network/transport/internal/netconn"
-	"github.com/2comjie/wali/packet"
+	"github.com/2comjie/nova/network/transport"
+	"github.com/2comjie/nova/network/transport/internal/netconn"
+	"github.com/2comjie/nova/packet"
 )
 
 type options struct {

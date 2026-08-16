@@ -6,12 +6,12 @@ import (
 	"maps"
 	"strings"
 
-	gateapp "github.com/2comjie/wali/app/gate"
-	"github.com/2comjie/wali/config"
-	"github.com/2comjie/wali/core/endpoint"
-	pbGate "github.com/2comjie/wali/internal/pb/transport/gate"
-	pbNode "github.com/2comjie/wali/internal/pb/transport/node"
-	"github.com/2comjie/wali/locator"
+	gateapp "github.com/2comjie/nova/app/gate"
+	"github.com/2comjie/nova/config"
+	"github.com/2comjie/nova/core/endpoint"
+	pbGate "github.com/2comjie/nova/internal/pb/transport/gate"
+	pbNode "github.com/2comjie/nova/internal/pb/transport/node"
+	"github.com/2comjie/nova/locator"
 )
 
 type GateApp struct {

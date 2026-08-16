@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 
-	"github.com/2comjie/wali/core/util"
-	"github.com/2comjie/wali/examples/external"
-	"github.com/2comjie/wali/locator"
-	redisLocator "github.com/2comjie/wali/locator/redis"
-	"github.com/2comjie/wali/logx"
+	"github.com/2comjie/nova/core/util"
+	"github.com/2comjie/nova/examples/external"
+	"github.com/2comjie/nova/locator"
+	redisLocator "github.com/2comjie/nova/locator/redis"
+	"github.com/2comjie/nova/logx"
 )
 
 func main() {

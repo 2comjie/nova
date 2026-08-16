@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/2comjie/wali/encoding"
+	"github.com/2comjie/nova/encoding"
 )
 
 func buildTree(sources []Source) (map[string]any, error) {

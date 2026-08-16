@@ -3,7 +3,7 @@ package network
 import (
 	"sync/atomic"
 
-	"github.com/2comjie/wali/packet"
+	"github.com/2comjie/nova/packet"
 )
 
 type ReqContext struct {

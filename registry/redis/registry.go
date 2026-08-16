@@ -8,9 +8,9 @@ import (
 
 	_ "embed"
 
-	"github.com/2comjie/wali/core/endpoint"
-	"github.com/2comjie/wali/core/help"
-	"github.com/2comjie/wali/logx"
+	"github.com/2comjie/nova/core/endpoint"
+	"github.com/2comjie/nova/core/help"
+	"github.com/2comjie/nova/logx"
 	"github.com/redis/go-redis/v9"
 )
 

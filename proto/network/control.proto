@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package wali.network;
+package nova.network;
 
-option go_package = "github.com/2comjie/wali/network/protocol;protocol";
+option go_package = "github.com/2comjie/nova/network/protocol;protocol";
 
 enum BindCode {
   BIND_OK = 0;

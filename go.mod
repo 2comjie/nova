@@ -1,4 +1,4 @@
-module github.com/2comjie/wali
+module github.com/2comjie/nova
 
 go 1.24.3
 

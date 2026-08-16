@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
-	"github.com/2comjie/wali/core/help"
-	pbNode "github.com/2comjie/wali/internal/pb/transport/node"
-	"github.com/2comjie/wali/locator"
-	"github.com/2comjie/wali/rpc"
-	"github.com/2comjie/wali/rpc/rpcerr"
+	"github.com/2comjie/nova/core/help"
+	pbNode "github.com/2comjie/nova/internal/pb/transport/node"
+	"github.com/2comjie/nova/locator"
+	"github.com/2comjie/nova/rpc"
+	"github.com/2comjie/nova/rpc/rpcerr"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

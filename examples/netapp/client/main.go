@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 
-	"github.com/2comjie/wali/logx"
-	"github.com/2comjie/wali/network"
-	netTcp "github.com/2comjie/wali/network/transport/tcp"
+	"github.com/2comjie/nova/logx"
+	"github.com/2comjie/nova/network"
+	netTcp "github.com/2comjie/nova/network/transport/tcp"
 )
 
 func main() {

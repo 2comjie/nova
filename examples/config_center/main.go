@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/2comjie/wali/app/gate"
-	"github.com/2comjie/wali/config"
-	"github.com/2comjie/wali/config/file"
-	"github.com/2comjie/wali/logx"
+	"github.com/2comjie/nova/app/gate"
+	"github.com/2comjie/nova/config"
+	"github.com/2comjie/nova/config/file"
+	"github.com/2comjie/nova/logx"
 )
 
 type TestConfig struct {

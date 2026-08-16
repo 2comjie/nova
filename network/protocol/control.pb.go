@@ -113,7 +113,7 @@ func (x *BindRequest) GetToken() []byte {
 
 type BindResponse struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
-	Code                   BindCode               `protobuf:"varint,1,opt,name=code,proto3,enum=wali.network.BindCode" json:"code,omitempty"`
+	Code                   BindCode               `protobuf:"varint,1,opt,name=code,proto3,enum=nova.network.BindCode" json:"code,omitempty"`
 	HeartbeatIntervalMilli uint32                 `protobuf:"varint,2,opt,name=heartbeat_interval_milli,json=heartbeatIntervalMilli,proto3" json:"heartbeat_interval_milli,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
@@ -167,15 +167,15 @@ var File_proto_network_control_proto protoreflect.FileDescriptor
 
 const file_proto_network_control_proto_rawDesc = "" +
 	"\n" +
-	"\x1bproto/network/control.proto\x12\fwali.network\"#\n" +
+	"\x1bproto/network/control.proto\x12\fnova.network\"#\n" +
 	"\vBindRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\fR\x05token\"t\n" +
 	"\fBindResponse\x12*\n" +
-	"\x04code\x18\x01 \x01(\x0e2\x16.wali.network.BindCodeR\x04code\x128\n" +
+	"\x04code\x18\x01 \x01(\x0e2\x16.nova.network.BindCodeR\x04code\x128\n" +
 	"\x18heartbeat_interval_milli\x18\x02 \x01(\rR\x16heartbeatIntervalMilli*.\n" +
 	"\bBindCode\x12\v\n" +
 	"\aBIND_OK\x10\x00\x12\x15\n" +
-	"\x11BIND_UNAUTHORIZED\x10\x01B3Z1github.com/2comjie/wali/network/protocol;protocolb\x06proto3"
+	"\x11BIND_UNAUTHORIZED\x10\x01B3Z1github.com/2comjie/nova/network/protocol;protocolb\x06proto3"
 
 var (
 	file_proto_network_control_proto_rawDescOnce sync.Once
@@ -192,12 +192,12 @@ func file_proto_network_control_proto_rawDescGZIP() []byte {
 var file_proto_network_control_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_proto_network_control_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_proto_network_control_proto_goTypes = []any{
-	(BindCode)(0),        // 0: wali.network.BindCode
-	(*BindRequest)(nil),  // 1: wali.network.BindRequest
-	(*BindResponse)(nil), // 2: wali.network.BindResponse
+	(BindCode)(0),        // 0: nova.network.BindCode
+	(*BindRequest)(nil),  // 1: nova.network.BindRequest
+	(*BindResponse)(nil), // 2: nova.network.BindResponse
 }
 var file_proto_network_control_proto_depIdxs = []int32{
-	0, // 0: wali.network.BindResponse.code:type_name -> wali.network.BindCode
+	0, // 0: nova.network.BindResponse.code:type_name -> nova.network.BindCode
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name

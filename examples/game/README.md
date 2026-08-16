@@ -13,7 +13,7 @@
 先启动本地 Redis：
 
 ```bash
-docker run --rm --name wali-demo-redis -p 6379:6379 redis:7
+docker run --rm --name nova-demo-redis -p 6379:6379 redis:7
 ```
 
 然后在 `examples` 目录打开多个终端。

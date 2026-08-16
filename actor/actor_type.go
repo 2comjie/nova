@@ -5,10 +5,10 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/2comjie/wali/actor/actorDef"
-	"github.com/2comjie/wali/actor/actorGuard"
-	"github.com/2comjie/wali/core/help"
-	"github.com/2comjie/wali/rpc/rpcerr"
+	"github.com/2comjie/nova/actor/actorDef"
+	"github.com/2comjie/nova/actor/actorGuard"
+	"github.com/2comjie/nova/core/help"
+	"github.com/2comjie/nova/rpc/rpcerr"
 	"golang.org/x/sync/singleflight"
 )
 
