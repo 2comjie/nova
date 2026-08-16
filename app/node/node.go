@@ -20,6 +20,7 @@ import (
 	"github.com/2comjie/wali/locator"
 	"github.com/2comjie/wali/logx"
 	"github.com/2comjie/wali/registry"
+	"github.com/2comjie/wali/rpc/lx"
 	"google.golang.org/grpc"
 )
 
@@ -93,10 +94,6 @@ func New(config Config) *Node {
 	if config.Discovery == nil {
 		panic("node: 必须提供Discovery")
 	}
-	if err := config.Router.Freeze(); err != nil {
-		panic(err)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	node := &Node{
 		instance:    config.Instance,
@@ -129,6 +126,10 @@ func (n *Node) AddComponent(component app.Component) error {
 	return nil
 }
 
+func (n *Node) Router() *Router {
+	return n.router
+}
+
 func (n *Node) Start() error {
 	n.componentMu.Lock()
 	if n.closed.Load() {
@@ -140,6 +141,10 @@ func (n *Node) Start() error {
 		return ErrStarted
 	}
 	n.componentMu.Unlock()
+	if err := n.router.Freeze(); err != nil {
+		n.started.Store(false)
+		return err
+	}
 
 	for _, component := range n.components {
 		logx.Infof("node: 正在启动组件 name=%s", component.Name())
@@ -335,6 +340,21 @@ func (n *Node) MultiPush(ctx context.Context, uidList []string, route uint32, bo
 	}
 	return response.Count, nil
 }
+
+func (n *Node) MockGateCall(ctx context.Context, uid string, route uint32, body []byte) ([]byte, bool, error) {
+	response, err := n.gateClient.MockCall(lx.WithBalance(ctx, locator.GateName), &pbGate.MockCallRequest{
+		Uid:             uid,
+		Route:           route,
+		Body:            body,
+		NodeServiceName: n.instance.ServiceName,
+		NodeInstanceId:  n.instance.ID,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return response.Body, response.Replied, nil
+}
+
 func (n *Node) ListServices(ctx context.Context) (map[string]endpoint.ServiceInstance, error) {
 	serviceList, err := n.discovery.List(ctx)
 	if err != nil {

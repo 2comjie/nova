@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/2comjie/wali/core/endpoint"
+	pbGate "github.com/2comjie/wali/internal/pb/transport/gate"
 	pbNode "github.com/2comjie/wali/internal/pb/transport/node"
 	"github.com/2comjie/wali/rpc"
 	"github.com/2comjie/wali/rpc/lx"
@@ -54,6 +55,7 @@ func TestActorRouteRetriesOwner(t *testing.T) {
 		ctx := &Context{
 			Context:    context.Background(),
 			App:        gateApp,
+			Uid:        "uid-1001",
 			Route:      1001,
 			Target:     Target{Mode: RouteModeActor, Service: "player", ActorKeyResolver: "player"},
 			BindingKey: "uid-1001",
@@ -128,5 +130,47 @@ func TestActorRouteResolverIsCompiled(t *testing.T) {
 	}
 	if !called || ctx.ActorKey != "player:uid-1001" {
 		t.Fatalf("called=%t actorKey=%q", called, ctx.ActorKey)
+	}
+}
+
+func TestMockCallUsesGateRouter(t *testing.T) {
+	router := NewRouter()
+	if err := router.RegisterActorKeyResolver("player", func(ctx *Context) string {
+		return "player:" + ctx.Uid
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := router.Add(Route{
+		ID:     "player",
+		Routes: []uint32{1001},
+		Target: Target{Mode: RouteModeActor, Service: "player", ActorKeyResolver: "player"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := router.Freeze(); err != nil {
+		t.Fatal(err)
+	}
+
+	nodeClient := &actorRouteNodeClient{}
+	gateApp := &Gate{
+		instance:   endpoint.ServiceInstance{ID: "gate-1", ServiceName: "gate"},
+		router:     router,
+		nodeClient: nodeClient,
+	}
+	response, err := gateApp.MockCall(context.Background(), &pbGate.MockCallRequest{
+		Uid:             "uid-1001",
+		Route:           1001,
+		Body:            []byte{1},
+		NodeServiceName: "api",
+		NodeInstanceId:  "api-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !response.Replied || len(response.Body) != 1 || response.Body[0] != 7 {
+		t.Fatalf("response=%+v", response)
+	}
+	if len(nodeClient.requests) != 2 || nodeClient.requests[0].Uid != "uid-1001" || nodeClient.requests[0].ActorKey != "player:uid-1001" {
+		t.Fatalf("requests=%+v", nodeClient.requests)
 	}
 }

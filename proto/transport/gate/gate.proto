@@ -42,10 +42,24 @@ message MultiPushResponse {
   uint32 count = 1;
 }
 
+message MockCallRequest {
+  string uid = 1;
+  uint32 route = 2;
+  bytes body = 3;
+  string node_service_name = 4;
+  string node_instance_id = 5;
+}
+
+message MockCallResponse {
+  bool replied = 1;
+  bytes body = 2;
+}
+
 service Gate {
   rpc Push(PushRequest) returns (google.protobuf.Empty);
   rpc Kick(KickRequest) returns (google.protobuf.Empty);
 
   rpc Broadcast(BroadcastRequest) returns (BroadcastResponse);
   rpc MultiPush(MultiPushRequest) returns (MultiPushResponse);
+  rpc MockCall(MockCallRequest) returns (MockCallResponse);
 }

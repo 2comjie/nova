@@ -67,3 +67,24 @@ func (g *Gate) MultiPush(ctx context.Context, request *pbGate.MultiPushRequest) 
 		Count: count,
 	}, nil
 }
+
+func (g *Gate) MockCall(ctx context.Context, request *pbGate.MockCallRequest) (*pbGate.MockCallResponse, error) {
+	if request == nil || request.Uid == "" || request.Route == 0 ||
+		request.NodeServiceName == "" || request.NodeInstanceId == "" {
+		return nil, status.Error(codes.InvalidArgument, "gate: MockCall参数无效")
+	}
+	gateCtx := &Context{
+		Context:    ctx,
+		App:        g,
+		Uid:        request.Uid,
+		Route:      request.Route,
+		Body:       request.Body,
+		BindingKey: request.Uid,
+		needReply:  true,
+		forward:    g.forward,
+	}
+	if err := g.dispatch(gateCtx); err != nil {
+		return nil, err
+	}
+	return &pbGate.MockCallResponse{Replied: gateCtx.replied, Body: gateCtx.responseBody}, nil
+}

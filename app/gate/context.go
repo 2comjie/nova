@@ -17,6 +17,7 @@ type Context struct {
 
 	App     *Gate
 	Session *network.Session
+	Uid     string
 	Route   uint32
 	Seq     uint64
 	Body    []byte

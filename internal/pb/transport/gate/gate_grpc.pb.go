@@ -26,6 +26,7 @@ const (
 	Gate_Kick_FullMethodName      = "/wali.transport.gate.Gate/Kick"
 	Gate_Broadcast_FullMethodName = "/wali.transport.gate.Gate/Broadcast"
 	Gate_MultiPush_FullMethodName = "/wali.transport.gate.Gate/MultiPush"
+	Gate_MockCall_FullMethodName  = "/wali.transport.gate.Gate/MockCall"
 )
 
 // GateClient is the client API for Gate service.
@@ -36,6 +37,7 @@ type GateClient interface {
 	Kick(ctx context.Context, in *KickRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	Broadcast(ctx context.Context, in *BroadcastRequest, opts ...grpc.CallOption) (*BroadcastResponse, error)
 	MultiPush(ctx context.Context, in *MultiPushRequest, opts ...grpc.CallOption) (*MultiPushResponse, error)
+	MockCall(ctx context.Context, in *MockCallRequest, opts ...grpc.CallOption) (*MockCallResponse, error)
 }
 
 type gateClient struct {
@@ -102,6 +104,20 @@ func (c *gateClient) MultiPush(ctx context.Context, in *MultiPushRequest, opts .
 	return out, nil
 }
 
+func (c *gateClient) MockCall(ctx context.Context, in *MockCallRequest, opts ...grpc.CallOption) (*MockCallResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	conn, err := c.cc.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := new(MockCallResponse)
+	err = conn.Invoke(ctx, Gate_MockCall_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, rpc.DecodeError(err)
+	}
+	return out, nil
+}
+
 // GateServer is the server API for Gate service.
 // All implementations must embed UnimplementedGateServer
 // for forward compatibility.
@@ -110,6 +126,7 @@ type GateServer interface {
 	Kick(context.Context, *KickRequest) (*emptypb.Empty, error)
 	Broadcast(context.Context, *BroadcastRequest) (*BroadcastResponse, error)
 	MultiPush(context.Context, *MultiPushRequest) (*MultiPushResponse, error)
+	MockCall(context.Context, *MockCallRequest) (*MockCallResponse, error)
 	mustEmbedUnimplementedGateServer()
 }
 
@@ -131,6 +148,9 @@ func (UnimplementedGateServer) Broadcast(context.Context, *BroadcastRequest) (*B
 }
 func (UnimplementedGateServer) MultiPush(context.Context, *MultiPushRequest) (*MultiPushResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MultiPush not implemented")
+}
+func (UnimplementedGateServer) MockCall(context.Context, *MockCallRequest) (*MockCallResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MockCall not implemented")
 }
 func (UnimplementedGateServer) mustEmbedUnimplementedGateServer() {}
 func (UnimplementedGateServer) testEmbeddedByValue()              {}
@@ -233,6 +253,26 @@ func _Gate_MultiPush_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return response, rpc.EncodeError(err)
 }
 
+func _Gate_MockCall_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MockCallRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		response, err := srv.(GateServer).MockCall(ctx, in)
+		return response, rpc.EncodeError(err)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gate_MockCall_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GateServer).MockCall(ctx, req.(*MockCallRequest))
+	}
+	response, err := interceptor(ctx, in, info, handler)
+	return response, rpc.EncodeError(err)
+}
+
 // Gate_ServiceDesc is the grpc.ServiceDesc for Gate service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -255,6 +295,10 @@ var Gate_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MultiPush",
 			Handler:    _Gate_MultiPush_Handler,
+		},
+		{
+			MethodName: "MockCall",
+			Handler:    _Gate_MockCall_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

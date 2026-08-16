@@ -359,6 +359,7 @@ func (g *Gate) onReq(request *network.ReqContext) {
 		Context:    g.ctx,
 		App:        g,
 		Session:    request.Session,
+		Uid:        request.Session.UID(),
 		Route:      message.Route,
 		Seq:        message.Seq,
 		Body:       message.Body,
@@ -367,15 +368,7 @@ func (g *Gate) onReq(request *network.ReqContext) {
 		forward:    g.forward,
 	}
 
-	var err error
-	completed := false
-	help.SafeRun(func() {
-		err = g.router.Dispatch(ctx)
-		completed = true
-	})
-	if !completed {
-		err = ErrHandlerPanic
-	}
+	err := g.dispatch(ctx)
 	if err == nil && request.NeedReply && ctx.replied {
 		err = request.Write(ctx.responseBody)
 	}
@@ -384,6 +377,19 @@ func (g *Gate) onReq(request *network.ReqContext) {
 			g.errorHandler(ctx, err)
 		})
 	}
+}
+
+func (g *Gate) dispatch(ctx *Context) error {
+	var err error
+	completed := false
+	help.SafeRun(func() {
+		err = g.router.Dispatch(ctx)
+		completed = true
+	})
+	if !completed {
+		return ErrHandlerPanic
+	}
+	return err
 }
 
 func (g *Gate) forward(ctx *Context) error {
@@ -413,7 +419,7 @@ func (g *Gate) forward(ctx *Context) error {
 	}
 
 	request := &pbNode.Request{
-		Uid:             ctx.Session.UID(),
+		Uid:             ctx.Uid,
 		Route:           ctx.Route,
 		Body:            ctx.Body,
 		GateServiceName: g.instance.ServiceName,
