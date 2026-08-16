@@ -8,14 +8,15 @@ import (
 	pbNode "github.com/2comjie/wali/internal/pb/transport/node"
 	"github.com/2comjie/wali/locator"
 	"github.com/2comjie/wali/rpc"
+	"github.com/2comjie/wali/rpc/rpcerr"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-func (n *Node) Call(ctx context.Context, request *pbNode.Request) (*pbNode.Response, error) {
+func (n *Node) Call(ctx context.Context, request *pbNode.Request) (*pbNode.Response, rpcerr.Err) {
 	nodeContext, err := n.handle(ctx, request, true)
 	if err != nil {
-		return nil, err
+		return nil, rpcerr.Wrap(err)
 	}
 	return &pbNode.Response{
 		Replied:         nodeContext.replied,
@@ -25,9 +26,9 @@ func (n *Node) Call(ctx context.Context, request *pbNode.Request) (*pbNode.Respo
 	}, nil
 }
 
-func (n *Node) Tell(ctx context.Context, request *pbNode.Request) (*pbNode.Response, error) {
+func (n *Node) Tell(ctx context.Context, request *pbNode.Request) (*pbNode.Response, rpcerr.Err) {
 	if _, err := n.handle(ctx, request, false); err != nil {
-		return nil, err
+		return nil, rpcerr.Wrap(err)
 	}
 	return &pbNode.Response{NodeServiceName: n.instance.ServiceName, NodeInstanceId: n.instance.ID}, nil
 }

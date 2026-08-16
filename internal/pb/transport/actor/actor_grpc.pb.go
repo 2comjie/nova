@@ -13,7 +13,6 @@ import (
 	rpcerr "github.com/2comjie/wali/rpc/rpcerr"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -74,8 +73,8 @@ func (c *actorClient) Tell(ctx context.Context, in *Request, opts ...grpc.CallOp
 // All implementations must embed UnimplementedActorServer
 // for forward compatibility.
 type ActorServer interface {
-	Ask(context.Context, *Request) (*Response, error)
-	Tell(context.Context, *Request) (*Response, error)
+	Ask(context.Context, *Request) (*Response, rpcerr.Err)
+	Tell(context.Context, *Request) (*Response, rpcerr.Err)
 	mustEmbedUnimplementedActorServer()
 }
 
@@ -86,11 +85,11 @@ type ActorServer interface {
 // pointer dereference when methods are called.
 type UnimplementedActorServer struct{}
 
-func (UnimplementedActorServer) Ask(context.Context, *Request) (*Response, error) {
-	return nil, status.Error(codes.Unimplemented, "method Ask not implemented")
+func (UnimplementedActorServer) Ask(context.Context, *Request) (*Response, rpcerr.Err) {
+	return nil, rpcerr.NewGRPC(codes.Unimplemented, "method Ask not implemented")
 }
-func (UnimplementedActorServer) Tell(context.Context, *Request) (*Response, error) {
-	return nil, status.Error(codes.Unimplemented, "method Tell not implemented")
+func (UnimplementedActorServer) Tell(context.Context, *Request) (*Response, rpcerr.Err) {
+	return nil, rpcerr.NewGRPC(codes.Unimplemented, "method Tell not implemented")
 }
 func (UnimplementedActorServer) mustEmbedUnimplementedActorServer() {}
 func (UnimplementedActorServer) testEmbeddedByValue()               {}

@@ -21,6 +21,7 @@ import (
 	"github.com/2comjie/wali/logx"
 	"github.com/2comjie/wali/registry"
 	"github.com/2comjie/wali/rpc/lx"
+	"github.com/2comjie/wali/rpc/rpcerr"
 	"google.golang.org/grpc"
 )
 
@@ -297,7 +298,7 @@ func (n *Node) DeleteMetadata(keys ...string) error {
 	return nil
 }
 
-func (n *Node) Push(ctx context.Context, uid string, route uint32, body []byte) error {
+func (n *Node) Push(ctx context.Context, uid string, route uint32, body []byte) rpcerr.Err {
 	_, err := n.gateClient.Push(ctx, &pbGate.PushRequest{
 		Uid:             uid,
 		Route:           route,
@@ -307,7 +308,8 @@ func (n *Node) Push(ctx context.Context, uid string, route uint32, body []byte) 
 	})
 	return err
 }
-func (n *Node) Kick(ctx context.Context, uid string) error {
+
+func (n *Node) Kick(ctx context.Context, uid string) rpcerr.Err {
 	_, err := n.gateClient.Kick(ctx, &pbGate.KickRequest{
 		Uid:             uid,
 		NodeServiceName: n.instance.ServiceName,
@@ -315,7 +317,8 @@ func (n *Node) Kick(ctx context.Context, uid string) error {
 	})
 	return err
 }
-func (n *Node) Broadcast(ctx context.Context, route uint32, body []byte) (uint32, error) {
+
+func (n *Node) Broadcast(ctx context.Context, route uint32, body []byte) (uint32, rpcerr.Err) {
 	response, err := n.gateClient.Broadcast(ctx, &pbGate.BroadcastRequest{
 		Route:           route,
 		Body:            body,
@@ -327,7 +330,8 @@ func (n *Node) Broadcast(ctx context.Context, route uint32, body []byte) (uint32
 	}
 	return response.Count, nil
 }
-func (n *Node) MultiPush(ctx context.Context, uidList []string, route uint32, body []byte) (uint32, error) {
+
+func (n *Node) MultiPush(ctx context.Context, uidList []string, route uint32, body []byte) (uint32, rpcerr.Err) {
 	response, err := n.gateClient.MultiPush(ctx, &pbGate.MultiPushRequest{
 		UidList:         uidList,
 		Route:           route,
@@ -341,7 +345,7 @@ func (n *Node) MultiPush(ctx context.Context, uidList []string, route uint32, bo
 	return response.Count, nil
 }
 
-func (n *Node) MockGateCall(ctx context.Context, uid string, route uint32, body []byte) ([]byte, bool, error) {
+func (n *Node) MockGateCall(ctx context.Context, uid string, route uint32, body []byte) ([]byte, bool, rpcerr.Err) {
 	response, err := n.gateClient.MockCall(lx.WithBalance(ctx, locator.GateName), &pbGate.MockCallRequest{
 		Uid:             uid,
 		Route:           route,

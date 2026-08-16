@@ -32,7 +32,6 @@ const (
 	contextPackage    = protogen.GoImportPath("context")
 	grpcPackage       = protogen.GoImportPath("google.golang.org/grpc")
 	codesPackage      = protogen.GoImportPath("google.golang.org/grpc/codes")
-	statusPackage     = protogen.GoImportPath("google.golang.org/grpc/status")
 	waliClientPackage = protogen.GoImportPath("github.com/2comjie/wali/rpc/client")
 	waliRPCPackage    = protogen.GoImportPath("github.com/2comjie/wali/rpc")
 	waliRPCErrPackage = protogen.GoImportPath("github.com/2comjie/wali/rpc/rpcerr")
@@ -100,7 +99,7 @@ func (serviceGenerateHelper) generateUnimplementedServerType(_ *protogen.Plugin,
 			nilArg = "nil,"
 		}
 		g.P("func (Unimplemented", serverType, ") ", serverSignature(g, method), "{")
-		g.P("return ", nilArg, statusPackage.Ident("Error"), "(", codesPackage.Ident("Unimplemented"), `, "method `, method.GoName, ` not implemented")`)
+		g.P("return ", nilArg, waliRPCErrPackage.Ident("NewGRPC"), "(", codesPackage.Ident("Unimplemented"), `, "method `, method.GoName, ` not implemented")`)
 		g.P("}")
 	}
 	if *requireUnimplemented {
@@ -393,10 +392,10 @@ func genClientMethod(_ *protogen.Plugin, _ *protogen.File, g *protogen.Generated
 
 func serverSignature(g *protogen.GeneratedFile, method *protogen.Method) string {
 	var reqArgs []string
-	ret := "error"
+	ret := g.QualifiedGoIdent(waliRPCErrPackage.Ident("Err"))
 	if !method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer() {
 		reqArgs = append(reqArgs, g.QualifiedGoIdent(contextPackage.Ident("Context")))
-		ret = "(*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", error)"
+		ret = "(*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", " + g.QualifiedGoIdent(waliRPCErrPackage.Ident("Err")) + ")"
 	}
 	if !method.Desc.IsStreamingClient() {
 		reqArgs = append(reqArgs, "*"+g.QualifiedGoIdent(method.Input.GoIdent))

@@ -7,9 +7,9 @@ import (
 
 	"github.com/2comjie/wali/actor/actorDef"
 	pbActor "github.com/2comjie/wali/internal/pb/transport/actor"
+	"github.com/2comjie/wali/rpc/rpcerr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type rpcProcessor func(ctx context.Context, key actorDef.Key, policy ActivationPolicy, message Message, needReply bool) ([]byte, bool, error)
@@ -76,29 +76,29 @@ func (s *System) Shutdown(ctx context.Context) error {
 	}
 }
 
-func (s *System) Ask(ctx context.Context, request *pbActor.Request) (*pbActor.Response, error) {
+func (s *System) Ask(ctx context.Context, request *pbActor.Request) (*pbActor.Response, rpcerr.Err) {
 	return s.process(ctx, request, true)
 }
 
-func (s *System) Tell(ctx context.Context, request *pbActor.Request) (*pbActor.Response, error) {
+func (s *System) Tell(ctx context.Context, request *pbActor.Request) (*pbActor.Response, rpcerr.Err) {
 	return s.process(ctx, request, false)
 }
 
-func (s *System) process(ctx context.Context, request *pbActor.Request, needReply bool) (*pbActor.Response, error) {
+func (s *System) process(ctx context.Context, request *pbActor.Request, needReply bool) (*pbActor.Response, rpcerr.Err) {
 	if request == nil || request.ActorKey == "" || request.Route == 0 {
-		return nil, status.Error(codes.InvalidArgument, "actor: RPC请求无效")
+		return nil, rpcerr.NewGRPC(codes.InvalidArgument, "actor: RPC请求无效")
 	}
 
 	s.mu.RLock()
 	processor := s.routes[actorDef.Type(request.ActorType)][request.Route]
 	s.mu.RUnlock()
 	if processor == nil {
-		return nil, status.Error(codes.NotFound, "actor: RPC route不存在")
+		return nil, rpcerr.NewGRPC(codes.NotFound, "actor: RPC route不存在")
 	}
 
 	body, handled, err := processor(ctx, actorDef.Key(request.ActorKey), ActivationPolicy(request.Activation), Message{Route: request.Route, Body: request.Body}, needReply)
 	if err != nil {
-		return nil, err
+		return nil, rpcerr.Wrap(err)
 	}
 	return &pbActor.Response{Handled: handled, Body: body}, nil
 }

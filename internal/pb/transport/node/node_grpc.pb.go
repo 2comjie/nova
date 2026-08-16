@@ -13,7 +13,6 @@ import (
 	rpcerr "github.com/2comjie/wali/rpc/rpcerr"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -74,8 +73,8 @@ func (c *nodeClient) Tell(ctx context.Context, in *Request, opts ...grpc.CallOpt
 // All implementations must embed UnimplementedNodeServer
 // for forward compatibility.
 type NodeServer interface {
-	Call(context.Context, *Request) (*Response, error)
-	Tell(context.Context, *Request) (*Response, error)
+	Call(context.Context, *Request) (*Response, rpcerr.Err)
+	Tell(context.Context, *Request) (*Response, rpcerr.Err)
 	mustEmbedUnimplementedNodeServer()
 }
 
@@ -86,11 +85,11 @@ type NodeServer interface {
 // pointer dereference when methods are called.
 type UnimplementedNodeServer struct{}
 
-func (UnimplementedNodeServer) Call(context.Context, *Request) (*Response, error) {
-	return nil, status.Error(codes.Unimplemented, "method Call not implemented")
+func (UnimplementedNodeServer) Call(context.Context, *Request) (*Response, rpcerr.Err) {
+	return nil, rpcerr.NewGRPC(codes.Unimplemented, "method Call not implemented")
 }
-func (UnimplementedNodeServer) Tell(context.Context, *Request) (*Response, error) {
-	return nil, status.Error(codes.Unimplemented, "method Tell not implemented")
+func (UnimplementedNodeServer) Tell(context.Context, *Request) (*Response, rpcerr.Err) {
+	return nil, rpcerr.NewGRPC(codes.Unimplemented, "method Tell not implemented")
 }
 func (UnimplementedNodeServer) mustEmbedUnimplementedNodeServer() {}
 func (UnimplementedNodeServer) testEmbeddedByValue()              {}

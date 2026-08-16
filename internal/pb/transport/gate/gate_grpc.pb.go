@@ -13,7 +13,6 @@ import (
 	rpcerr "github.com/2comjie/wali/rpc/rpcerr"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -123,11 +122,11 @@ func (c *gateClient) MockCall(ctx context.Context, in *MockCallRequest, opts ...
 // All implementations must embed UnimplementedGateServer
 // for forward compatibility.
 type GateServer interface {
-	Push(context.Context, *PushRequest) (*emptypb.Empty, error)
-	Kick(context.Context, *KickRequest) (*emptypb.Empty, error)
-	Broadcast(context.Context, *BroadcastRequest) (*BroadcastResponse, error)
-	MultiPush(context.Context, *MultiPushRequest) (*MultiPushResponse, error)
-	MockCall(context.Context, *MockCallRequest) (*MockCallResponse, error)
+	Push(context.Context, *PushRequest) (*emptypb.Empty, rpcerr.Err)
+	Kick(context.Context, *KickRequest) (*emptypb.Empty, rpcerr.Err)
+	Broadcast(context.Context, *BroadcastRequest) (*BroadcastResponse, rpcerr.Err)
+	MultiPush(context.Context, *MultiPushRequest) (*MultiPushResponse, rpcerr.Err)
+	MockCall(context.Context, *MockCallRequest) (*MockCallResponse, rpcerr.Err)
 	mustEmbedUnimplementedGateServer()
 }
 
@@ -138,20 +137,20 @@ type GateServer interface {
 // pointer dereference when methods are called.
 type UnimplementedGateServer struct{}
 
-func (UnimplementedGateServer) Push(context.Context, *PushRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method Push not implemented")
+func (UnimplementedGateServer) Push(context.Context, *PushRequest) (*emptypb.Empty, rpcerr.Err) {
+	return nil, rpcerr.NewGRPC(codes.Unimplemented, "method Push not implemented")
 }
-func (UnimplementedGateServer) Kick(context.Context, *KickRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method Kick not implemented")
+func (UnimplementedGateServer) Kick(context.Context, *KickRequest) (*emptypb.Empty, rpcerr.Err) {
+	return nil, rpcerr.NewGRPC(codes.Unimplemented, "method Kick not implemented")
 }
-func (UnimplementedGateServer) Broadcast(context.Context, *BroadcastRequest) (*BroadcastResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Broadcast not implemented")
+func (UnimplementedGateServer) Broadcast(context.Context, *BroadcastRequest) (*BroadcastResponse, rpcerr.Err) {
+	return nil, rpcerr.NewGRPC(codes.Unimplemented, "method Broadcast not implemented")
 }
-func (UnimplementedGateServer) MultiPush(context.Context, *MultiPushRequest) (*MultiPushResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method MultiPush not implemented")
+func (UnimplementedGateServer) MultiPush(context.Context, *MultiPushRequest) (*MultiPushResponse, rpcerr.Err) {
+	return nil, rpcerr.NewGRPC(codes.Unimplemented, "method MultiPush not implemented")
 }
-func (UnimplementedGateServer) MockCall(context.Context, *MockCallRequest) (*MockCallResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method MockCall not implemented")
+func (UnimplementedGateServer) MockCall(context.Context, *MockCallRequest) (*MockCallResponse, rpcerr.Err) {
+	return nil, rpcerr.NewGRPC(codes.Unimplemented, "method MockCall not implemented")
 }
 func (UnimplementedGateServer) mustEmbedUnimplementedGateServer() {}
 func (UnimplementedGateServer) testEmbeddedByValue()              {}
