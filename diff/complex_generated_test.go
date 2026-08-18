@@ -153,3 +153,77 @@ func TestGeneratedComplexStateEndToEnd(t *testing.T) {
 		t.Fatal("ClearDirty did not clear root state")
 	}
 }
+
+func TestGeneratedApplyHooks(t *testing.T) {
+	source := &testdata.GameData{
+		Profile: &testdata.Profile{Nickname: "before"},
+		Items: map[uint64]*testdata.InventoryItem{
+			1001: {Id: 1001, Count: 10},
+		},
+		Currencies:  map[string]int64{"silver": 20},
+		Snapshots:   map[int32][]byte{1: {1}},
+		Checkpoints: []int64{10},
+	}
+	target := proto.Clone(source).(*testdata.GameData)
+	state := testdata.NewGameDataState(source)
+	state.GetProfile().SetNickname("after")
+	item, _ := state.Items().GetValue(1001)
+	item.SetCount(7)
+	state.Currencies().Store("gold", 100)
+	state.Currencies().Delete("silver")
+	state.Snapshots().Clear()
+	state.Checkpoints().Append(20)
+
+	writer := NewWriter(nil)
+	state.WriteDiff(writer)
+	toastCount := 0
+	putCount := 0
+	deleteCount := 0
+	clearCount := 0
+	appendCount := 0
+	nicknameCount := 0
+	hooks := &testdata.GameDataApplyHooks{
+		OnItemsCountChanged: func(key uint64, oldValue, newValue int32) {
+			if key != 1001 || oldValue != 10 || newValue != 7 {
+				t.Fatalf("unexpected item count event: key=%d old=%d new=%d", key, oldValue, newValue)
+			}
+			toastCount = int(oldValue - newValue)
+		},
+		OnCurrenciesPut: func(key string, oldValue, newValue int64, replaced bool) {
+			if key != "gold" || oldValue != 0 || newValue != 100 || replaced {
+				t.Fatalf("unexpected map put event: key=%s old=%d new=%d replaced=%v", key, oldValue, newValue, replaced)
+			}
+			putCount++
+		},
+		OnCurrenciesDelete: func(key string, oldValue int64) {
+			if key != "silver" || oldValue != 20 {
+				t.Fatalf("unexpected map delete event: key=%s old=%d", key, oldValue)
+			}
+			deleteCount++
+		},
+		OnSnapshotsClear: func() {
+			clearCount++
+		},
+		OnCheckpointsAppend: func(index int, value int64) {
+			if index != 1 || value != 20 {
+				t.Fatalf("unexpected list append event: index=%d value=%d", index, value)
+			}
+			appendCount++
+		},
+		OnProfilePatch: func(oldValue, newValue *testdata.Profile) {
+			if oldValue.Nickname != "before" || newValue.Nickname != "after" {
+				t.Fatalf("unexpected profile event: old=%s new=%s", oldValue.Nickname, newValue.Nickname)
+			}
+			nicknameCount++
+		},
+	}
+	if err := testdata.ApplyGameDataDiffWithHooks(target, writer.Data(), hooks); err != nil {
+		t.Fatal(err)
+	}
+	if toastCount != 3 || putCount != 1 || deleteCount != 1 || clearCount != 1 || appendCount != 1 || nicknameCount != 1 {
+		t.Fatalf("unexpected hook counts: toast=%d put=%d delete=%d clear=%d append=%d nickname=%d", toastCount, putCount, deleteCount, clearCount, appendCount, nicknameCount)
+	}
+	if !proto.Equal(target, source) {
+		t.Fatalf("diff result does not match source\nsource: %v\nresult: %v", source, target)
+	}
+}

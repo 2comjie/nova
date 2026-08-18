@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package nova.diff.testdata.bagpkg;
+
+option go_package = "github.com/2comjie/nova/diff/testdata/bagpkg;bagpkg";
+
+message Bag {
+  map<uint64, Item> items = 1;
+}
+
+message Item {
+  uint64 id = 1;
+  int32 count = 2;
+}

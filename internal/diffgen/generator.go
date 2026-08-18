@@ -48,6 +48,7 @@ func generateMessage(generated *protogen.GeneratedFile, message *protogen.Messag
 			generateListTypes(generated, message, field)
 		}
 	}
+	generateApplyHooks(generated, message)
 
 	for index, field := range message.Fields {
 		generated.P("const ", dirtyWordName(message, field), " uint32 = ", index/64)
@@ -124,6 +125,59 @@ func generateMessage(generated *protogen.GeneratedFile, message *protogen.Messag
 			generated.P("}")
 		} else if field.Desc.IsMap() || field.Desc.IsList() {
 			generated.P("s.", lowerFirst(field.GoName), "Changes.ClearDirty()")
+		}
+	}
+	generated.P("}")
+	generated.P()
+}
+
+func generateApplyHooks(generated *protogen.GeneratedFile, message *protogen.Message) {
+	generated.P("type ", message.GoIdent.GoName, "ApplyHooks struct {")
+	for _, field := range message.Fields {
+		switch {
+		case isScalar(field):
+			fieldType := scalarGoType(generated, field)
+			generated.P("On", field.GoName, "Changed func(oldValue, newValue ", fieldType, ")")
+		case isMessage(field):
+			messageType := "*" + generated.QualifiedGoIdent(field.Message.GoIdent)
+			generated.P(field.GoName, " *", generated.QualifiedGoIdent(applyHooksIdent(field.Message)))
+			generated.P("On", field.GoName, "Patch func(oldValue, newValue ", messageType, ")")
+			generated.P("On", field.GoName, "Replace func(oldValue, newValue ", messageType, ")")
+			generated.P("On", field.GoName, "Clear func(oldValue ", messageType, ")")
+		case field.Desc.IsMap():
+			key := field.Message.Fields[0]
+			value := field.Message.Fields[1]
+			keyType := scalarGoType(generated, key)
+			valueType := mapValueType(generated, value)
+			generated.P("On", field.GoName, "Put func(key ", keyType, ", oldValue, newValue ", valueType, ", replaced bool)")
+			generated.P("On", field.GoName, "Delete func(key ", keyType, ", oldValue ", valueType, ")")
+			generated.P("On", field.GoName, "Clear func()")
+			if value.Message != nil {
+				generated.P("On", field.GoName, "Patch func(key ", keyType, ", oldValue, newValue ", valueType, ")")
+				for _, child := range value.Message.Fields {
+					if isScalar(child) {
+						childType := scalarGoType(generated, child)
+						generated.P("On", field.GoName, child.GoName, "Changed func(key ", keyType, ", oldValue, newValue ", childType, ")")
+					}
+				}
+			}
+		case field.Desc.IsList():
+			valueType := listValueType(generated, field)
+			generated.P("On", field.GoName, "Append func(index int, value ", valueType, ")")
+			generated.P("On", field.GoName, "Insert func(index int, value ", valueType, ")")
+			generated.P("On", field.GoName, "Store func(index int, oldValue, newValue ", valueType, ")")
+			generated.P("On", field.GoName, "Delete func(index int, oldValue ", valueType, ")")
+			generated.P("On", field.GoName, "Move func(from, to int)")
+			generated.P("On", field.GoName, "Clear func()")
+			if field.Message != nil {
+				generated.P("On", field.GoName, "Patch func(index int, oldValue, newValue ", valueType, ")")
+				for _, child := range field.Message.Fields {
+					if isScalar(child) {
+						childType := scalarGoType(generated, child)
+						generated.P("On", field.GoName, child.GoName, "Changed func(index int, oldValue, newValue ", childType, ")")
+					}
+				}
+			}
 		}
 	}
 	generated.P("}")
@@ -785,7 +839,7 @@ func generateWriteListField(generated *protogen.GeneratedFile, message *protogen
 	generated.P("}")
 }
 
-func generateApplyMapField(generated *protogen.GeneratedFile, field *protogen.Field) {
+func generateApplyMapField(generated *protogen.GeneratedFile, _ *protogen.Message, field *protogen.Field) {
 	key := field.Message.Fields[0]
 	value := field.Message.Fields[1]
 	generated.P("if operation == ", generated.QualifiedGoIdent(diffIdent("OperationClear")), " {")
@@ -793,6 +847,9 @@ func generateApplyMapField(generated *protogen.GeneratedFile, field *protogen.Fi
 	generated.P("return ", generated.QualifiedGoIdent(diffIdent("ErrInvalidData")))
 	generated.P("}")
 	generated.P("value.", field.GoName, " = nil")
+	generated.P("if hooks != nil && hooks.On", field.GoName, "Clear != nil {")
+	generated.P("hooks.On", field.GoName, "Clear()")
+	generated.P("}")
 	generated.P("break")
 	generated.P("}")
 	generated.P("valueReader := ", generated.QualifiedGoIdent(diffIdent("NewValueReader")), "(payload)")
@@ -811,22 +868,43 @@ func generateApplyMapField(generated *protogen.GeneratedFile, field *protogen.Fi
 	generated.P("if valueReader.Err() != nil || !valueReader.Done() {")
 	generated.P("return ", generated.QualifiedGoIdent(diffIdent("ErrInvalidData")))
 	generated.P("}")
+	generated.P("oldItem, replaced := value.", field.GoName, "[key]")
 	generated.P("if value.", field.GoName, " == nil {")
 	generated.P("value.", field.GoName, " = make(map[", scalarGoType(generated, key), "]", mapValueType(generated, value), ")")
 	generated.P("}")
 	generated.P("value.", field.GoName, "[key] = item")
+	generated.P("if hooks != nil && hooks.On", field.GoName, "Put != nil {")
+	if value.Message != nil {
+		generated.P("var oldHookValue *", value.Message.GoIdent)
+		generated.P("if oldItem != nil {")
+		generated.P("oldHookValue = ", cloneMessageExpr(generated, "oldItem", value.Message))
+		generated.P("}")
+		generated.P("hooks.On", field.GoName, "Put(key, oldHookValue, ", hookValueExpr(generated, "item", value), ", replaced)")
+	} else {
+		generated.P("hooks.On", field.GoName, "Put(key, ", hookValueExpr(generated, "oldItem", value), ", ", hookValueExpr(generated, "item", value), ", replaced)")
+	}
+	generated.P("}")
 	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationMapDelete")), ":")
 	generated.P("if valueReader.Err() != nil || !valueReader.Done() {")
 	generated.P("return ", generated.QualifiedGoIdent(diffIdent("ErrInvalidData")))
 	generated.P("}")
+	generated.P("oldItem, existed := value.", field.GoName, "[key]")
 	generated.P("delete(value.", field.GoName, ", key)")
+	generated.P("if existed && hooks != nil && hooks.On", field.GoName, "Delete != nil {")
+	generated.P("hooks.On", field.GoName, "Delete(key, ", hookValueExpr(generated, "oldItem", value), ")")
+	generated.P("}")
 	if value.Message != nil {
+		patchHooks := messagePatchHooksCondition(field.GoName, value.Message)
 		generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationMapPatch")), ":")
 		generated.P("patch := valueReader.Remaining()")
 		generated.P("if valueReader.Err() != nil {")
 		generated.P("return ", generated.QualifiedGoIdent(diffIdent("ErrInvalidData")))
 		generated.P("}")
 		generated.P("item := value.", field.GoName, "[key]")
+		generated.P("var oldItem *", value.Message.GoIdent)
+		generated.P("if hooks != nil && (", patchHooks, ") && item != nil {")
+		generated.P("oldItem = ", cloneMessageExpr(generated, "item", value.Message))
+		generated.P("}")
 		generated.P("if item == nil {")
 		generated.P("item = &", value.Message.GoIdent, "{}")
 		generated.P("if value.", field.GoName, " == nil {")
@@ -837,20 +915,33 @@ func generateApplyMapField(generated *protogen.GeneratedFile, field *protogen.Fi
 		generated.P("if err := ", generated.QualifiedGoIdent(applyDiffIdent(value.Message)), "(item, patch); err != nil {")
 		generated.P("return err")
 		generated.P("}")
+		generated.P("if hooks != nil {")
+		generated.P("if hooks.On", field.GoName, "Patch != nil {")
+		generated.P("hooks.On", field.GoName, "Patch(key, oldItem, ", cloneMessageExpr(generated, "item", value.Message), ")")
+		generated.P("}")
+		generateMessageScalarHooks(generated, field.GoName, value.Message, "key, ", "oldItem", "item")
+		generated.P("}")
 	}
 	generated.P("default:")
 	generated.P("return ", generated.QualifiedGoIdent(diffIdent("ErrInvalidData")))
 	generated.P("}")
 }
 
-func generateApplyListField(generated *protogen.GeneratedFile, field *protogen.Field) {
+func generateApplyListField(generated *protogen.GeneratedFile, _ *protogen.Message, field *protogen.Field) {
 	generated.P("valueReader := ", generated.QualifiedGoIdent(diffIdent("NewValueReader")), "(payload)")
 	generated.P("switch operation {")
 	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationClear")), ":")
 	generated.P("value.", field.GoName, " = nil")
+	generated.P("if hooks != nil && hooks.On", field.GoName, "Clear != nil {")
+	generated.P("hooks.On", field.GoName, "Clear()")
+	generated.P("}")
 	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationListAppend")), ":")
 	generateReadListValue(generated, "valueReader", field, "item")
+	generated.P("index := len(value.", field.GoName, ")")
 	generated.P("value.", field.GoName, " = append(value.", field.GoName, ", item)")
+	generated.P("if hooks != nil && hooks.On", field.GoName, "Append != nil {")
+	generated.P("hooks.On", field.GoName, "Append(index, ", hookValueExpr(generated, "item", field), ")")
+	generated.P("}")
 	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationListInsert")), ":")
 	generated.P("index := int(valueReader.Uint32())")
 	generateReadListValue(generated, "valueReader", field, "item")
@@ -858,14 +949,25 @@ func generateApplyListField(generated *protogen.GeneratedFile, field *protogen.F
 	generated.P("value.", field.GoName, " = append(value.", field.GoName, ", zero)")
 	generated.P("copy(value.", field.GoName, "[index+1:], value.", field.GoName, "[index:len(value.", field.GoName, ")-1])")
 	generated.P("value.", field.GoName, "[index] = item")
+	generated.P("if hooks != nil && hooks.On", field.GoName, "Insert != nil {")
+	generated.P("hooks.On", field.GoName, "Insert(index, ", hookValueExpr(generated, "item", field), ")")
+	generated.P("}")
 	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationListSet")), ":")
 	generated.P("index := int(valueReader.Uint32())")
 	generateReadListValue(generated, "valueReader", field, "item")
+	generated.P("oldItem := value.", field.GoName, "[index]")
 	generated.P("value.", field.GoName, "[index] = item")
+	generated.P("if hooks != nil && hooks.On", field.GoName, "Store != nil {")
+	generated.P("hooks.On", field.GoName, "Store(index, ", hookValueExpr(generated, "oldItem", field), ", ", hookValueExpr(generated, "item", field), ")")
+	generated.P("}")
 	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationListDelete")), ":")
 	generated.P("index := int(valueReader.Uint32())")
+	generated.P("oldItem := value.", field.GoName, "[index]")
 	generated.P("copy(value.", field.GoName, "[index:], value.", field.GoName, "[index+1:])")
 	generated.P("value.", field.GoName, " = value.", field.GoName, "[:len(value.", field.GoName, ")-1]")
+	generated.P("if hooks != nil && hooks.On", field.GoName, "Delete != nil {")
+	generated.P("hooks.On", field.GoName, "Delete(index, ", hookValueExpr(generated, "oldItem", field), ")")
+	generated.P("}")
 	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationListMove")), ":")
 	generated.P("from := int(valueReader.Uint32())")
 	generated.P("to := int(valueReader.Uint32())")
@@ -876,12 +978,26 @@ func generateApplyListField(generated *protogen.GeneratedFile, field *protogen.F
 	generated.P("copy(value.", field.GoName, "[to+1:from+1], value.", field.GoName, "[to:from])")
 	generated.P("}")
 	generated.P("value.", field.GoName, "[to] = item")
+	generated.P("if hooks != nil && hooks.On", field.GoName, "Move != nil {")
+	generated.P("hooks.On", field.GoName, "Move(from, to)")
+	generated.P("}")
 	if field.Message != nil {
+		patchHooks := messagePatchHooksCondition(field.GoName, field.Message)
 		generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationListPatch")), ":")
 		generated.P("index := int(valueReader.Uint32())")
 		generated.P("patch := valueReader.Remaining()")
+		generated.P("var oldItem *", field.Message.GoIdent)
+		generated.P("if hooks != nil && (", patchHooks, ") {")
+		generated.P("oldItem = ", cloneMessageExpr(generated, "value."+field.GoName+"[index]", field.Message))
+		generated.P("}")
 		generated.P("if err := ", generated.QualifiedGoIdent(applyDiffIdent(field.Message)), "(value.", field.GoName, "[index], patch); err != nil {")
 		generated.P("return err")
+		generated.P("}")
+		generated.P("if hooks != nil {")
+		generated.P("if hooks.On", field.GoName, "Patch != nil {")
+		generated.P("hooks.On", field.GoName, "Patch(index, oldItem, ", cloneMessageExpr(generated, "value."+field.GoName+"[index]", field.Message), ")")
+		generated.P("}")
+		generateMessageScalarHooks(generated, field.GoName, field.Message, "index, ", "oldItem", "value."+field.GoName+"[index]")
 		generated.P("}")
 	}
 	generated.P("default:")
@@ -928,6 +1044,14 @@ func generateWriteDiff(generated *protogen.GeneratedFile, message *protogen.Mess
 
 func generateApplyDiff(generated *protogen.GeneratedFile, message *protogen.Message) {
 	generated.P("func Apply", message.GoIdent.GoName, "Diff(value *", message.GoIdent, ", data []byte) error {")
+	generated.P("return apply", message.GoIdent.GoName, "Diff(value, data, nil)")
+	generated.P("}")
+	generated.P()
+	generated.P("func Apply", message.GoIdent.GoName, "DiffWithHooks(value *", message.GoIdent, ", data []byte, hooks *", message.GoIdent.GoName, "ApplyHooks) error {")
+	generated.P("return apply", message.GoIdent.GoName, "Diff(value, data, hooks)")
+	generated.P("}")
+	generated.P()
+	generated.P("func apply", message.GoIdent.GoName, "Diff(value *", message.GoIdent, ", data []byte, hooks *", message.GoIdent.GoName, "ApplyHooks) error {")
 	generated.P("reader := ", generated.QualifiedGoIdent(diffIdent("NewReader")), "(data)")
 	generated.P("for {")
 	generated.P("fieldNumber, operation, payload, ok, err := reader.Next()")
@@ -941,36 +1065,113 @@ func generateApplyDiff(generated *protogen.GeneratedFile, message *protogen.Mess
 			generated.P("if operation != ", generated.QualifiedGoIdent(diffIdent(expectedOperation(field))), " {")
 			generated.P("return ", generated.QualifiedGoIdent(diffIdent("ErrInvalidData")))
 			generated.P("}")
+			generated.P("oldValue := value.", field.GoName)
 			generated.P("value.", field.GoName, " = ", decodeScalar(generated, field, "payload"))
+			generated.P("if hooks != nil && hooks.On", field.GoName, "Changed != nil {")
+			generated.P("hooks.On", field.GoName, "Changed(", hookScalarValue(generated, "oldValue", field), ", ", hookScalarValue(generated, "value."+field.GoName, field), ")")
+			generated.P("}")
 		} else if isMessage(field) {
 			generated.P("switch operation {")
 			generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationPatch")), ":")
+			generateCloneMessageForHooks(generated, field, "oldValue", "hooks.On"+field.GoName+"Patch != nil")
+			generated.P("var childHooks *", generated.QualifiedGoIdent(applyHooksIdent(field.Message)))
+			generated.P("if hooks != nil {")
+			generated.P("childHooks = hooks.", field.GoName)
+			generated.P("}")
 			generated.P("if value.", field.GoName, " == nil {")
 			generated.P("value.", field.GoName, " = &", field.Message.GoIdent, "{}")
 			generated.P("}")
-			generated.P("if err := ", generated.QualifiedGoIdent(applyDiffIdent(field.Message)), "(value.", field.GoName, ", payload); err != nil {")
+			generated.P("if err := ", generated.QualifiedGoIdent(applyDiffWithHooksIdent(field.Message)), "(value.", field.GoName, ", payload, childHooks); err != nil {")
 			generated.P("return err")
 			generated.P("}")
+			generated.P("if hooks != nil {")
+			generated.P("if hooks.On", field.GoName, "Patch != nil {")
+			generated.P("hooks.On", field.GoName, "Patch(oldValue, ", cloneMessageExpr(generated, "value."+field.GoName, field.Message), ")")
+			generated.P("}")
+			generated.P("}")
 			generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationReplace")), ":")
+			generateCloneMessageForHooks(generated, field, "oldValue", "hooks.On"+field.GoName+"Replace != nil")
 			generated.P("value.", field.GoName, " = &", field.Message.GoIdent, "{}")
 			generated.P("if err := ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Unmarshal", GoImportPath: protoPackage}), "(payload, value.", field.GoName, "); err != nil {")
 			generated.P("return err")
 			generated.P("}")
+			generated.P("if hooks != nil && hooks.On", field.GoName, "Replace != nil {")
+			generated.P("hooks.On", field.GoName, "Replace(oldValue, ", cloneMessageExpr(generated, "value."+field.GoName, field.Message), ")")
+			generated.P("}")
 			generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationClear")), ":")
+			generateCloneMessageForHooks(generated, field, "oldValue", "hooks.On"+field.GoName+"Clear != nil")
 			generated.P("value.", field.GoName, " = nil")
+			generated.P("if hooks != nil && hooks.On", field.GoName, "Clear != nil {")
+			generated.P("hooks.On", field.GoName, "Clear(oldValue)")
+			generated.P("}")
 			generated.P("default:")
 			generated.P("return ", generated.QualifiedGoIdent(diffIdent("ErrInvalidData")))
 			generated.P("}")
 		} else if field.Desc.IsMap() {
-			generateApplyMapField(generated, field)
+			generateApplyMapField(generated, message, field)
 		} else if field.Desc.IsList() {
-			generateApplyListField(generated, field)
+			generateApplyListField(generated, message, field)
 		}
 	}
 	generated.P("}")
 	generated.P("}")
 	generated.P("}")
 	generated.P()
+}
+
+func generateCloneMessageForHooks(generated *protogen.GeneratedFile, field *protogen.Field, name string, condition string) {
+	generated.P("var ", name, " *", field.Message.GoIdent)
+	generated.P("if hooks != nil && (", condition, ") && value.", field.GoName, " != nil {")
+	generated.P(name, " = ", cloneMessageExpr(generated, "value."+field.GoName, field.Message))
+	generated.P("}")
+}
+
+func generateMessageScalarHooks(generated *protogen.GeneratedFile, prefix string, message *protogen.Message, arguments string, oldValue string, newValue string) {
+	for _, field := range message.Fields {
+		if !isScalar(field) {
+			continue
+		}
+		oldField := oldValue + ".Get" + field.GoName + "()"
+		newField := newValue + ".Get" + field.GoName + "()"
+		generated.P("if hooks.On", prefix, field.GoName, "Changed != nil && ", scalarChangedCondition(generated, oldField, newField, field), " {")
+		generated.P("hooks.On", prefix, field.GoName, "Changed(", arguments, hookScalarValue(generated, oldField, field), ", ", hookScalarValue(generated, newField, field), ")")
+		generated.P("}")
+	}
+}
+
+func messagePatchHooksCondition(prefix string, message *protogen.Message) string {
+	condition := "hooks.On" + prefix + "Patch != nil"
+	for _, field := range message.Fields {
+		if isScalar(field) {
+			condition += " || hooks.On" + prefix + field.GoName + "Changed != nil"
+		}
+	}
+	return condition
+}
+
+func cloneMessageExpr(generated *protogen.GeneratedFile, value string, message *protogen.Message) string {
+	return generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Clone", GoImportPath: protoPackage}) + "(" + value + ").(*" + generated.QualifiedGoIdent(message.GoIdent) + ")"
+}
+
+func hookValueExpr(generated *protogen.GeneratedFile, value string, field *protogen.Field) string {
+	if field.Message != nil {
+		return cloneMessageExpr(generated, value, field.Message)
+	}
+	if field.Desc.Kind() == protoreflect.BytesKind {
+		return generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Clone", GoImportPath: bytesPackage}) + "(" + value + ")"
+	}
+	return value
+}
+
+func hookScalarValue(generated *protogen.GeneratedFile, value string, field *protogen.Field) string {
+	return hookValueExpr(generated, value, field)
+}
+
+func scalarChangedCondition(generated *protogen.GeneratedFile, oldValue string, newValue string, field *protogen.Field) string {
+	if field.Desc.Kind() == protoreflect.BytesKind {
+		return "!" + generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Equal", GoImportPath: bytesPackage}) + "(" + oldValue + ", " + newValue + ")"
+	}
+	return oldValue + " != " + newValue
 }
 
 func dirtyWordName(message *protogen.Message, field *protogen.Field) string {
@@ -1006,6 +1207,14 @@ func stateIdent(message *protogen.Message) protogen.GoIdent {
 
 func applyDiffIdent(message *protogen.Message) protogen.GoIdent {
 	return protogen.GoIdent{GoName: "Apply" + message.GoIdent.GoName + "Diff", GoImportPath: message.GoIdent.GoImportPath}
+}
+
+func applyDiffWithHooksIdent(message *protogen.Message) protogen.GoIdent {
+	return protogen.GoIdent{GoName: "Apply" + message.GoIdent.GoName + "DiffWithHooks", GoImportPath: message.GoIdent.GoImportPath}
+}
+
+func applyHooksIdent(message *protogen.Message) protogen.GoIdent {
+	return protogen.GoIdent{GoName: message.GoIdent.GoName + "ApplyHooks", GoImportPath: message.GoIdent.GoImportPath}
 }
 
 func trackerName(message *protogen.Message, field *protogen.Field) string {

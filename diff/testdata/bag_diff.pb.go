@@ -10,6 +10,17 @@ import (
 	proto "google.golang.org/protobuf/proto"
 )
 
+type PlayerApplyHooks struct {
+	Bag           *BagApplyHooks
+	OnBagPatch    func(oldValue, newValue *Bag)
+	OnBagReplace  func(oldValue, newValue *Bag)
+	OnBagClear    func(oldValue *Bag)
+	Bag2          *Bag2ApplyHooks
+	OnBag2Patch   func(oldValue, newValue *Bag2)
+	OnBag2Replace func(oldValue, newValue *Bag2)
+	OnBag2Clear   func(oldValue *Bag2)
+}
+
 const playerStateDirtyBagWord uint32 = 0
 const playerStateDirtyBagMask uint64 = 1
 const playerStateDirtyBag2Word uint32 = 0
@@ -158,6 +169,14 @@ func (s *PlayerState) WriteDiff(writer *diff.Writer) {
 }
 
 func ApplyPlayerDiff(value *Player, data []byte) error {
+	return applyPlayerDiff(value, data, nil)
+}
+
+func ApplyPlayerDiffWithHooks(value *Player, data []byte, hooks *PlayerApplyHooks) error {
+	return applyPlayerDiff(value, data, hooks)
+}
+
+func applyPlayerDiff(value *Player, data []byte, hooks *PlayerApplyHooks) error {
 	reader := diff.NewReader(data)
 	for {
 		fieldNumber, operation, payload, ok, err := reader.Next()
@@ -168,38 +187,92 @@ func ApplyPlayerDiff(value *Player, data []byte) error {
 		case 1:
 			switch operation {
 			case diff.OperationPatch:
+				var oldValue *Bag
+				if hooks != nil && (hooks.OnBagPatch != nil) && value.Bag != nil {
+					oldValue = proto.Clone(value.Bag).(*Bag)
+				}
+				var childHooks *BagApplyHooks
+				if hooks != nil {
+					childHooks = hooks.Bag
+				}
 				if value.Bag == nil {
 					value.Bag = &Bag{}
 				}
-				if err := ApplyBagDiff(value.Bag, payload); err != nil {
+				if err := ApplyBagDiffWithHooks(value.Bag, payload, childHooks); err != nil {
 					return err
 				}
+				if hooks != nil {
+					if hooks.OnBagPatch != nil {
+						hooks.OnBagPatch(oldValue, proto.Clone(value.Bag).(*Bag))
+					}
+				}
 			case diff.OperationReplace:
+				var oldValue *Bag
+				if hooks != nil && (hooks.OnBagReplace != nil) && value.Bag != nil {
+					oldValue = proto.Clone(value.Bag).(*Bag)
+				}
 				value.Bag = &Bag{}
 				if err := proto.Unmarshal(payload, value.Bag); err != nil {
 					return err
 				}
+				if hooks != nil && hooks.OnBagReplace != nil {
+					hooks.OnBagReplace(oldValue, proto.Clone(value.Bag).(*Bag))
+				}
 			case diff.OperationClear:
+				var oldValue *Bag
+				if hooks != nil && (hooks.OnBagClear != nil) && value.Bag != nil {
+					oldValue = proto.Clone(value.Bag).(*Bag)
+				}
 				value.Bag = nil
+				if hooks != nil && hooks.OnBagClear != nil {
+					hooks.OnBagClear(oldValue)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
 		case 2:
 			switch operation {
 			case diff.OperationPatch:
+				var oldValue *Bag2
+				if hooks != nil && (hooks.OnBag2Patch != nil) && value.Bag2 != nil {
+					oldValue = proto.Clone(value.Bag2).(*Bag2)
+				}
+				var childHooks *Bag2ApplyHooks
+				if hooks != nil {
+					childHooks = hooks.Bag2
+				}
 				if value.Bag2 == nil {
 					value.Bag2 = &Bag2{}
 				}
-				if err := ApplyBag2Diff(value.Bag2, payload); err != nil {
+				if err := ApplyBag2DiffWithHooks(value.Bag2, payload, childHooks); err != nil {
 					return err
 				}
+				if hooks != nil {
+					if hooks.OnBag2Patch != nil {
+						hooks.OnBag2Patch(oldValue, proto.Clone(value.Bag2).(*Bag2))
+					}
+				}
 			case diff.OperationReplace:
+				var oldValue *Bag2
+				if hooks != nil && (hooks.OnBag2Replace != nil) && value.Bag2 != nil {
+					oldValue = proto.Clone(value.Bag2).(*Bag2)
+				}
 				value.Bag2 = &Bag2{}
 				if err := proto.Unmarshal(payload, value.Bag2); err != nil {
 					return err
 				}
+				if hooks != nil && hooks.OnBag2Replace != nil {
+					hooks.OnBag2Replace(oldValue, proto.Clone(value.Bag2).(*Bag2))
+				}
 			case diff.OperationClear:
+				var oldValue *Bag2
+				if hooks != nil && (hooks.OnBag2Clear != nil) && value.Bag2 != nil {
+					oldValue = proto.Clone(value.Bag2).(*Bag2)
+				}
 				value.Bag2 = nil
+				if hooks != nil && hooks.OnBag2Clear != nil {
+					hooks.OnBag2Clear(oldValue)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -543,6 +616,42 @@ func (t *bagCountersTracker) ClearDirty() {
 	clear(t.indexes)
 	clear(t.changes)
 	t.changes = t.changes[:0]
+}
+
+type BagApplyHooks struct {
+	OnCapacityChanged   func(oldValue, newValue int32)
+	OnItemsPut          func(key uint64, oldValue, newValue *Item, replaced bool)
+	OnItemsDelete       func(key uint64, oldValue *Item)
+	OnItemsClear        func()
+	OnItemsPatch        func(key uint64, oldValue, newValue *Item)
+	OnItemsIdChanged    func(key uint64, oldValue, newValue uint64)
+	OnItemsCountChanged func(key uint64, oldValue, newValue int32)
+	OnItemsLevelChanged func(key uint64, oldValue, newValue int32)
+	OnOrderAppend       func(index int, value uint64)
+	OnOrderInsert       func(index int, value uint64)
+	OnOrderStore        func(index int, oldValue, newValue uint64)
+	OnOrderDelete       func(index int, oldValue uint64)
+	OnOrderMove         func(from, to int)
+	OnOrderClear        func()
+	OnSlotsAppend       func(index int, value *Item)
+	OnSlotsInsert       func(index int, value *Item)
+	OnSlotsStore        func(index int, oldValue, newValue *Item)
+	OnSlotsDelete       func(index int, oldValue *Item)
+	OnSlotsMove         func(from, to int)
+	OnSlotsClear        func()
+	OnSlotsPatch        func(index int, oldValue, newValue *Item)
+	OnSlotsIdChanged    func(index int, oldValue, newValue uint64)
+	OnSlotsCountChanged func(index int, oldValue, newValue int32)
+	OnSlotsLevelChanged func(index int, oldValue, newValue int32)
+	OnBlobsAppend       func(index int, value []byte)
+	OnBlobsInsert       func(index int, value []byte)
+	OnBlobsStore        func(index int, oldValue, newValue []byte)
+	OnBlobsDelete       func(index int, oldValue []byte)
+	OnBlobsMove         func(from, to int)
+	OnBlobsClear        func()
+	OnCountersPut       func(key string, oldValue, newValue int32, replaced bool)
+	OnCountersDelete    func(key string, oldValue int32)
+	OnCountersClear     func()
 }
 
 const bagStateDirtyCapacityWord uint32 = 0
@@ -1267,6 +1376,14 @@ func (s *BagState) WriteDiff(writer *diff.Writer) {
 }
 
 func ApplyBagDiff(value *Bag, data []byte) error {
+	return applyBagDiff(value, data, nil)
+}
+
+func ApplyBagDiffWithHooks(value *Bag, data []byte, hooks *BagApplyHooks) error {
+	return applyBagDiff(value, data, hooks)
+}
+
+func applyBagDiff(value *Bag, data []byte, hooks *BagApplyHooks) error {
 	reader := diff.NewReader(data)
 	for {
 		fieldNumber, operation, payload, ok, err := reader.Next()
@@ -1278,13 +1395,20 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Capacity
 			value.Capacity = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnCapacityChanged != nil {
+				hooks.OnCapacityChanged(oldValue, value.Capacity)
+			}
 		case 2:
 			if operation == diff.OperationClear {
 				if len(payload) != 0 {
 					return diff.ErrInvalidData
 				}
 				value.Items = nil
+				if hooks != nil && hooks.OnItemsClear != nil {
+					hooks.OnItemsClear()
+				}
 				break
 			}
 			valueReader := diff.NewValueReader(payload)
@@ -1299,21 +1423,37 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, replaced := value.Items[key]
 				if value.Items == nil {
 					value.Items = make(map[uint64]*Item)
 				}
 				value.Items[key] = item
+				if hooks != nil && hooks.OnItemsPut != nil {
+					var oldHookValue *Item
+					if oldItem != nil {
+						oldHookValue = proto.Clone(oldItem).(*Item)
+					}
+					hooks.OnItemsPut(key, oldHookValue, proto.Clone(item).(*Item), replaced)
+				}
 			case diff.OperationMapDelete:
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, existed := value.Items[key]
 				delete(value.Items, key)
+				if existed && hooks != nil && hooks.OnItemsDelete != nil {
+					hooks.OnItemsDelete(key, proto.Clone(oldItem).(*Item))
+				}
 			case diff.OperationMapPatch:
 				patch := valueReader.Remaining()
 				if valueReader.Err() != nil {
 					return diff.ErrInvalidData
 				}
 				item := value.Items[key]
+				var oldItem *Item
+				if hooks != nil && (hooks.OnItemsPatch != nil || hooks.OnItemsIdChanged != nil || hooks.OnItemsCountChanged != nil || hooks.OnItemsLevelChanged != nil) && item != nil {
+					oldItem = proto.Clone(item).(*Item)
+				}
 				if item == nil {
 					item = &Item{}
 					if value.Items == nil {
@@ -1324,6 +1464,20 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 				if err := ApplyItemDiff(item, patch); err != nil {
 					return err
 				}
+				if hooks != nil {
+					if hooks.OnItemsPatch != nil {
+						hooks.OnItemsPatch(key, oldItem, proto.Clone(item).(*Item))
+					}
+					if hooks.OnItemsIdChanged != nil && oldItem.GetId() != item.GetId() {
+						hooks.OnItemsIdChanged(key, oldItem.GetId(), item.GetId())
+					}
+					if hooks.OnItemsCountChanged != nil && oldItem.GetCount() != item.GetCount() {
+						hooks.OnItemsCountChanged(key, oldItem.GetCount(), item.GetCount())
+					}
+					if hooks.OnItemsLevelChanged != nil && oldItem.GetLevel() != item.GetLevel() {
+						hooks.OnItemsLevelChanged(key, oldItem.GetLevel(), item.GetLevel())
+					}
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -1332,9 +1486,16 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 			switch operation {
 			case diff.OperationClear:
 				value.Order = nil
+				if hooks != nil && hooks.OnOrderClear != nil {
+					hooks.OnOrderClear()
+				}
 			case diff.OperationListAppend:
 				item := valueReader.Uint64()
+				index := len(value.Order)
 				value.Order = append(value.Order, item)
+				if hooks != nil && hooks.OnOrderAppend != nil {
+					hooks.OnOrderAppend(index, item)
+				}
 			case diff.OperationListInsert:
 				index := int(valueReader.Uint32())
 				item := valueReader.Uint64()
@@ -1342,14 +1503,25 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 				value.Order = append(value.Order, zero)
 				copy(value.Order[index+1:], value.Order[index:len(value.Order)-1])
 				value.Order[index] = item
+				if hooks != nil && hooks.OnOrderInsert != nil {
+					hooks.OnOrderInsert(index, item)
+				}
 			case diff.OperationListSet:
 				index := int(valueReader.Uint32())
 				item := valueReader.Uint64()
+				oldItem := value.Order[index]
 				value.Order[index] = item
+				if hooks != nil && hooks.OnOrderStore != nil {
+					hooks.OnOrderStore(index, oldItem, item)
+				}
 			case diff.OperationListDelete:
 				index := int(valueReader.Uint32())
+				oldItem := value.Order[index]
 				copy(value.Order[index:], value.Order[index+1:])
 				value.Order = value.Order[:len(value.Order)-1]
+				if hooks != nil && hooks.OnOrderDelete != nil {
+					hooks.OnOrderDelete(index, oldItem)
+				}
 			case diff.OperationListMove:
 				from := int(valueReader.Uint32())
 				to := int(valueReader.Uint32())
@@ -1360,6 +1532,9 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 					copy(value.Order[to+1:from+1], value.Order[to:from])
 				}
 				value.Order[to] = item
+				if hooks != nil && hooks.OnOrderMove != nil {
+					hooks.OnOrderMove(from, to)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -1371,13 +1546,20 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 			switch operation {
 			case diff.OperationClear:
 				value.Slots = nil
+				if hooks != nil && hooks.OnSlotsClear != nil {
+					hooks.OnSlotsClear()
+				}
 			case diff.OperationListAppend:
 				itemData := valueReader.Bytes()
 				item := &Item{}
 				if err := proto.Unmarshal(itemData, item); err != nil {
 					return err
 				}
+				index := len(value.Slots)
 				value.Slots = append(value.Slots, item)
+				if hooks != nil && hooks.OnSlotsAppend != nil {
+					hooks.OnSlotsAppend(index, proto.Clone(item).(*Item))
+				}
 			case diff.OperationListInsert:
 				index := int(valueReader.Uint32())
 				itemData := valueReader.Bytes()
@@ -1389,6 +1571,9 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 				value.Slots = append(value.Slots, zero)
 				copy(value.Slots[index+1:], value.Slots[index:len(value.Slots)-1])
 				value.Slots[index] = item
+				if hooks != nil && hooks.OnSlotsInsert != nil {
+					hooks.OnSlotsInsert(index, proto.Clone(item).(*Item))
+				}
 			case diff.OperationListSet:
 				index := int(valueReader.Uint32())
 				itemData := valueReader.Bytes()
@@ -1396,11 +1581,19 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 				if err := proto.Unmarshal(itemData, item); err != nil {
 					return err
 				}
+				oldItem := value.Slots[index]
 				value.Slots[index] = item
+				if hooks != nil && hooks.OnSlotsStore != nil {
+					hooks.OnSlotsStore(index, proto.Clone(oldItem).(*Item), proto.Clone(item).(*Item))
+				}
 			case diff.OperationListDelete:
 				index := int(valueReader.Uint32())
+				oldItem := value.Slots[index]
 				copy(value.Slots[index:], value.Slots[index+1:])
 				value.Slots = value.Slots[:len(value.Slots)-1]
+				if hooks != nil && hooks.OnSlotsDelete != nil {
+					hooks.OnSlotsDelete(index, proto.Clone(oldItem).(*Item))
+				}
 			case diff.OperationListMove:
 				from := int(valueReader.Uint32())
 				to := int(valueReader.Uint32())
@@ -1411,11 +1604,32 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 					copy(value.Slots[to+1:from+1], value.Slots[to:from])
 				}
 				value.Slots[to] = item
+				if hooks != nil && hooks.OnSlotsMove != nil {
+					hooks.OnSlotsMove(from, to)
+				}
 			case diff.OperationListPatch:
 				index := int(valueReader.Uint32())
 				patch := valueReader.Remaining()
+				var oldItem *Item
+				if hooks != nil && (hooks.OnSlotsPatch != nil || hooks.OnSlotsIdChanged != nil || hooks.OnSlotsCountChanged != nil || hooks.OnSlotsLevelChanged != nil) {
+					oldItem = proto.Clone(value.Slots[index]).(*Item)
+				}
 				if err := ApplyItemDiff(value.Slots[index], patch); err != nil {
 					return err
+				}
+				if hooks != nil {
+					if hooks.OnSlotsPatch != nil {
+						hooks.OnSlotsPatch(index, oldItem, proto.Clone(value.Slots[index]).(*Item))
+					}
+					if hooks.OnSlotsIdChanged != nil && oldItem.GetId() != value.Slots[index].GetId() {
+						hooks.OnSlotsIdChanged(index, oldItem.GetId(), value.Slots[index].GetId())
+					}
+					if hooks.OnSlotsCountChanged != nil && oldItem.GetCount() != value.Slots[index].GetCount() {
+						hooks.OnSlotsCountChanged(index, oldItem.GetCount(), value.Slots[index].GetCount())
+					}
+					if hooks.OnSlotsLevelChanged != nil && oldItem.GetLevel() != value.Slots[index].GetLevel() {
+						hooks.OnSlotsLevelChanged(index, oldItem.GetLevel(), value.Slots[index].GetLevel())
+					}
 				}
 			default:
 				return diff.ErrInvalidData
@@ -1428,9 +1642,16 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 			switch operation {
 			case diff.OperationClear:
 				value.Blobs = nil
+				if hooks != nil && hooks.OnBlobsClear != nil {
+					hooks.OnBlobsClear()
+				}
 			case diff.OperationListAppend:
 				item := bytes.Clone(valueReader.Bytes())
+				index := len(value.Blobs)
 				value.Blobs = append(value.Blobs, item)
+				if hooks != nil && hooks.OnBlobsAppend != nil {
+					hooks.OnBlobsAppend(index, bytes.Clone(item))
+				}
 			case diff.OperationListInsert:
 				index := int(valueReader.Uint32())
 				item := bytes.Clone(valueReader.Bytes())
@@ -1438,14 +1659,25 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 				value.Blobs = append(value.Blobs, zero)
 				copy(value.Blobs[index+1:], value.Blobs[index:len(value.Blobs)-1])
 				value.Blobs[index] = item
+				if hooks != nil && hooks.OnBlobsInsert != nil {
+					hooks.OnBlobsInsert(index, bytes.Clone(item))
+				}
 			case diff.OperationListSet:
 				index := int(valueReader.Uint32())
 				item := bytes.Clone(valueReader.Bytes())
+				oldItem := value.Blobs[index]
 				value.Blobs[index] = item
+				if hooks != nil && hooks.OnBlobsStore != nil {
+					hooks.OnBlobsStore(index, bytes.Clone(oldItem), bytes.Clone(item))
+				}
 			case diff.OperationListDelete:
 				index := int(valueReader.Uint32())
+				oldItem := value.Blobs[index]
 				copy(value.Blobs[index:], value.Blobs[index+1:])
 				value.Blobs = value.Blobs[:len(value.Blobs)-1]
+				if hooks != nil && hooks.OnBlobsDelete != nil {
+					hooks.OnBlobsDelete(index, bytes.Clone(oldItem))
+				}
 			case diff.OperationListMove:
 				from := int(valueReader.Uint32())
 				to := int(valueReader.Uint32())
@@ -1456,6 +1688,9 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 					copy(value.Blobs[to+1:from+1], value.Blobs[to:from])
 				}
 				value.Blobs[to] = item
+				if hooks != nil && hooks.OnBlobsMove != nil {
+					hooks.OnBlobsMove(from, to)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -1468,6 +1703,9 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 					return diff.ErrInvalidData
 				}
 				value.Counters = nil
+				if hooks != nil && hooks.OnCountersClear != nil {
+					hooks.OnCountersClear()
+				}
 				break
 			}
 			valueReader := diff.NewValueReader(payload)
@@ -1478,15 +1716,23 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, replaced := value.Counters[key]
 				if value.Counters == nil {
 					value.Counters = make(map[string]int32)
 				}
 				value.Counters[key] = item
+				if hooks != nil && hooks.OnCountersPut != nil {
+					hooks.OnCountersPut(key, oldItem, item, replaced)
+				}
 			case diff.OperationMapDelete:
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, existed := value.Counters[key]
 				delete(value.Counters, key)
+				if existed && hooks != nil && hooks.OnCountersDelete != nil {
+					hooks.OnCountersDelete(key, oldItem)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -1641,6 +1887,23 @@ func (t *bag2OrderTracker) Clear() bool {
 func (t *bag2OrderTracker) ClearDirty() {
 	clear(t.changes)
 	t.changes = t.changes[:0]
+}
+
+type Bag2ApplyHooks struct {
+	OnCapacityChanged   func(oldValue, newValue int32)
+	OnItemsPut          func(key uint64, oldValue, newValue *Item, replaced bool)
+	OnItemsDelete       func(key uint64, oldValue *Item)
+	OnItemsClear        func()
+	OnItemsPatch        func(key uint64, oldValue, newValue *Item)
+	OnItemsIdChanged    func(key uint64, oldValue, newValue uint64)
+	OnItemsCountChanged func(key uint64, oldValue, newValue int32)
+	OnItemsLevelChanged func(key uint64, oldValue, newValue int32)
+	OnOrderAppend       func(index int, value uint64)
+	OnOrderInsert       func(index int, value uint64)
+	OnOrderStore        func(index int, oldValue, newValue uint64)
+	OnOrderDelete       func(index int, oldValue uint64)
+	OnOrderMove         func(from, to int)
+	OnOrderClear        func()
 }
 
 const bag2StateDirtyCapacityWord uint32 = 0
@@ -1968,6 +2231,14 @@ func (s *Bag2State) WriteDiff(writer *diff.Writer) {
 }
 
 func ApplyBag2Diff(value *Bag2, data []byte) error {
+	return applyBag2Diff(value, data, nil)
+}
+
+func ApplyBag2DiffWithHooks(value *Bag2, data []byte, hooks *Bag2ApplyHooks) error {
+	return applyBag2Diff(value, data, hooks)
+}
+
+func applyBag2Diff(value *Bag2, data []byte, hooks *Bag2ApplyHooks) error {
 	reader := diff.NewReader(data)
 	for {
 		fieldNumber, operation, payload, ok, err := reader.Next()
@@ -1979,13 +2250,20 @@ func ApplyBag2Diff(value *Bag2, data []byte) error {
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Capacity
 			value.Capacity = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnCapacityChanged != nil {
+				hooks.OnCapacityChanged(oldValue, value.Capacity)
+			}
 		case 2:
 			if operation == diff.OperationClear {
 				if len(payload) != 0 {
 					return diff.ErrInvalidData
 				}
 				value.Items = nil
+				if hooks != nil && hooks.OnItemsClear != nil {
+					hooks.OnItemsClear()
+				}
 				break
 			}
 			valueReader := diff.NewValueReader(payload)
@@ -2000,21 +2278,37 @@ func ApplyBag2Diff(value *Bag2, data []byte) error {
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, replaced := value.Items[key]
 				if value.Items == nil {
 					value.Items = make(map[uint64]*Item)
 				}
 				value.Items[key] = item
+				if hooks != nil && hooks.OnItemsPut != nil {
+					var oldHookValue *Item
+					if oldItem != nil {
+						oldHookValue = proto.Clone(oldItem).(*Item)
+					}
+					hooks.OnItemsPut(key, oldHookValue, proto.Clone(item).(*Item), replaced)
+				}
 			case diff.OperationMapDelete:
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, existed := value.Items[key]
 				delete(value.Items, key)
+				if existed && hooks != nil && hooks.OnItemsDelete != nil {
+					hooks.OnItemsDelete(key, proto.Clone(oldItem).(*Item))
+				}
 			case diff.OperationMapPatch:
 				patch := valueReader.Remaining()
 				if valueReader.Err() != nil {
 					return diff.ErrInvalidData
 				}
 				item := value.Items[key]
+				var oldItem *Item
+				if hooks != nil && (hooks.OnItemsPatch != nil || hooks.OnItemsIdChanged != nil || hooks.OnItemsCountChanged != nil || hooks.OnItemsLevelChanged != nil) && item != nil {
+					oldItem = proto.Clone(item).(*Item)
+				}
 				if item == nil {
 					item = &Item{}
 					if value.Items == nil {
@@ -2025,6 +2319,20 @@ func ApplyBag2Diff(value *Bag2, data []byte) error {
 				if err := ApplyItemDiff(item, patch); err != nil {
 					return err
 				}
+				if hooks != nil {
+					if hooks.OnItemsPatch != nil {
+						hooks.OnItemsPatch(key, oldItem, proto.Clone(item).(*Item))
+					}
+					if hooks.OnItemsIdChanged != nil && oldItem.GetId() != item.GetId() {
+						hooks.OnItemsIdChanged(key, oldItem.GetId(), item.GetId())
+					}
+					if hooks.OnItemsCountChanged != nil && oldItem.GetCount() != item.GetCount() {
+						hooks.OnItemsCountChanged(key, oldItem.GetCount(), item.GetCount())
+					}
+					if hooks.OnItemsLevelChanged != nil && oldItem.GetLevel() != item.GetLevel() {
+						hooks.OnItemsLevelChanged(key, oldItem.GetLevel(), item.GetLevel())
+					}
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -2033,9 +2341,16 @@ func ApplyBag2Diff(value *Bag2, data []byte) error {
 			switch operation {
 			case diff.OperationClear:
 				value.Order = nil
+				if hooks != nil && hooks.OnOrderClear != nil {
+					hooks.OnOrderClear()
+				}
 			case diff.OperationListAppend:
 				item := valueReader.Uint64()
+				index := len(value.Order)
 				value.Order = append(value.Order, item)
+				if hooks != nil && hooks.OnOrderAppend != nil {
+					hooks.OnOrderAppend(index, item)
+				}
 			case diff.OperationListInsert:
 				index := int(valueReader.Uint32())
 				item := valueReader.Uint64()
@@ -2043,14 +2358,25 @@ func ApplyBag2Diff(value *Bag2, data []byte) error {
 				value.Order = append(value.Order, zero)
 				copy(value.Order[index+1:], value.Order[index:len(value.Order)-1])
 				value.Order[index] = item
+				if hooks != nil && hooks.OnOrderInsert != nil {
+					hooks.OnOrderInsert(index, item)
+				}
 			case diff.OperationListSet:
 				index := int(valueReader.Uint32())
 				item := valueReader.Uint64()
+				oldItem := value.Order[index]
 				value.Order[index] = item
+				if hooks != nil && hooks.OnOrderStore != nil {
+					hooks.OnOrderStore(index, oldItem, item)
+				}
 			case diff.OperationListDelete:
 				index := int(valueReader.Uint32())
+				oldItem := value.Order[index]
 				copy(value.Order[index:], value.Order[index+1:])
 				value.Order = value.Order[:len(value.Order)-1]
+				if hooks != nil && hooks.OnOrderDelete != nil {
+					hooks.OnOrderDelete(index, oldItem)
+				}
 			case diff.OperationListMove:
 				from := int(valueReader.Uint32())
 				to := int(valueReader.Uint32())
@@ -2061,6 +2387,9 @@ func ApplyBag2Diff(value *Bag2, data []byte) error {
 					copy(value.Order[to+1:from+1], value.Order[to:from])
 				}
 				value.Order[to] = item
+				if hooks != nil && hooks.OnOrderMove != nil {
+					hooks.OnOrderMove(from, to)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -2075,6 +2404,12 @@ func (s *Bag2State) ClearDirty() {
 	diff.ClearDirty(s.dirty[:])
 	s.itemsChanges.ClearDirty()
 	s.orderChanges.ClearDirty()
+}
+
+type ItemApplyHooks struct {
+	OnIdChanged    func(oldValue, newValue uint64)
+	OnCountChanged func(oldValue, newValue int32)
+	OnLevelChanged func(oldValue, newValue int32)
 }
 
 const itemStateDirtyIdWord uint32 = 0
@@ -2166,6 +2501,14 @@ func (s *ItemState) WriteDiff(writer *diff.Writer) {
 }
 
 func ApplyItemDiff(value *Item, data []byte) error {
+	return applyItemDiff(value, data, nil)
+}
+
+func ApplyItemDiffWithHooks(value *Item, data []byte, hooks *ItemApplyHooks) error {
+	return applyItemDiff(value, data, hooks)
+}
+
+func applyItemDiff(value *Item, data []byte, hooks *ItemApplyHooks) error {
 	reader := diff.NewReader(data)
 	for {
 		fieldNumber, operation, payload, ok, err := reader.Next()
@@ -2177,17 +2520,29 @@ func ApplyItemDiff(value *Item, data []byte) error {
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Id
 			value.Id = diff.DecodeUint64(payload)
+			if hooks != nil && hooks.OnIdChanged != nil {
+				hooks.OnIdChanged(oldValue, value.Id)
+			}
 		case 2:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Count
 			value.Count = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnCountChanged != nil {
+				hooks.OnCountChanged(oldValue, value.Count)
+			}
 		case 3:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Level
 			value.Level = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnLevelChanged != nil {
+				hooks.OnLevelChanged(oldValue, value.Level)
+			}
 		}
 	}
 }

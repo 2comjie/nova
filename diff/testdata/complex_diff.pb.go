@@ -570,6 +570,75 @@ func (t *gameDataQualitiesTracker) ClearDirty() {
 	t.changes = t.changes[:0]
 }
 
+type GameDataApplyHooks struct {
+	Scalars                *ScalarValuesApplyHooks
+	OnScalarsPatch         func(oldValue, newValue *ScalarValues)
+	OnScalarsReplace       func(oldValue, newValue *ScalarValues)
+	OnScalarsClear         func(oldValue *ScalarValues)
+	Profile                *ProfileApplyHooks
+	OnProfilePatch         func(oldValue, newValue *Profile)
+	OnProfileReplace       func(oldValue, newValue *Profile)
+	OnProfileClear         func(oldValue *Profile)
+	OnItemsPut             func(key uint64, oldValue, newValue *InventoryItem, replaced bool)
+	OnItemsDelete          func(key uint64, oldValue *InventoryItem)
+	OnItemsClear           func()
+	OnItemsPatch           func(key uint64, oldValue, newValue *InventoryItem)
+	OnItemsIdChanged       func(key uint64, oldValue, newValue uint64)
+	OnItemsCountChanged    func(key uint64, oldValue, newValue int32)
+	OnItemsQualityChanged  func(key uint64, oldValue, newValue ItemQuality)
+	OnItemsNameChanged     func(key uint64, oldValue, newValue string)
+	OnItemsPayloadChanged  func(key uint64, oldValue, newValue []byte)
+	OnCurrenciesPut        func(key string, oldValue, newValue int64, replaced bool)
+	OnCurrenciesDelete     func(key string, oldValue int64)
+	OnCurrenciesClear      func()
+	OnSnapshotsPut         func(key int32, oldValue, newValue []byte, replaced bool)
+	OnSnapshotsDelete      func(key int32, oldValue []byte)
+	OnSnapshotsClear       func()
+	OnFeatureFlagsPut      func(key bool, oldValue, newValue string, replaced bool)
+	OnFeatureFlagsDelete   func(key bool, oldValue string)
+	OnFeatureFlagsClear    func()
+	OnCheckpointsAppend    func(index int, value int64)
+	OnCheckpointsInsert    func(index int, value int64)
+	OnCheckpointsStore     func(index int, oldValue, newValue int64)
+	OnCheckpointsDelete    func(index int, oldValue int64)
+	OnCheckpointsMove      func(from, to int)
+	OnCheckpointsClear     func()
+	OnLabelsAppend         func(index int, value string)
+	OnLabelsInsert         func(index int, value string)
+	OnLabelsStore          func(index int, oldValue, newValue string)
+	OnLabelsDelete         func(index int, oldValue string)
+	OnLabelsMove           func(from, to int)
+	OnLabelsClear          func()
+	OnPacketsAppend        func(index int, value []byte)
+	OnPacketsInsert        func(index int, value []byte)
+	OnPacketsStore         func(index int, oldValue, newValue []byte)
+	OnPacketsDelete        func(index int, oldValue []byte)
+	OnPacketsMove          func(from, to int)
+	OnPacketsClear         func()
+	OnLineupAppend         func(index int, value *InventoryItem)
+	OnLineupInsert         func(index int, value *InventoryItem)
+	OnLineupStore          func(index int, oldValue, newValue *InventoryItem)
+	OnLineupDelete         func(index int, oldValue *InventoryItem)
+	OnLineupMove           func(from, to int)
+	OnLineupClear          func()
+	OnLineupPatch          func(index int, oldValue, newValue *InventoryItem)
+	OnLineupIdChanged      func(index int, oldValue, newValue uint64)
+	OnLineupCountChanged   func(index int, oldValue, newValue int32)
+	OnLineupQualityChanged func(index int, oldValue, newValue ItemQuality)
+	OnLineupNameChanged    func(index int, oldValue, newValue string)
+	OnLineupPayloadChanged func(index int, oldValue, newValue []byte)
+	OnQualitiesAppend      func(index int, value ItemQuality)
+	OnQualitiesInsert      func(index int, value ItemQuality)
+	OnQualitiesStore       func(index int, oldValue, newValue ItemQuality)
+	OnQualitiesDelete      func(index int, oldValue ItemQuality)
+	OnQualitiesMove        func(from, to int)
+	OnQualitiesClear       func()
+	Wide                   *WideStateApplyHooks
+	OnWidePatch            func(oldValue, newValue *WideState)
+	OnWideReplace          func(oldValue, newValue *WideState)
+	OnWideClear            func(oldValue *WideState)
+}
+
 const gameDataStateDirtyScalarsWord uint32 = 0
 const gameDataStateDirtyScalarsMask uint64 = 1
 const gameDataStateDirtyProfileWord uint32 = 0
@@ -1922,6 +1991,14 @@ func (s *GameDataState) WriteDiff(writer *diff.Writer) {
 }
 
 func ApplyGameDataDiff(value *GameData, data []byte) error {
+	return applyGameDataDiff(value, data, nil)
+}
+
+func ApplyGameDataDiffWithHooks(value *GameData, data []byte, hooks *GameDataApplyHooks) error {
+	return applyGameDataDiff(value, data, hooks)
+}
+
+func applyGameDataDiff(value *GameData, data []byte, hooks *GameDataApplyHooks) error {
 	reader := diff.NewReader(data)
 	for {
 		fieldNumber, operation, payload, ok, err := reader.Next()
@@ -1932,38 +2009,92 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 		case 1:
 			switch operation {
 			case diff.OperationPatch:
+				var oldValue *ScalarValues
+				if hooks != nil && (hooks.OnScalarsPatch != nil) && value.Scalars != nil {
+					oldValue = proto.Clone(value.Scalars).(*ScalarValues)
+				}
+				var childHooks *ScalarValuesApplyHooks
+				if hooks != nil {
+					childHooks = hooks.Scalars
+				}
 				if value.Scalars == nil {
 					value.Scalars = &ScalarValues{}
 				}
-				if err := ApplyScalarValuesDiff(value.Scalars, payload); err != nil {
+				if err := ApplyScalarValuesDiffWithHooks(value.Scalars, payload, childHooks); err != nil {
 					return err
 				}
+				if hooks != nil {
+					if hooks.OnScalarsPatch != nil {
+						hooks.OnScalarsPatch(oldValue, proto.Clone(value.Scalars).(*ScalarValues))
+					}
+				}
 			case diff.OperationReplace:
+				var oldValue *ScalarValues
+				if hooks != nil && (hooks.OnScalarsReplace != nil) && value.Scalars != nil {
+					oldValue = proto.Clone(value.Scalars).(*ScalarValues)
+				}
 				value.Scalars = &ScalarValues{}
 				if err := proto.Unmarshal(payload, value.Scalars); err != nil {
 					return err
 				}
+				if hooks != nil && hooks.OnScalarsReplace != nil {
+					hooks.OnScalarsReplace(oldValue, proto.Clone(value.Scalars).(*ScalarValues))
+				}
 			case diff.OperationClear:
+				var oldValue *ScalarValues
+				if hooks != nil && (hooks.OnScalarsClear != nil) && value.Scalars != nil {
+					oldValue = proto.Clone(value.Scalars).(*ScalarValues)
+				}
 				value.Scalars = nil
+				if hooks != nil && hooks.OnScalarsClear != nil {
+					hooks.OnScalarsClear(oldValue)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
 		case 2:
 			switch operation {
 			case diff.OperationPatch:
+				var oldValue *Profile
+				if hooks != nil && (hooks.OnProfilePatch != nil) && value.Profile != nil {
+					oldValue = proto.Clone(value.Profile).(*Profile)
+				}
+				var childHooks *ProfileApplyHooks
+				if hooks != nil {
+					childHooks = hooks.Profile
+				}
 				if value.Profile == nil {
 					value.Profile = &Profile{}
 				}
-				if err := ApplyProfileDiff(value.Profile, payload); err != nil {
+				if err := ApplyProfileDiffWithHooks(value.Profile, payload, childHooks); err != nil {
 					return err
 				}
+				if hooks != nil {
+					if hooks.OnProfilePatch != nil {
+						hooks.OnProfilePatch(oldValue, proto.Clone(value.Profile).(*Profile))
+					}
+				}
 			case diff.OperationReplace:
+				var oldValue *Profile
+				if hooks != nil && (hooks.OnProfileReplace != nil) && value.Profile != nil {
+					oldValue = proto.Clone(value.Profile).(*Profile)
+				}
 				value.Profile = &Profile{}
 				if err := proto.Unmarshal(payload, value.Profile); err != nil {
 					return err
 				}
+				if hooks != nil && hooks.OnProfileReplace != nil {
+					hooks.OnProfileReplace(oldValue, proto.Clone(value.Profile).(*Profile))
+				}
 			case diff.OperationClear:
+				var oldValue *Profile
+				if hooks != nil && (hooks.OnProfileClear != nil) && value.Profile != nil {
+					oldValue = proto.Clone(value.Profile).(*Profile)
+				}
 				value.Profile = nil
+				if hooks != nil && hooks.OnProfileClear != nil {
+					hooks.OnProfileClear(oldValue)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -1973,6 +2104,9 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 					return diff.ErrInvalidData
 				}
 				value.Items = nil
+				if hooks != nil && hooks.OnItemsClear != nil {
+					hooks.OnItemsClear()
+				}
 				break
 			}
 			valueReader := diff.NewValueReader(payload)
@@ -1987,21 +2121,37 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, replaced := value.Items[key]
 				if value.Items == nil {
 					value.Items = make(map[uint64]*InventoryItem)
 				}
 				value.Items[key] = item
+				if hooks != nil && hooks.OnItemsPut != nil {
+					var oldHookValue *InventoryItem
+					if oldItem != nil {
+						oldHookValue = proto.Clone(oldItem).(*InventoryItem)
+					}
+					hooks.OnItemsPut(key, oldHookValue, proto.Clone(item).(*InventoryItem), replaced)
+				}
 			case diff.OperationMapDelete:
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, existed := value.Items[key]
 				delete(value.Items, key)
+				if existed && hooks != nil && hooks.OnItemsDelete != nil {
+					hooks.OnItemsDelete(key, proto.Clone(oldItem).(*InventoryItem))
+				}
 			case diff.OperationMapPatch:
 				patch := valueReader.Remaining()
 				if valueReader.Err() != nil {
 					return diff.ErrInvalidData
 				}
 				item := value.Items[key]
+				var oldItem *InventoryItem
+				if hooks != nil && (hooks.OnItemsPatch != nil || hooks.OnItemsIdChanged != nil || hooks.OnItemsCountChanged != nil || hooks.OnItemsQualityChanged != nil || hooks.OnItemsNameChanged != nil || hooks.OnItemsPayloadChanged != nil) && item != nil {
+					oldItem = proto.Clone(item).(*InventoryItem)
+				}
 				if item == nil {
 					item = &InventoryItem{}
 					if value.Items == nil {
@@ -2012,6 +2162,26 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 				if err := ApplyInventoryItemDiff(item, patch); err != nil {
 					return err
 				}
+				if hooks != nil {
+					if hooks.OnItemsPatch != nil {
+						hooks.OnItemsPatch(key, oldItem, proto.Clone(item).(*InventoryItem))
+					}
+					if hooks.OnItemsIdChanged != nil && oldItem.GetId() != item.GetId() {
+						hooks.OnItemsIdChanged(key, oldItem.GetId(), item.GetId())
+					}
+					if hooks.OnItemsCountChanged != nil && oldItem.GetCount() != item.GetCount() {
+						hooks.OnItemsCountChanged(key, oldItem.GetCount(), item.GetCount())
+					}
+					if hooks.OnItemsQualityChanged != nil && oldItem.GetQuality() != item.GetQuality() {
+						hooks.OnItemsQualityChanged(key, oldItem.GetQuality(), item.GetQuality())
+					}
+					if hooks.OnItemsNameChanged != nil && oldItem.GetName() != item.GetName() {
+						hooks.OnItemsNameChanged(key, oldItem.GetName(), item.GetName())
+					}
+					if hooks.OnItemsPayloadChanged != nil && !bytes.Equal(oldItem.GetPayload(), item.GetPayload()) {
+						hooks.OnItemsPayloadChanged(key, bytes.Clone(oldItem.GetPayload()), bytes.Clone(item.GetPayload()))
+					}
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -2021,6 +2191,9 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 					return diff.ErrInvalidData
 				}
 				value.Currencies = nil
+				if hooks != nil && hooks.OnCurrenciesClear != nil {
+					hooks.OnCurrenciesClear()
+				}
 				break
 			}
 			valueReader := diff.NewValueReader(payload)
@@ -2031,15 +2204,23 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, replaced := value.Currencies[key]
 				if value.Currencies == nil {
 					value.Currencies = make(map[string]int64)
 				}
 				value.Currencies[key] = item
+				if hooks != nil && hooks.OnCurrenciesPut != nil {
+					hooks.OnCurrenciesPut(key, oldItem, item, replaced)
+				}
 			case diff.OperationMapDelete:
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, existed := value.Currencies[key]
 				delete(value.Currencies, key)
+				if existed && hooks != nil && hooks.OnCurrenciesDelete != nil {
+					hooks.OnCurrenciesDelete(key, oldItem)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -2049,6 +2230,9 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 					return diff.ErrInvalidData
 				}
 				value.Snapshots = nil
+				if hooks != nil && hooks.OnSnapshotsClear != nil {
+					hooks.OnSnapshotsClear()
+				}
 				break
 			}
 			valueReader := diff.NewValueReader(payload)
@@ -2059,15 +2243,23 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, replaced := value.Snapshots[key]
 				if value.Snapshots == nil {
 					value.Snapshots = make(map[int32][]byte)
 				}
 				value.Snapshots[key] = item
+				if hooks != nil && hooks.OnSnapshotsPut != nil {
+					hooks.OnSnapshotsPut(key, bytes.Clone(oldItem), bytes.Clone(item), replaced)
+				}
 			case diff.OperationMapDelete:
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, existed := value.Snapshots[key]
 				delete(value.Snapshots, key)
+				if existed && hooks != nil && hooks.OnSnapshotsDelete != nil {
+					hooks.OnSnapshotsDelete(key, bytes.Clone(oldItem))
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -2077,6 +2269,9 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 					return diff.ErrInvalidData
 				}
 				value.FeatureFlags = nil
+				if hooks != nil && hooks.OnFeatureFlagsClear != nil {
+					hooks.OnFeatureFlagsClear()
+				}
 				break
 			}
 			valueReader := diff.NewValueReader(payload)
@@ -2087,15 +2282,23 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, replaced := value.FeatureFlags[key]
 				if value.FeatureFlags == nil {
 					value.FeatureFlags = make(map[bool]string)
 				}
 				value.FeatureFlags[key] = item
+				if hooks != nil && hooks.OnFeatureFlagsPut != nil {
+					hooks.OnFeatureFlagsPut(key, oldItem, item, replaced)
+				}
 			case diff.OperationMapDelete:
 				if valueReader.Err() != nil || !valueReader.Done() {
 					return diff.ErrInvalidData
 				}
+				oldItem, existed := value.FeatureFlags[key]
 				delete(value.FeatureFlags, key)
+				if existed && hooks != nil && hooks.OnFeatureFlagsDelete != nil {
+					hooks.OnFeatureFlagsDelete(key, oldItem)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -2104,9 +2307,16 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 			switch operation {
 			case diff.OperationClear:
 				value.Checkpoints = nil
+				if hooks != nil && hooks.OnCheckpointsClear != nil {
+					hooks.OnCheckpointsClear()
+				}
 			case diff.OperationListAppend:
 				item := valueReader.Int64()
+				index := len(value.Checkpoints)
 				value.Checkpoints = append(value.Checkpoints, item)
+				if hooks != nil && hooks.OnCheckpointsAppend != nil {
+					hooks.OnCheckpointsAppend(index, item)
+				}
 			case diff.OperationListInsert:
 				index := int(valueReader.Uint32())
 				item := valueReader.Int64()
@@ -2114,14 +2324,25 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 				value.Checkpoints = append(value.Checkpoints, zero)
 				copy(value.Checkpoints[index+1:], value.Checkpoints[index:len(value.Checkpoints)-1])
 				value.Checkpoints[index] = item
+				if hooks != nil && hooks.OnCheckpointsInsert != nil {
+					hooks.OnCheckpointsInsert(index, item)
+				}
 			case diff.OperationListSet:
 				index := int(valueReader.Uint32())
 				item := valueReader.Int64()
+				oldItem := value.Checkpoints[index]
 				value.Checkpoints[index] = item
+				if hooks != nil && hooks.OnCheckpointsStore != nil {
+					hooks.OnCheckpointsStore(index, oldItem, item)
+				}
 			case diff.OperationListDelete:
 				index := int(valueReader.Uint32())
+				oldItem := value.Checkpoints[index]
 				copy(value.Checkpoints[index:], value.Checkpoints[index+1:])
 				value.Checkpoints = value.Checkpoints[:len(value.Checkpoints)-1]
+				if hooks != nil && hooks.OnCheckpointsDelete != nil {
+					hooks.OnCheckpointsDelete(index, oldItem)
+				}
 			case diff.OperationListMove:
 				from := int(valueReader.Uint32())
 				to := int(valueReader.Uint32())
@@ -2132,6 +2353,9 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 					copy(value.Checkpoints[to+1:from+1], value.Checkpoints[to:from])
 				}
 				value.Checkpoints[to] = item
+				if hooks != nil && hooks.OnCheckpointsMove != nil {
+					hooks.OnCheckpointsMove(from, to)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -2143,9 +2367,16 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 			switch operation {
 			case diff.OperationClear:
 				value.Labels = nil
+				if hooks != nil && hooks.OnLabelsClear != nil {
+					hooks.OnLabelsClear()
+				}
 			case diff.OperationListAppend:
 				item := valueReader.String()
+				index := len(value.Labels)
 				value.Labels = append(value.Labels, item)
+				if hooks != nil && hooks.OnLabelsAppend != nil {
+					hooks.OnLabelsAppend(index, item)
+				}
 			case diff.OperationListInsert:
 				index := int(valueReader.Uint32())
 				item := valueReader.String()
@@ -2153,14 +2384,25 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 				value.Labels = append(value.Labels, zero)
 				copy(value.Labels[index+1:], value.Labels[index:len(value.Labels)-1])
 				value.Labels[index] = item
+				if hooks != nil && hooks.OnLabelsInsert != nil {
+					hooks.OnLabelsInsert(index, item)
+				}
 			case diff.OperationListSet:
 				index := int(valueReader.Uint32())
 				item := valueReader.String()
+				oldItem := value.Labels[index]
 				value.Labels[index] = item
+				if hooks != nil && hooks.OnLabelsStore != nil {
+					hooks.OnLabelsStore(index, oldItem, item)
+				}
 			case diff.OperationListDelete:
 				index := int(valueReader.Uint32())
+				oldItem := value.Labels[index]
 				copy(value.Labels[index:], value.Labels[index+1:])
 				value.Labels = value.Labels[:len(value.Labels)-1]
+				if hooks != nil && hooks.OnLabelsDelete != nil {
+					hooks.OnLabelsDelete(index, oldItem)
+				}
 			case diff.OperationListMove:
 				from := int(valueReader.Uint32())
 				to := int(valueReader.Uint32())
@@ -2171,6 +2413,9 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 					copy(value.Labels[to+1:from+1], value.Labels[to:from])
 				}
 				value.Labels[to] = item
+				if hooks != nil && hooks.OnLabelsMove != nil {
+					hooks.OnLabelsMove(from, to)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -2182,9 +2427,16 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 			switch operation {
 			case diff.OperationClear:
 				value.Packets = nil
+				if hooks != nil && hooks.OnPacketsClear != nil {
+					hooks.OnPacketsClear()
+				}
 			case diff.OperationListAppend:
 				item := bytes.Clone(valueReader.Bytes())
+				index := len(value.Packets)
 				value.Packets = append(value.Packets, item)
+				if hooks != nil && hooks.OnPacketsAppend != nil {
+					hooks.OnPacketsAppend(index, bytes.Clone(item))
+				}
 			case diff.OperationListInsert:
 				index := int(valueReader.Uint32())
 				item := bytes.Clone(valueReader.Bytes())
@@ -2192,14 +2444,25 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 				value.Packets = append(value.Packets, zero)
 				copy(value.Packets[index+1:], value.Packets[index:len(value.Packets)-1])
 				value.Packets[index] = item
+				if hooks != nil && hooks.OnPacketsInsert != nil {
+					hooks.OnPacketsInsert(index, bytes.Clone(item))
+				}
 			case diff.OperationListSet:
 				index := int(valueReader.Uint32())
 				item := bytes.Clone(valueReader.Bytes())
+				oldItem := value.Packets[index]
 				value.Packets[index] = item
+				if hooks != nil && hooks.OnPacketsStore != nil {
+					hooks.OnPacketsStore(index, bytes.Clone(oldItem), bytes.Clone(item))
+				}
 			case diff.OperationListDelete:
 				index := int(valueReader.Uint32())
+				oldItem := value.Packets[index]
 				copy(value.Packets[index:], value.Packets[index+1:])
 				value.Packets = value.Packets[:len(value.Packets)-1]
+				if hooks != nil && hooks.OnPacketsDelete != nil {
+					hooks.OnPacketsDelete(index, bytes.Clone(oldItem))
+				}
 			case diff.OperationListMove:
 				from := int(valueReader.Uint32())
 				to := int(valueReader.Uint32())
@@ -2210,6 +2473,9 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 					copy(value.Packets[to+1:from+1], value.Packets[to:from])
 				}
 				value.Packets[to] = item
+				if hooks != nil && hooks.OnPacketsMove != nil {
+					hooks.OnPacketsMove(from, to)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -2221,13 +2487,20 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 			switch operation {
 			case diff.OperationClear:
 				value.Lineup = nil
+				if hooks != nil && hooks.OnLineupClear != nil {
+					hooks.OnLineupClear()
+				}
 			case diff.OperationListAppend:
 				itemData := valueReader.Bytes()
 				item := &InventoryItem{}
 				if err := proto.Unmarshal(itemData, item); err != nil {
 					return err
 				}
+				index := len(value.Lineup)
 				value.Lineup = append(value.Lineup, item)
+				if hooks != nil && hooks.OnLineupAppend != nil {
+					hooks.OnLineupAppend(index, proto.Clone(item).(*InventoryItem))
+				}
 			case diff.OperationListInsert:
 				index := int(valueReader.Uint32())
 				itemData := valueReader.Bytes()
@@ -2239,6 +2512,9 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 				value.Lineup = append(value.Lineup, zero)
 				copy(value.Lineup[index+1:], value.Lineup[index:len(value.Lineup)-1])
 				value.Lineup[index] = item
+				if hooks != nil && hooks.OnLineupInsert != nil {
+					hooks.OnLineupInsert(index, proto.Clone(item).(*InventoryItem))
+				}
 			case diff.OperationListSet:
 				index := int(valueReader.Uint32())
 				itemData := valueReader.Bytes()
@@ -2246,11 +2522,19 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 				if err := proto.Unmarshal(itemData, item); err != nil {
 					return err
 				}
+				oldItem := value.Lineup[index]
 				value.Lineup[index] = item
+				if hooks != nil && hooks.OnLineupStore != nil {
+					hooks.OnLineupStore(index, proto.Clone(oldItem).(*InventoryItem), proto.Clone(item).(*InventoryItem))
+				}
 			case diff.OperationListDelete:
 				index := int(valueReader.Uint32())
+				oldItem := value.Lineup[index]
 				copy(value.Lineup[index:], value.Lineup[index+1:])
 				value.Lineup = value.Lineup[:len(value.Lineup)-1]
+				if hooks != nil && hooks.OnLineupDelete != nil {
+					hooks.OnLineupDelete(index, proto.Clone(oldItem).(*InventoryItem))
+				}
 			case diff.OperationListMove:
 				from := int(valueReader.Uint32())
 				to := int(valueReader.Uint32())
@@ -2261,11 +2545,38 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 					copy(value.Lineup[to+1:from+1], value.Lineup[to:from])
 				}
 				value.Lineup[to] = item
+				if hooks != nil && hooks.OnLineupMove != nil {
+					hooks.OnLineupMove(from, to)
+				}
 			case diff.OperationListPatch:
 				index := int(valueReader.Uint32())
 				patch := valueReader.Remaining()
+				var oldItem *InventoryItem
+				if hooks != nil && (hooks.OnLineupPatch != nil || hooks.OnLineupIdChanged != nil || hooks.OnLineupCountChanged != nil || hooks.OnLineupQualityChanged != nil || hooks.OnLineupNameChanged != nil || hooks.OnLineupPayloadChanged != nil) {
+					oldItem = proto.Clone(value.Lineup[index]).(*InventoryItem)
+				}
 				if err := ApplyInventoryItemDiff(value.Lineup[index], patch); err != nil {
 					return err
+				}
+				if hooks != nil {
+					if hooks.OnLineupPatch != nil {
+						hooks.OnLineupPatch(index, oldItem, proto.Clone(value.Lineup[index]).(*InventoryItem))
+					}
+					if hooks.OnLineupIdChanged != nil && oldItem.GetId() != value.Lineup[index].GetId() {
+						hooks.OnLineupIdChanged(index, oldItem.GetId(), value.Lineup[index].GetId())
+					}
+					if hooks.OnLineupCountChanged != nil && oldItem.GetCount() != value.Lineup[index].GetCount() {
+						hooks.OnLineupCountChanged(index, oldItem.GetCount(), value.Lineup[index].GetCount())
+					}
+					if hooks.OnLineupQualityChanged != nil && oldItem.GetQuality() != value.Lineup[index].GetQuality() {
+						hooks.OnLineupQualityChanged(index, oldItem.GetQuality(), value.Lineup[index].GetQuality())
+					}
+					if hooks.OnLineupNameChanged != nil && oldItem.GetName() != value.Lineup[index].GetName() {
+						hooks.OnLineupNameChanged(index, oldItem.GetName(), value.Lineup[index].GetName())
+					}
+					if hooks.OnLineupPayloadChanged != nil && !bytes.Equal(oldItem.GetPayload(), value.Lineup[index].GetPayload()) {
+						hooks.OnLineupPayloadChanged(index, bytes.Clone(oldItem.GetPayload()), bytes.Clone(value.Lineup[index].GetPayload()))
+					}
 				}
 			default:
 				return diff.ErrInvalidData
@@ -2278,9 +2589,16 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 			switch operation {
 			case diff.OperationClear:
 				value.Qualities = nil
+				if hooks != nil && hooks.OnQualitiesClear != nil {
+					hooks.OnQualitiesClear()
+				}
 			case diff.OperationListAppend:
 				item := ItemQuality(valueReader.Enum())
+				index := len(value.Qualities)
 				value.Qualities = append(value.Qualities, item)
+				if hooks != nil && hooks.OnQualitiesAppend != nil {
+					hooks.OnQualitiesAppend(index, item)
+				}
 			case diff.OperationListInsert:
 				index := int(valueReader.Uint32())
 				item := ItemQuality(valueReader.Enum())
@@ -2288,14 +2606,25 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 				value.Qualities = append(value.Qualities, zero)
 				copy(value.Qualities[index+1:], value.Qualities[index:len(value.Qualities)-1])
 				value.Qualities[index] = item
+				if hooks != nil && hooks.OnQualitiesInsert != nil {
+					hooks.OnQualitiesInsert(index, item)
+				}
 			case diff.OperationListSet:
 				index := int(valueReader.Uint32())
 				item := ItemQuality(valueReader.Enum())
+				oldItem := value.Qualities[index]
 				value.Qualities[index] = item
+				if hooks != nil && hooks.OnQualitiesStore != nil {
+					hooks.OnQualitiesStore(index, oldItem, item)
+				}
 			case diff.OperationListDelete:
 				index := int(valueReader.Uint32())
+				oldItem := value.Qualities[index]
 				copy(value.Qualities[index:], value.Qualities[index+1:])
 				value.Qualities = value.Qualities[:len(value.Qualities)-1]
+				if hooks != nil && hooks.OnQualitiesDelete != nil {
+					hooks.OnQualitiesDelete(index, oldItem)
+				}
 			case diff.OperationListMove:
 				from := int(valueReader.Uint32())
 				to := int(valueReader.Uint32())
@@ -2306,6 +2635,9 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 					copy(value.Qualities[to+1:from+1], value.Qualities[to:from])
 				}
 				value.Qualities[to] = item
+				if hooks != nil && hooks.OnQualitiesMove != nil {
+					hooks.OnQualitiesMove(from, to)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -2315,19 +2647,46 @@ func ApplyGameDataDiff(value *GameData, data []byte) error {
 		case 12:
 			switch operation {
 			case diff.OperationPatch:
+				var oldValue *WideState
+				if hooks != nil && (hooks.OnWidePatch != nil) && value.Wide != nil {
+					oldValue = proto.Clone(value.Wide).(*WideState)
+				}
+				var childHooks *WideStateApplyHooks
+				if hooks != nil {
+					childHooks = hooks.Wide
+				}
 				if value.Wide == nil {
 					value.Wide = &WideState{}
 				}
-				if err := ApplyWideStateDiff(value.Wide, payload); err != nil {
+				if err := ApplyWideStateDiffWithHooks(value.Wide, payload, childHooks); err != nil {
 					return err
 				}
+				if hooks != nil {
+					if hooks.OnWidePatch != nil {
+						hooks.OnWidePatch(oldValue, proto.Clone(value.Wide).(*WideState))
+					}
+				}
 			case diff.OperationReplace:
+				var oldValue *WideState
+				if hooks != nil && (hooks.OnWideReplace != nil) && value.Wide != nil {
+					oldValue = proto.Clone(value.Wide).(*WideState)
+				}
 				value.Wide = &WideState{}
 				if err := proto.Unmarshal(payload, value.Wide); err != nil {
 					return err
 				}
+				if hooks != nil && hooks.OnWideReplace != nil {
+					hooks.OnWideReplace(oldValue, proto.Clone(value.Wide).(*WideState))
+				}
 			case diff.OperationClear:
+				var oldValue *WideState
+				if hooks != nil && (hooks.OnWideClear != nil) && value.Wide != nil {
+					oldValue = proto.Clone(value.Wide).(*WideState)
+				}
 				value.Wide = nil
+				if hooks != nil && hooks.OnWideClear != nil {
+					hooks.OnWideClear(oldValue)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -2358,6 +2717,25 @@ func (s *GameDataState) ClearDirty() {
 	if s.wide != nil {
 		s.wide.ClearDirty()
 	}
+}
+
+type ScalarValuesApplyHooks struct {
+	OnEnabledChanged       func(oldValue, newValue bool)
+	OnQualityChanged       func(oldValue, newValue ItemQuality)
+	OnInt32ValueChanged    func(oldValue, newValue int32)
+	OnSint32ValueChanged   func(oldValue, newValue int32)
+	OnSfixed32ValueChanged func(oldValue, newValue int32)
+	OnUint32ValueChanged   func(oldValue, newValue uint32)
+	OnFixed32ValueChanged  func(oldValue, newValue uint32)
+	OnInt64ValueChanged    func(oldValue, newValue int64)
+	OnSint64ValueChanged   func(oldValue, newValue int64)
+	OnSfixed64ValueChanged func(oldValue, newValue int64)
+	OnUint64ValueChanged   func(oldValue, newValue uint64)
+	OnFixed64ValueChanged  func(oldValue, newValue uint64)
+	OnFloatValueChanged    func(oldValue, newValue float32)
+	OnDoubleValueChanged   func(oldValue, newValue float64)
+	OnStringValueChanged   func(oldValue, newValue string)
+	OnBytesValueChanged    func(oldValue, newValue []byte)
 }
 
 const scalarValuesStateDirtyEnabledWord uint32 = 0
@@ -2696,6 +3074,14 @@ func (s *ScalarValuesState) WriteDiff(writer *diff.Writer) {
 }
 
 func ApplyScalarValuesDiff(value *ScalarValues, data []byte) error {
+	return applyScalarValuesDiff(value, data, nil)
+}
+
+func ApplyScalarValuesDiffWithHooks(value *ScalarValues, data []byte, hooks *ScalarValuesApplyHooks) error {
+	return applyScalarValuesDiff(value, data, hooks)
+}
+
+func applyScalarValuesDiff(value *ScalarValues, data []byte, hooks *ScalarValuesApplyHooks) error {
 	reader := diff.NewReader(data)
 	for {
 		fieldNumber, operation, payload, ok, err := reader.Next()
@@ -2707,82 +3093,146 @@ func ApplyScalarValuesDiff(value *ScalarValues, data []byte) error {
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Enabled
 			value.Enabled = diff.DecodeBool(payload)
+			if hooks != nil && hooks.OnEnabledChanged != nil {
+				hooks.OnEnabledChanged(oldValue, value.Enabled)
+			}
 		case 2:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Quality
 			value.Quality = ItemQuality(diff.DecodeEnum(payload))
+			if hooks != nil && hooks.OnQualityChanged != nil {
+				hooks.OnQualityChanged(oldValue, value.Quality)
+			}
 		case 3:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Int32Value
 			value.Int32Value = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnInt32ValueChanged != nil {
+				hooks.OnInt32ValueChanged(oldValue, value.Int32Value)
+			}
 		case 4:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Sint32Value
 			value.Sint32Value = diff.DecodeSint32(payload)
+			if hooks != nil && hooks.OnSint32ValueChanged != nil {
+				hooks.OnSint32ValueChanged(oldValue, value.Sint32Value)
+			}
 		case 5:
 			if operation != diff.OperationSetFixed32 {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Sfixed32Value
 			value.Sfixed32Value = diff.DecodeSfixed32(payload)
+			if hooks != nil && hooks.OnSfixed32ValueChanged != nil {
+				hooks.OnSfixed32ValueChanged(oldValue, value.Sfixed32Value)
+			}
 		case 6:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Uint32Value
 			value.Uint32Value = diff.DecodeUint32(payload)
+			if hooks != nil && hooks.OnUint32ValueChanged != nil {
+				hooks.OnUint32ValueChanged(oldValue, value.Uint32Value)
+			}
 		case 7:
 			if operation != diff.OperationSetFixed32 {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Fixed32Value
 			value.Fixed32Value = diff.DecodeFixed32(payload)
+			if hooks != nil && hooks.OnFixed32ValueChanged != nil {
+				hooks.OnFixed32ValueChanged(oldValue, value.Fixed32Value)
+			}
 		case 8:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Int64Value
 			value.Int64Value = diff.DecodeInt64(payload)
+			if hooks != nil && hooks.OnInt64ValueChanged != nil {
+				hooks.OnInt64ValueChanged(oldValue, value.Int64Value)
+			}
 		case 9:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Sint64Value
 			value.Sint64Value = diff.DecodeSint64(payload)
+			if hooks != nil && hooks.OnSint64ValueChanged != nil {
+				hooks.OnSint64ValueChanged(oldValue, value.Sint64Value)
+			}
 		case 10:
 			if operation != diff.OperationSetFixed64 {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Sfixed64Value
 			value.Sfixed64Value = diff.DecodeSfixed64(payload)
+			if hooks != nil && hooks.OnSfixed64ValueChanged != nil {
+				hooks.OnSfixed64ValueChanged(oldValue, value.Sfixed64Value)
+			}
 		case 11:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Uint64Value
 			value.Uint64Value = diff.DecodeUint64(payload)
+			if hooks != nil && hooks.OnUint64ValueChanged != nil {
+				hooks.OnUint64ValueChanged(oldValue, value.Uint64Value)
+			}
 		case 12:
 			if operation != diff.OperationSetFixed64 {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Fixed64Value
 			value.Fixed64Value = diff.DecodeFixed64(payload)
+			if hooks != nil && hooks.OnFixed64ValueChanged != nil {
+				hooks.OnFixed64ValueChanged(oldValue, value.Fixed64Value)
+			}
 		case 13:
 			if operation != diff.OperationSetFixed32 {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.FloatValue
 			value.FloatValue = diff.DecodeFloat32(payload)
+			if hooks != nil && hooks.OnFloatValueChanged != nil {
+				hooks.OnFloatValueChanged(oldValue, value.FloatValue)
+			}
 		case 14:
 			if operation != diff.OperationSetFixed64 {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.DoubleValue
 			value.DoubleValue = diff.DecodeFloat64(payload)
+			if hooks != nil && hooks.OnDoubleValueChanged != nil {
+				hooks.OnDoubleValueChanged(oldValue, value.DoubleValue)
+			}
 		case 15:
 			if operation != diff.OperationSetBytes {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.StringValue
 			value.StringValue = diff.DecodeString(payload)
+			if hooks != nil && hooks.OnStringValueChanged != nil {
+				hooks.OnStringValueChanged(oldValue, value.StringValue)
+			}
 		case 16:
 			if operation != diff.OperationSetBytes {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.BytesValue
 			value.BytesValue = diff.DecodeBytes(payload)
+			if hooks != nil && hooks.OnBytesValueChanged != nil {
+				hooks.OnBytesValueChanged(bytes.Clone(oldValue), bytes.Clone(value.BytesValue))
+			}
 		}
 	}
 }
@@ -2846,6 +3296,20 @@ func (t *profileTagsTracker) Clear() bool {
 func (t *profileTagsTracker) ClearDirty() {
 	clear(t.changes)
 	t.changes = t.changes[:0]
+}
+
+type ProfileApplyHooks struct {
+	OnNicknameChanged func(oldValue, newValue string)
+	Address           *AddressApplyHooks
+	OnAddressPatch    func(oldValue, newValue *Address)
+	OnAddressReplace  func(oldValue, newValue *Address)
+	OnAddressClear    func(oldValue *Address)
+	OnTagsAppend      func(index int, value string)
+	OnTagsInsert      func(index int, value string)
+	OnTagsStore       func(index int, oldValue, newValue string)
+	OnTagsDelete      func(index int, oldValue string)
+	OnTagsMove        func(from, to int)
+	OnTagsClear       func()
 }
 
 const profileStateDirtyNicknameWord uint32 = 0
@@ -3075,6 +3539,14 @@ func (s *ProfileState) WriteDiff(writer *diff.Writer) {
 }
 
 func ApplyProfileDiff(value *Profile, data []byte) error {
+	return applyProfileDiff(value, data, nil)
+}
+
+func ApplyProfileDiffWithHooks(value *Profile, data []byte, hooks *ProfileApplyHooks) error {
+	return applyProfileDiff(value, data, hooks)
+}
+
+func applyProfileDiff(value *Profile, data []byte, hooks *ProfileApplyHooks) error {
 	reader := diff.NewReader(data)
 	for {
 		fieldNumber, operation, payload, ok, err := reader.Next()
@@ -3086,23 +3558,54 @@ func ApplyProfileDiff(value *Profile, data []byte) error {
 			if operation != diff.OperationSetBytes {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Nickname
 			value.Nickname = diff.DecodeString(payload)
+			if hooks != nil && hooks.OnNicknameChanged != nil {
+				hooks.OnNicknameChanged(oldValue, value.Nickname)
+			}
 		case 2:
 			switch operation {
 			case diff.OperationPatch:
+				var oldValue *Address
+				if hooks != nil && (hooks.OnAddressPatch != nil) && value.Address != nil {
+					oldValue = proto.Clone(value.Address).(*Address)
+				}
+				var childHooks *AddressApplyHooks
+				if hooks != nil {
+					childHooks = hooks.Address
+				}
 				if value.Address == nil {
 					value.Address = &Address{}
 				}
-				if err := ApplyAddressDiff(value.Address, payload); err != nil {
+				if err := ApplyAddressDiffWithHooks(value.Address, payload, childHooks); err != nil {
 					return err
 				}
+				if hooks != nil {
+					if hooks.OnAddressPatch != nil {
+						hooks.OnAddressPatch(oldValue, proto.Clone(value.Address).(*Address))
+					}
+				}
 			case diff.OperationReplace:
+				var oldValue *Address
+				if hooks != nil && (hooks.OnAddressReplace != nil) && value.Address != nil {
+					oldValue = proto.Clone(value.Address).(*Address)
+				}
 				value.Address = &Address{}
 				if err := proto.Unmarshal(payload, value.Address); err != nil {
 					return err
 				}
+				if hooks != nil && hooks.OnAddressReplace != nil {
+					hooks.OnAddressReplace(oldValue, proto.Clone(value.Address).(*Address))
+				}
 			case diff.OperationClear:
+				var oldValue *Address
+				if hooks != nil && (hooks.OnAddressClear != nil) && value.Address != nil {
+					oldValue = proto.Clone(value.Address).(*Address)
+				}
 				value.Address = nil
+				if hooks != nil && hooks.OnAddressClear != nil {
+					hooks.OnAddressClear(oldValue)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -3111,9 +3614,16 @@ func ApplyProfileDiff(value *Profile, data []byte) error {
 			switch operation {
 			case diff.OperationClear:
 				value.Tags = nil
+				if hooks != nil && hooks.OnTagsClear != nil {
+					hooks.OnTagsClear()
+				}
 			case diff.OperationListAppend:
 				item := valueReader.String()
+				index := len(value.Tags)
 				value.Tags = append(value.Tags, item)
+				if hooks != nil && hooks.OnTagsAppend != nil {
+					hooks.OnTagsAppend(index, item)
+				}
 			case diff.OperationListInsert:
 				index := int(valueReader.Uint32())
 				item := valueReader.String()
@@ -3121,14 +3631,25 @@ func ApplyProfileDiff(value *Profile, data []byte) error {
 				value.Tags = append(value.Tags, zero)
 				copy(value.Tags[index+1:], value.Tags[index:len(value.Tags)-1])
 				value.Tags[index] = item
+				if hooks != nil && hooks.OnTagsInsert != nil {
+					hooks.OnTagsInsert(index, item)
+				}
 			case diff.OperationListSet:
 				index := int(valueReader.Uint32())
 				item := valueReader.String()
+				oldItem := value.Tags[index]
 				value.Tags[index] = item
+				if hooks != nil && hooks.OnTagsStore != nil {
+					hooks.OnTagsStore(index, oldItem, item)
+				}
 			case diff.OperationListDelete:
 				index := int(valueReader.Uint32())
+				oldItem := value.Tags[index]
 				copy(value.Tags[index:], value.Tags[index+1:])
 				value.Tags = value.Tags[:len(value.Tags)-1]
+				if hooks != nil && hooks.OnTagsDelete != nil {
+					hooks.OnTagsDelete(index, oldItem)
+				}
 			case diff.OperationListMove:
 				from := int(valueReader.Uint32())
 				to := int(valueReader.Uint32())
@@ -3139,6 +3660,9 @@ func ApplyProfileDiff(value *Profile, data []byte) error {
 					copy(value.Tags[to+1:from+1], value.Tags[to:from])
 				}
 				value.Tags[to] = item
+				if hooks != nil && hooks.OnTagsMove != nil {
+					hooks.OnTagsMove(from, to)
+				}
 			default:
 				return diff.ErrInvalidData
 			}
@@ -3156,6 +3680,12 @@ func (s *ProfileState) ClearDirty() {
 		s.address.ClearDirty()
 	}
 	s.tagsChanges.ClearDirty()
+}
+
+type AddressApplyHooks struct {
+	OnCountryChanged func(oldValue, newValue string)
+	OnCityChanged    func(oldValue, newValue string)
+	OnZipCodeChanged func(oldValue, newValue uint32)
 }
 
 const addressStateDirtyCountryWord uint32 = 0
@@ -3247,6 +3777,14 @@ func (s *AddressState) WriteDiff(writer *diff.Writer) {
 }
 
 func ApplyAddressDiff(value *Address, data []byte) error {
+	return applyAddressDiff(value, data, nil)
+}
+
+func ApplyAddressDiffWithHooks(value *Address, data []byte, hooks *AddressApplyHooks) error {
+	return applyAddressDiff(value, data, hooks)
+}
+
+func applyAddressDiff(value *Address, data []byte, hooks *AddressApplyHooks) error {
 	reader := diff.NewReader(data)
 	for {
 		fieldNumber, operation, payload, ok, err := reader.Next()
@@ -3258,23 +3796,43 @@ func ApplyAddressDiff(value *Address, data []byte) error {
 			if operation != diff.OperationSetBytes {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Country
 			value.Country = diff.DecodeString(payload)
+			if hooks != nil && hooks.OnCountryChanged != nil {
+				hooks.OnCountryChanged(oldValue, value.Country)
+			}
 		case 2:
 			if operation != diff.OperationSetBytes {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.City
 			value.City = diff.DecodeString(payload)
+			if hooks != nil && hooks.OnCityChanged != nil {
+				hooks.OnCityChanged(oldValue, value.City)
+			}
 		case 3:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.ZipCode
 			value.ZipCode = diff.DecodeUint32(payload)
+			if hooks != nil && hooks.OnZipCodeChanged != nil {
+				hooks.OnZipCodeChanged(oldValue, value.ZipCode)
+			}
 		}
 	}
 }
 
 func (s *AddressState) ClearDirty() {
 	diff.ClearDirty(s.dirty[:])
+}
+
+type InventoryItemApplyHooks struct {
+	OnIdChanged      func(oldValue, newValue uint64)
+	OnCountChanged   func(oldValue, newValue int32)
+	OnQualityChanged func(oldValue, newValue ItemQuality)
+	OnNameChanged    func(oldValue, newValue string)
+	OnPayloadChanged func(oldValue, newValue []byte)
 }
 
 const inventoryItemStateDirtyIdWord uint32 = 0
@@ -3404,6 +3962,14 @@ func (s *InventoryItemState) WriteDiff(writer *diff.Writer) {
 }
 
 func ApplyInventoryItemDiff(value *InventoryItem, data []byte) error {
+	return applyInventoryItemDiff(value, data, nil)
+}
+
+func ApplyInventoryItemDiffWithHooks(value *InventoryItem, data []byte, hooks *InventoryItemApplyHooks) error {
+	return applyInventoryItemDiff(value, data, hooks)
+}
+
+func applyInventoryItemDiff(value *InventoryItem, data []byte, hooks *InventoryItemApplyHooks) error {
 	reader := diff.NewReader(data)
 	for {
 		fieldNumber, operation, payload, ok, err := reader.Next()
@@ -3415,33 +3981,126 @@ func ApplyInventoryItemDiff(value *InventoryItem, data []byte) error {
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Id
 			value.Id = diff.DecodeUint64(payload)
+			if hooks != nil && hooks.OnIdChanged != nil {
+				hooks.OnIdChanged(oldValue, value.Id)
+			}
 		case 2:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Count
 			value.Count = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnCountChanged != nil {
+				hooks.OnCountChanged(oldValue, value.Count)
+			}
 		case 3:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Quality
 			value.Quality = ItemQuality(diff.DecodeEnum(payload))
+			if hooks != nil && hooks.OnQualityChanged != nil {
+				hooks.OnQualityChanged(oldValue, value.Quality)
+			}
 		case 4:
 			if operation != diff.OperationSetBytes {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Name
 			value.Name = diff.DecodeString(payload)
+			if hooks != nil && hooks.OnNameChanged != nil {
+				hooks.OnNameChanged(oldValue, value.Name)
+			}
 		case 5:
 			if operation != diff.OperationSetBytes {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.Payload
 			value.Payload = diff.DecodeBytes(payload)
+			if hooks != nil && hooks.OnPayloadChanged != nil {
+				hooks.OnPayloadChanged(bytes.Clone(oldValue), bytes.Clone(value.Payload))
+			}
 		}
 	}
 }
 
 func (s *InventoryItemState) ClearDirty() {
 	diff.ClearDirty(s.dirty[:])
+}
+
+type WideStateApplyHooks struct {
+	OnV1Changed  func(oldValue, newValue int32)
+	OnV2Changed  func(oldValue, newValue int32)
+	OnV3Changed  func(oldValue, newValue int32)
+	OnV4Changed  func(oldValue, newValue int32)
+	OnV5Changed  func(oldValue, newValue int32)
+	OnV6Changed  func(oldValue, newValue int32)
+	OnV7Changed  func(oldValue, newValue int32)
+	OnV8Changed  func(oldValue, newValue int32)
+	OnV9Changed  func(oldValue, newValue int32)
+	OnV10Changed func(oldValue, newValue int32)
+	OnV11Changed func(oldValue, newValue int32)
+	OnV12Changed func(oldValue, newValue int32)
+	OnV13Changed func(oldValue, newValue int32)
+	OnV14Changed func(oldValue, newValue int32)
+	OnV15Changed func(oldValue, newValue int32)
+	OnV16Changed func(oldValue, newValue int32)
+	OnV17Changed func(oldValue, newValue int32)
+	OnV18Changed func(oldValue, newValue int32)
+	OnV19Changed func(oldValue, newValue int32)
+	OnV20Changed func(oldValue, newValue int32)
+	OnV21Changed func(oldValue, newValue int32)
+	OnV22Changed func(oldValue, newValue int32)
+	OnV23Changed func(oldValue, newValue int32)
+	OnV24Changed func(oldValue, newValue int32)
+	OnV25Changed func(oldValue, newValue int32)
+	OnV26Changed func(oldValue, newValue int32)
+	OnV27Changed func(oldValue, newValue int32)
+	OnV28Changed func(oldValue, newValue int32)
+	OnV29Changed func(oldValue, newValue int32)
+	OnV30Changed func(oldValue, newValue int32)
+	OnV31Changed func(oldValue, newValue int32)
+	OnV32Changed func(oldValue, newValue int32)
+	OnV33Changed func(oldValue, newValue int32)
+	OnV34Changed func(oldValue, newValue int32)
+	OnV35Changed func(oldValue, newValue int32)
+	OnV36Changed func(oldValue, newValue int32)
+	OnV37Changed func(oldValue, newValue int32)
+	OnV38Changed func(oldValue, newValue int32)
+	OnV39Changed func(oldValue, newValue int32)
+	OnV40Changed func(oldValue, newValue int32)
+	OnV41Changed func(oldValue, newValue int32)
+	OnV42Changed func(oldValue, newValue int32)
+	OnV43Changed func(oldValue, newValue int32)
+	OnV44Changed func(oldValue, newValue int32)
+	OnV45Changed func(oldValue, newValue int32)
+	OnV46Changed func(oldValue, newValue int32)
+	OnV47Changed func(oldValue, newValue int32)
+	OnV48Changed func(oldValue, newValue int32)
+	OnV49Changed func(oldValue, newValue int32)
+	OnV50Changed func(oldValue, newValue int32)
+	OnV51Changed func(oldValue, newValue int32)
+	OnV52Changed func(oldValue, newValue int32)
+	OnV53Changed func(oldValue, newValue int32)
+	OnV54Changed func(oldValue, newValue int32)
+	OnV55Changed func(oldValue, newValue int32)
+	OnV56Changed func(oldValue, newValue int32)
+	OnV57Changed func(oldValue, newValue int32)
+	OnV58Changed func(oldValue, newValue int32)
+	OnV59Changed func(oldValue, newValue int32)
+	OnV60Changed func(oldValue, newValue int32)
+	OnV61Changed func(oldValue, newValue int32)
+	OnV62Changed func(oldValue, newValue int32)
+	OnV63Changed func(oldValue, newValue int32)
+	OnV64Changed func(oldValue, newValue int32)
+	OnV65Changed func(oldValue, newValue int32)
+	OnV66Changed func(oldValue, newValue int32)
+	OnV67Changed func(oldValue, newValue int32)
+	OnV68Changed func(oldValue, newValue int32)
+	OnV69Changed func(oldValue, newValue int32)
+	OnV70Changed func(oldValue, newValue int32)
 }
 
 const wideStateStateDirtyV1Word uint32 = 0
@@ -4806,6 +5465,14 @@ func (s *WideStateState) WriteDiff(writer *diff.Writer) {
 }
 
 func ApplyWideStateDiff(value *WideState, data []byte) error {
+	return applyWideStateDiff(value, data, nil)
+}
+
+func ApplyWideStateDiffWithHooks(value *WideState, data []byte, hooks *WideStateApplyHooks) error {
+	return applyWideStateDiff(value, data, hooks)
+}
+
+func applyWideStateDiff(value *WideState, data []byte, hooks *WideStateApplyHooks) error {
 	reader := diff.NewReader(data)
 	for {
 		fieldNumber, operation, payload, ok, err := reader.Next()
@@ -4817,352 +5484,632 @@ func ApplyWideStateDiff(value *WideState, data []byte) error {
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V1
 			value.V1 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV1Changed != nil {
+				hooks.OnV1Changed(oldValue, value.V1)
+			}
 		case 2:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V2
 			value.V2 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV2Changed != nil {
+				hooks.OnV2Changed(oldValue, value.V2)
+			}
 		case 3:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V3
 			value.V3 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV3Changed != nil {
+				hooks.OnV3Changed(oldValue, value.V3)
+			}
 		case 4:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V4
 			value.V4 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV4Changed != nil {
+				hooks.OnV4Changed(oldValue, value.V4)
+			}
 		case 5:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V5
 			value.V5 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV5Changed != nil {
+				hooks.OnV5Changed(oldValue, value.V5)
+			}
 		case 6:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V6
 			value.V6 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV6Changed != nil {
+				hooks.OnV6Changed(oldValue, value.V6)
+			}
 		case 7:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V7
 			value.V7 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV7Changed != nil {
+				hooks.OnV7Changed(oldValue, value.V7)
+			}
 		case 8:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V8
 			value.V8 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV8Changed != nil {
+				hooks.OnV8Changed(oldValue, value.V8)
+			}
 		case 9:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V9
 			value.V9 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV9Changed != nil {
+				hooks.OnV9Changed(oldValue, value.V9)
+			}
 		case 10:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V10
 			value.V10 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV10Changed != nil {
+				hooks.OnV10Changed(oldValue, value.V10)
+			}
 		case 11:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V11
 			value.V11 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV11Changed != nil {
+				hooks.OnV11Changed(oldValue, value.V11)
+			}
 		case 12:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V12
 			value.V12 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV12Changed != nil {
+				hooks.OnV12Changed(oldValue, value.V12)
+			}
 		case 13:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V13
 			value.V13 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV13Changed != nil {
+				hooks.OnV13Changed(oldValue, value.V13)
+			}
 		case 14:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V14
 			value.V14 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV14Changed != nil {
+				hooks.OnV14Changed(oldValue, value.V14)
+			}
 		case 15:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V15
 			value.V15 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV15Changed != nil {
+				hooks.OnV15Changed(oldValue, value.V15)
+			}
 		case 16:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V16
 			value.V16 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV16Changed != nil {
+				hooks.OnV16Changed(oldValue, value.V16)
+			}
 		case 17:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V17
 			value.V17 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV17Changed != nil {
+				hooks.OnV17Changed(oldValue, value.V17)
+			}
 		case 18:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V18
 			value.V18 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV18Changed != nil {
+				hooks.OnV18Changed(oldValue, value.V18)
+			}
 		case 19:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V19
 			value.V19 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV19Changed != nil {
+				hooks.OnV19Changed(oldValue, value.V19)
+			}
 		case 20:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V20
 			value.V20 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV20Changed != nil {
+				hooks.OnV20Changed(oldValue, value.V20)
+			}
 		case 21:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V21
 			value.V21 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV21Changed != nil {
+				hooks.OnV21Changed(oldValue, value.V21)
+			}
 		case 22:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V22
 			value.V22 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV22Changed != nil {
+				hooks.OnV22Changed(oldValue, value.V22)
+			}
 		case 23:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V23
 			value.V23 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV23Changed != nil {
+				hooks.OnV23Changed(oldValue, value.V23)
+			}
 		case 24:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V24
 			value.V24 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV24Changed != nil {
+				hooks.OnV24Changed(oldValue, value.V24)
+			}
 		case 25:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V25
 			value.V25 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV25Changed != nil {
+				hooks.OnV25Changed(oldValue, value.V25)
+			}
 		case 26:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V26
 			value.V26 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV26Changed != nil {
+				hooks.OnV26Changed(oldValue, value.V26)
+			}
 		case 27:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V27
 			value.V27 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV27Changed != nil {
+				hooks.OnV27Changed(oldValue, value.V27)
+			}
 		case 28:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V28
 			value.V28 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV28Changed != nil {
+				hooks.OnV28Changed(oldValue, value.V28)
+			}
 		case 29:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V29
 			value.V29 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV29Changed != nil {
+				hooks.OnV29Changed(oldValue, value.V29)
+			}
 		case 30:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V30
 			value.V30 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV30Changed != nil {
+				hooks.OnV30Changed(oldValue, value.V30)
+			}
 		case 31:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V31
 			value.V31 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV31Changed != nil {
+				hooks.OnV31Changed(oldValue, value.V31)
+			}
 		case 32:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V32
 			value.V32 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV32Changed != nil {
+				hooks.OnV32Changed(oldValue, value.V32)
+			}
 		case 33:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V33
 			value.V33 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV33Changed != nil {
+				hooks.OnV33Changed(oldValue, value.V33)
+			}
 		case 34:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V34
 			value.V34 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV34Changed != nil {
+				hooks.OnV34Changed(oldValue, value.V34)
+			}
 		case 35:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V35
 			value.V35 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV35Changed != nil {
+				hooks.OnV35Changed(oldValue, value.V35)
+			}
 		case 36:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V36
 			value.V36 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV36Changed != nil {
+				hooks.OnV36Changed(oldValue, value.V36)
+			}
 		case 37:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V37
 			value.V37 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV37Changed != nil {
+				hooks.OnV37Changed(oldValue, value.V37)
+			}
 		case 38:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V38
 			value.V38 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV38Changed != nil {
+				hooks.OnV38Changed(oldValue, value.V38)
+			}
 		case 39:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V39
 			value.V39 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV39Changed != nil {
+				hooks.OnV39Changed(oldValue, value.V39)
+			}
 		case 40:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V40
 			value.V40 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV40Changed != nil {
+				hooks.OnV40Changed(oldValue, value.V40)
+			}
 		case 41:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V41
 			value.V41 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV41Changed != nil {
+				hooks.OnV41Changed(oldValue, value.V41)
+			}
 		case 42:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V42
 			value.V42 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV42Changed != nil {
+				hooks.OnV42Changed(oldValue, value.V42)
+			}
 		case 43:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V43
 			value.V43 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV43Changed != nil {
+				hooks.OnV43Changed(oldValue, value.V43)
+			}
 		case 44:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V44
 			value.V44 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV44Changed != nil {
+				hooks.OnV44Changed(oldValue, value.V44)
+			}
 		case 45:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V45
 			value.V45 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV45Changed != nil {
+				hooks.OnV45Changed(oldValue, value.V45)
+			}
 		case 46:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V46
 			value.V46 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV46Changed != nil {
+				hooks.OnV46Changed(oldValue, value.V46)
+			}
 		case 47:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V47
 			value.V47 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV47Changed != nil {
+				hooks.OnV47Changed(oldValue, value.V47)
+			}
 		case 48:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V48
 			value.V48 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV48Changed != nil {
+				hooks.OnV48Changed(oldValue, value.V48)
+			}
 		case 49:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V49
 			value.V49 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV49Changed != nil {
+				hooks.OnV49Changed(oldValue, value.V49)
+			}
 		case 50:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V50
 			value.V50 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV50Changed != nil {
+				hooks.OnV50Changed(oldValue, value.V50)
+			}
 		case 51:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V51
 			value.V51 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV51Changed != nil {
+				hooks.OnV51Changed(oldValue, value.V51)
+			}
 		case 52:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V52
 			value.V52 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV52Changed != nil {
+				hooks.OnV52Changed(oldValue, value.V52)
+			}
 		case 53:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V53
 			value.V53 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV53Changed != nil {
+				hooks.OnV53Changed(oldValue, value.V53)
+			}
 		case 54:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V54
 			value.V54 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV54Changed != nil {
+				hooks.OnV54Changed(oldValue, value.V54)
+			}
 		case 55:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V55
 			value.V55 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV55Changed != nil {
+				hooks.OnV55Changed(oldValue, value.V55)
+			}
 		case 56:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V56
 			value.V56 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV56Changed != nil {
+				hooks.OnV56Changed(oldValue, value.V56)
+			}
 		case 57:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V57
 			value.V57 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV57Changed != nil {
+				hooks.OnV57Changed(oldValue, value.V57)
+			}
 		case 58:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V58
 			value.V58 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV58Changed != nil {
+				hooks.OnV58Changed(oldValue, value.V58)
+			}
 		case 59:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V59
 			value.V59 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV59Changed != nil {
+				hooks.OnV59Changed(oldValue, value.V59)
+			}
 		case 60:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V60
 			value.V60 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV60Changed != nil {
+				hooks.OnV60Changed(oldValue, value.V60)
+			}
 		case 61:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V61
 			value.V61 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV61Changed != nil {
+				hooks.OnV61Changed(oldValue, value.V61)
+			}
 		case 62:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V62
 			value.V62 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV62Changed != nil {
+				hooks.OnV62Changed(oldValue, value.V62)
+			}
 		case 63:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V63
 			value.V63 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV63Changed != nil {
+				hooks.OnV63Changed(oldValue, value.V63)
+			}
 		case 64:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V64
 			value.V64 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV64Changed != nil {
+				hooks.OnV64Changed(oldValue, value.V64)
+			}
 		case 65:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V65
 			value.V65 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV65Changed != nil {
+				hooks.OnV65Changed(oldValue, value.V65)
+			}
 		case 66:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V66
 			value.V66 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV66Changed != nil {
+				hooks.OnV66Changed(oldValue, value.V66)
+			}
 		case 67:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V67
 			value.V67 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV67Changed != nil {
+				hooks.OnV67Changed(oldValue, value.V67)
+			}
 		case 68:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V68
 			value.V68 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV68Changed != nil {
+				hooks.OnV68Changed(oldValue, value.V68)
+			}
 		case 69:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V69
 			value.V69 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV69Changed != nil {
+				hooks.OnV69Changed(oldValue, value.V69)
+			}
 		case 70:
 			if operation != diff.OperationSetVarint {
 				return diff.ErrInvalidData
 			}
+			oldValue := value.V70
 			value.V70 = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnV70Changed != nil {
+				hooks.OnV70Changed(oldValue, value.V70)
+			}
 		}
 	}
 }

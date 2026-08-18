@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/2comjie/nova/diff/testdata"
+	"github.com/2comjie/nova/diff/testdata/bagpkg"
+	"github.com/2comjie/nova/diff/testdata/playerpkg"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -63,8 +65,14 @@ func TestGenerateStateAndDirtyBits(t *testing.T) {
 		"func (s *PlayerState) SetLevel(value int32)",
 		"func (s *PlayerState) GetName() string",
 		"func (s *PlayerState) SetName(value string)",
+		"type PlayerApplyHooks struct",
+		"OnLevelChanged",
+		"OnBagPatch",
+		"OnBagReplace",
+		"OnBagClear",
 		"func (s *PlayerState) WriteDiff(writer *diff.Writer)",
 		"func ApplyPlayerDiff(value *Player, data []byte) error",
+		"func ApplyPlayerDiffWithHooks(value *Player, data []byte, hooks *PlayerApplyHooks) error",
 		"func (s *PlayerState) GetBag() *BagState",
 		"func (s *PlayerState) SetBag(value *Bag)",
 		"func (s *PlayerState) ClearBag()",
@@ -81,17 +89,29 @@ func TestGenerateStateAndDirtyBits(t *testing.T) {
 
 func TestGeneratedFilesAreCurrent(t *testing.T) {
 	files := []struct {
-		descriptor protoreflect.FileDescriptor
-		path       string
+		descriptor   protoreflect.FileDescriptor
+		dependencies []protoreflect.FileDescriptor
+		path         string
 	}{
 		{descriptor: testdata.File_diff_testdata_bag_proto, path: "../../diff/testdata/bag_diff.pb.go"},
 		{descriptor: testdata.File_diff_testdata_complex_proto, path: "../../diff/testdata/complex_diff.pb.go"},
+		{descriptor: bagpkg.File_diff_testdata_bagpkg_bag_proto, path: "../../diff/testdata/bagpkg/bag_diff.pb.go"},
+		{
+			descriptor:   playerpkg.File_diff_testdata_playerpkg_player_proto,
+			dependencies: []protoreflect.FileDescriptor{bagpkg.File_diff_testdata_bagpkg_bag_proto},
+			path:         "../../diff/testdata/playerpkg/player_diff.pb.go",
+		},
 	}
 	for _, file := range files {
 		descriptor := protodesc.ToFileDescriptorProto(file.descriptor)
+		protoFiles := make([]*descriptorpb.FileDescriptorProto, 0, len(file.dependencies)+1)
+		for _, dependency := range file.dependencies {
+			protoFiles = append(protoFiles, protodesc.ToFileDescriptorProto(dependency))
+		}
+		protoFiles = append(protoFiles, descriptor)
 		request := &pluginpb.CodeGeneratorRequest{
 			FileToGenerate: []string{descriptor.GetName()},
-			ProtoFile:      []*descriptorpb.FileDescriptorProto{descriptor},
+			ProtoFile:      protoFiles,
 			Parameter:      proto.String("paths=source_relative"),
 		}
 		plugin, err := (protogen.Options{}).New(request)

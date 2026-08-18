@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package nova.diff.testdata.playerpkg;
+
+import "diff/testdata/bagpkg/bag.proto";
+
+option go_package = "github.com/2comjie/nova/diff/testdata/playerpkg;playerpkg";
+
+message Player {
+  uint64 id = 1;
+  nova.diff.testdata.bagpkg.Bag bag = 2;
+}
