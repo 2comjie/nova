@@ -6,9 +6,16 @@ option go_package = "github.com/2comjie/nova/diff/testdata;testdata";
 
 message Player {
   Bag bag = 1;
+  Bag2 bag2 = 2;
 }
 
 message Bag {
+  int32 capacity = 1;
+  map<uint64, Item> items = 2;
+  repeated uint64 order = 3;
+}
+
+message Bag2 {
   int32 capacity = 1;
   map<uint64, Item> items = 2;
   repeated uint64 order = 3;

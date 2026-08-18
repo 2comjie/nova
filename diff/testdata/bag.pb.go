@@ -24,6 +24,7 @@ const (
 type Player struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Bag           *Bag                   `protobuf:"bytes,1,opt,name=bag,proto3" json:"bag,omitempty"`
+	Bag2          *Bag2                  `protobuf:"bytes,2,opt,name=bag2,proto3" json:"bag2,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -61,6 +62,13 @@ func (*Player) Descriptor() ([]byte, []int) {
 func (x *Player) GetBag() *Bag {
 	if x != nil {
 		return x.Bag
+	}
+	return nil
+}
+
+func (x *Player) GetBag2() *Bag2 {
+	if x != nil {
+		return x.Bag2
 	}
 	return nil
 }
@@ -125,6 +133,66 @@ func (x *Bag) GetOrder() []uint64 {
 	return nil
 }
 
+type Bag2 struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Capacity      int32                  `protobuf:"varint,1,opt,name=capacity,proto3" json:"capacity,omitempty"`
+	Items         map[uint64]*Item       `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Order         []uint64               `protobuf:"varint,3,rep,packed,name=order,proto3" json:"order,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Bag2) Reset() {
+	*x = Bag2{}
+	mi := &file_diff_testdata_bag_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Bag2) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Bag2) ProtoMessage() {}
+
+func (x *Bag2) ProtoReflect() protoreflect.Message {
+	mi := &file_diff_testdata_bag_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Bag2.ProtoReflect.Descriptor instead.
+func (*Bag2) Descriptor() ([]byte, []int) {
+	return file_diff_testdata_bag_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Bag2) GetCapacity() int32 {
+	if x != nil {
+		return x.Capacity
+	}
+	return 0
+}
+
+func (x *Bag2) GetItems() map[uint64]*Item {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *Bag2) GetOrder() []uint64 {
+	if x != nil {
+		return x.Order
+	}
+	return nil
+}
+
 type Item struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            uint64                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -136,7 +204,7 @@ type Item struct {
 
 func (x *Item) Reset() {
 	*x = Item{}
-	mi := &file_diff_testdata_bag_proto_msgTypes[2]
+	mi := &file_diff_testdata_bag_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -148,7 +216,7 @@ func (x *Item) String() string {
 func (*Item) ProtoMessage() {}
 
 func (x *Item) ProtoReflect() protoreflect.Message {
-	mi := &file_diff_testdata_bag_proto_msgTypes[2]
+	mi := &file_diff_testdata_bag_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -161,7 +229,7 @@ func (x *Item) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Item.ProtoReflect.Descriptor instead.
 func (*Item) Descriptor() ([]byte, []int) {
-	return file_diff_testdata_bag_proto_rawDescGZIP(), []int{2}
+	return file_diff_testdata_bag_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Item) GetId() uint64 {
@@ -189,12 +257,21 @@ var File_diff_testdata_bag_proto protoreflect.FileDescriptor
 
 const file_diff_testdata_bag_proto_rawDesc = "" +
 	"\n" +
-	"\x17diff/testdata/bag.proto\x12\x12nova.diff.testdata\"3\n" +
+	"\x17diff/testdata/bag.proto\x12\x12nova.diff.testdata\"a\n" +
 	"\x06Player\x12)\n" +
-	"\x03bag\x18\x01 \x01(\v2\x17.nova.diff.testdata.BagR\x03bag\"\xc5\x01\n" +
+	"\x03bag\x18\x01 \x01(\v2\x17.nova.diff.testdata.BagR\x03bag\x12,\n" +
+	"\x04bag2\x18\x02 \x01(\v2\x18.nova.diff.testdata.Bag2R\x04bag2\"\xc5\x01\n" +
 	"\x03Bag\x12\x1a\n" +
 	"\bcapacity\x18\x01 \x01(\x05R\bcapacity\x128\n" +
 	"\x05items\x18\x02 \x03(\v2\".nova.diff.testdata.Bag.ItemsEntryR\x05items\x12\x14\n" +
+	"\x05order\x18\x03 \x03(\x04R\x05order\x1aR\n" +
+	"\n" +
+	"ItemsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\x04R\x03key\x12.\n" +
+	"\x05value\x18\x02 \x01(\v2\x18.nova.diff.testdata.ItemR\x05value:\x028\x01\"\xc7\x01\n" +
+	"\x04Bag2\x12\x1a\n" +
+	"\bcapacity\x18\x01 \x01(\x05R\bcapacity\x129\n" +
+	"\x05items\x18\x02 \x03(\v2#.nova.diff.testdata.Bag2.ItemsEntryR\x05items\x12\x14\n" +
 	"\x05order\x18\x03 \x03(\x04R\x05order\x1aR\n" +
 	"\n" +
 	"ItemsEntry\x12\x10\n" +
@@ -217,22 +294,27 @@ func file_diff_testdata_bag_proto_rawDescGZIP() []byte {
 	return file_diff_testdata_bag_proto_rawDescData
 }
 
-var file_diff_testdata_bag_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_diff_testdata_bag_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_diff_testdata_bag_proto_goTypes = []any{
 	(*Player)(nil), // 0: nova.diff.testdata.Player
 	(*Bag)(nil),    // 1: nova.diff.testdata.Bag
-	(*Item)(nil),   // 2: nova.diff.testdata.Item
-	nil,            // 3: nova.diff.testdata.Bag.ItemsEntry
+	(*Bag2)(nil),   // 2: nova.diff.testdata.Bag2
+	(*Item)(nil),   // 3: nova.diff.testdata.Item
+	nil,            // 4: nova.diff.testdata.Bag.ItemsEntry
+	nil,            // 5: nova.diff.testdata.Bag2.ItemsEntry
 }
 var file_diff_testdata_bag_proto_depIdxs = []int32{
 	1, // 0: nova.diff.testdata.Player.bag:type_name -> nova.diff.testdata.Bag
-	3, // 1: nova.diff.testdata.Bag.items:type_name -> nova.diff.testdata.Bag.ItemsEntry
-	2, // 2: nova.diff.testdata.Bag.ItemsEntry.value:type_name -> nova.diff.testdata.Item
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	2, // 1: nova.diff.testdata.Player.bag2:type_name -> nova.diff.testdata.Bag2
+	4, // 2: nova.diff.testdata.Bag.items:type_name -> nova.diff.testdata.Bag.ItemsEntry
+	5, // 3: nova.diff.testdata.Bag2.items:type_name -> nova.diff.testdata.Bag2.ItemsEntry
+	3, // 4: nova.diff.testdata.Bag.ItemsEntry.value:type_name -> nova.diff.testdata.Item
+	3, // 5: nova.diff.testdata.Bag2.ItemsEntry.value:type_name -> nova.diff.testdata.Item
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_diff_testdata_bag_proto_init() }
@@ -246,7 +328,7 @@ func file_diff_testdata_bag_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_diff_testdata_bag_proto_rawDesc), len(file_diff_testdata_bag_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

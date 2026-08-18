@@ -4,17 +4,27 @@ import "testing"
 
 func TestDirtyBits(t *testing.T) {
 	bits := make([]uint64, 10)
-	indexes := []uint32{0, 63, 64, 127, 128, 599}
+	positions := []struct {
+		word uint32
+		mask uint64
+	}{
+		{word: 0, mask: 1},
+		{word: 0, mask: uint64(1) << 63},
+		{word: 1, mask: 1},
+		{word: 1, mask: uint64(1) << 63},
+		{word: 2, mask: 1},
+		{word: 9, mask: uint64(1) << 23},
+	}
 
-	for _, index := range indexes {
-		if !MarkDirty(bits, index) {
-			t.Fatalf("index %d should become dirty", index)
+	for _, position := range positions {
+		if !MarkDirty(&bits[position.word], position.mask) {
+			t.Fatalf("word %d mask %d should become dirty", position.word, position.mask)
 		}
-		if !HasDirty(bits, index) {
-			t.Fatalf("index %d should be dirty", index)
+		if !HasDirty(bits[position.word], position.mask) {
+			t.Fatalf("word %d mask %d should be dirty", position.word, position.mask)
 		}
-		if MarkDirty(bits, index) {
-			t.Fatalf("index %d should not become dirty twice", index)
+		if MarkDirty(&bits[position.word], position.mask) {
+			t.Fatalf("word %d mask %d should not become dirty twice", position.word, position.mask)
 		}
 	}
 
@@ -26,13 +36,13 @@ func TestDirtyBits(t *testing.T) {
 	if AnyDirty(bits) {
 		t.Fatal("expected clean bits")
 	}
-	for _, index := range indexes {
-		if HasDirty(bits, index) {
-			t.Fatalf("index %d should be clean", index)
+	for _, position := range positions {
+		if HasDirty(bits[position.word], position.mask) {
+			t.Fatalf("word %d mask %d should be clean", position.word, position.mask)
 		}
 	}
 
-	if !MarkDirty(bits, 599) {
+	if !MarkDirty(&bits[9], uint64(1)<<23) {
 		t.Fatal("index 599 should become dirty after clear")
 	}
 }
