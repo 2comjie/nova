@@ -14,45 +14,41 @@ type GameDataItems struct {
 	state *GameDataState
 }
 
-type GameDataItemsValue struct {
-	value  *InventoryItem
-	key    uint64
-	parent *GameDataState
-}
-
 type gameDataItemsChange struct {
 	key       uint64
 	operation diff.Operation
-	dirty     [1]uint64
+	state     *InventoryItemState
 }
 
 type gameDataItemsTracker struct {
 	indexes map[uint64]int
 	changes []gameDataItemsChange
+	states  map[uint64]*InventoryItemState
 }
 
-func (t *gameDataItemsTracker) Patch(key uint64) (*[1]uint64, bool) {
+func (t *gameDataItemsTracker) Patch(key uint64, state *InventoryItemState) bool {
 	if index := t.indexes[key]; index != 0 {
 		change := &t.changes[index-1]
 		if change.operation != diff.OperationMapPatch {
-			return nil, false
+			return false
 		}
-		return &change.dirty, false
+		change.state = state
+		return false
 	}
 	if t.indexes == nil {
 		t.indexes = make(map[uint64]int)
 	}
 	first := len(t.changes) == 0
-	t.changes = append(t.changes, gameDataItemsChange{key: key, operation: diff.OperationMapPatch})
+	t.changes = append(t.changes, gameDataItemsChange{key: key, operation: diff.OperationMapPatch, state: state})
 	t.indexes[key] = len(t.changes)
-	return &t.changes[len(t.changes)-1].dirty, first
+	return first
 }
 
 func (t *gameDataItemsTracker) Put(key uint64) bool {
 	if index := t.indexes[key]; index != 0 {
 		change := &t.changes[index-1]
 		change.operation = diff.OperationMapPut
-		clear(change.dirty[:])
+		change.state = nil
 		return false
 	}
 	if t.indexes == nil {
@@ -68,7 +64,7 @@ func (t *gameDataItemsTracker) Delete(key uint64) bool {
 	if index := t.indexes[key]; index != 0 {
 		change := &t.changes[index-1]
 		change.operation = diff.OperationMapDelete
-		clear(change.dirty[:])
+		change.state = nil
 		return false
 	}
 	if t.indexes == nil {
@@ -91,6 +87,9 @@ func (t *gameDataItemsTracker) ClearDirty() {
 	clear(t.indexes)
 	clear(t.changes)
 	t.changes = t.changes[:0]
+	for _, state := range t.states {
+		state.ClearDirty()
+	}
 }
 
 type GameDataCurrencies struct {
@@ -100,7 +99,6 @@ type GameDataCurrencies struct {
 type gameDataCurrenciesChange struct {
 	key       string
 	operation diff.Operation
-	dirty     [1]uint64
 }
 
 type gameDataCurrenciesTracker struct {
@@ -112,7 +110,6 @@ func (t *gameDataCurrenciesTracker) Put(key string) bool {
 	if index := t.indexes[key]; index != 0 {
 		change := &t.changes[index-1]
 		change.operation = diff.OperationMapPut
-		clear(change.dirty[:])
 		return false
 	}
 	if t.indexes == nil {
@@ -128,7 +125,6 @@ func (t *gameDataCurrenciesTracker) Delete(key string) bool {
 	if index := t.indexes[key]; index != 0 {
 		change := &t.changes[index-1]
 		change.operation = diff.OperationMapDelete
-		clear(change.dirty[:])
 		return false
 	}
 	if t.indexes == nil {
@@ -160,7 +156,6 @@ type GameDataSnapshots struct {
 type gameDataSnapshotsChange struct {
 	key       int32
 	operation diff.Operation
-	dirty     [1]uint64
 }
 
 type gameDataSnapshotsTracker struct {
@@ -172,7 +167,6 @@ func (t *gameDataSnapshotsTracker) Put(key int32) bool {
 	if index := t.indexes[key]; index != 0 {
 		change := &t.changes[index-1]
 		change.operation = diff.OperationMapPut
-		clear(change.dirty[:])
 		return false
 	}
 	if t.indexes == nil {
@@ -188,7 +182,6 @@ func (t *gameDataSnapshotsTracker) Delete(key int32) bool {
 	if index := t.indexes[key]; index != 0 {
 		change := &t.changes[index-1]
 		change.operation = diff.OperationMapDelete
-		clear(change.dirty[:])
 		return false
 	}
 	if t.indexes == nil {
@@ -220,7 +213,6 @@ type GameDataFeatureFlags struct {
 type gameDataFeatureFlagsChange struct {
 	key       bool
 	operation diff.Operation
-	dirty     [1]uint64
 }
 
 type gameDataFeatureFlagsTracker struct {
@@ -232,7 +224,6 @@ func (t *gameDataFeatureFlagsTracker) Put(key bool) bool {
 	if index := t.indexes[key]; index != 0 {
 		change := &t.changes[index-1]
 		change.operation = diff.OperationMapPut
-		clear(change.dirty[:])
 		return false
 	}
 	if t.indexes == nil {
@@ -248,7 +239,6 @@ func (t *gameDataFeatureFlagsTracker) Delete(key bool) bool {
 	if index := t.indexes[key]; index != 0 {
 		change := &t.changes[index-1]
 		change.operation = diff.OperationMapDelete
-		clear(change.dirty[:])
 		return false
 	}
 	if t.indexes == nil {
@@ -282,7 +272,6 @@ type gameDataCheckpointsChange struct {
 	index     uint32
 	to        uint32
 	value     int64
-	dirty     [1]uint64
 }
 
 type gameDataCheckpointsTracker struct {
@@ -339,7 +328,6 @@ type gameDataLabelsChange struct {
 	index     uint32
 	to        uint32
 	value     string
-	dirty     [1]uint64
 }
 
 type gameDataLabelsTracker struct {
@@ -396,7 +384,6 @@ type gameDataPacketsChange struct {
 	index     uint32
 	to        uint32
 	value     []byte
-	dirty     [1]uint64
 }
 
 type gameDataPacketsTracker struct {
@@ -448,28 +435,36 @@ type GameDataLineup struct {
 	state *GameDataState
 }
 
-type GameDataLineupValue struct {
-	value  *InventoryItem
-	index  int
-	parent *GameDataState
-}
-
 type gameDataLineupChange struct {
 	operation diff.Operation
 	index     uint32
 	to        uint32
 	value     *InventoryItem
-	dirty     [1]uint64
+	state     *InventoryItemState
 }
 
-func (t *gameDataLineupTracker) Patch(index uint32, value *InventoryItem) (*[1]uint64, bool) {
+func (t *gameDataLineupTracker) Patch(index uint32, state *InventoryItemState) bool {
+	for _, change := range t.changes {
+		if (change.operation == diff.OperationListAppend || change.operation == diff.OperationListInsert || change.operation == diff.OperationListSet) && change.value == state.GetRawValue() {
+			return false
+		}
+	}
+	if _, ok := t.patches[state]; ok {
+		return false
+	}
+	if t.patches == nil {
+		t.patches = make(map[*InventoryItemState]struct{})
+	}
 	first := len(t.changes) == 0
-	t.changes = append(t.changes, gameDataLineupChange{operation: diff.OperationListPatch, index: index, value: value})
-	return &t.changes[len(t.changes)-1].dirty, first
+	t.changes = append(t.changes, gameDataLineupChange{operation: diff.OperationListPatch, index: index, state: state})
+	t.patches[state] = struct{}{}
+	return first
 }
 
 type gameDataLineupTracker struct {
 	changes []gameDataLineupChange
+	states  map[*InventoryItem]*InventoryItemState
+	patches map[*InventoryItemState]struct{}
 }
 
 func (t *gameDataLineupTracker) Append(value *InventoryItem) bool {
@@ -511,6 +506,10 @@ func (t *gameDataLineupTracker) Clear() bool {
 func (t *gameDataLineupTracker) ClearDirty() {
 	clear(t.changes)
 	t.changes = t.changes[:0]
+	clear(t.patches)
+	for _, state := range t.states {
+		state.ClearDirty()
+	}
 }
 
 type GameDataQualities struct {
@@ -522,7 +521,6 @@ type gameDataQualitiesChange struct {
 	index     uint32
 	to        uint32
 	value     ItemQuality
-	dirty     [1]uint64
 }
 
 type gameDataQualitiesTracker struct {
@@ -582,6 +580,7 @@ type GameDataApplyHooks struct {
 	OnItemsPut             func(key uint64, oldValue, newValue *InventoryItem, replaced bool)
 	OnItemsDelete          func(key uint64, oldValue *InventoryItem)
 	OnItemsClear           func()
+	Items                  func(key uint64) *InventoryItemApplyHooks
 	OnItemsPatch           func(key uint64, oldValue, newValue *InventoryItem)
 	OnItemsIdChanged       func(key uint64, oldValue, newValue uint64)
 	OnItemsCountChanged    func(key uint64, oldValue, newValue int32)
@@ -621,6 +620,7 @@ type GameDataApplyHooks struct {
 	OnLineupDelete         func(index int, oldValue *InventoryItem)
 	OnLineupMove           func(from, to int)
 	OnLineupClear          func()
+	Lineup                 func(index int) *InventoryItemApplyHooks
 	OnLineupPatch          func(index int, oldValue, newValue *InventoryItem)
 	OnLineupIdChanged      func(index int, oldValue, newValue uint64)
 	OnLineupCountChanged   func(index int, oldValue, newValue int32)
@@ -795,12 +795,32 @@ func (s *GameDataState) Items() GameDataItems {
 	return GameDataItems{state: s}
 }
 
-func (m GameDataItems) GetValue(key uint64) (GameDataItemsValue, bool) {
+func (m GameDataItems) GetValue(key uint64) (*InventoryItemState, bool) {
 	value, ok := m.state.value.Items[key]
-	return GameDataItemsValue{value: value, key: key, parent: m.state}, ok
+	if !ok {
+		return nil, false
+	}
+	if state := m.state.itemsChanges.states[key]; state != nil {
+		return state, true
+	}
+	var state *InventoryItemState
+	state = newInventoryItemState(value, func() {
+		if m.state.itemsChanges.states[key] != state {
+			return
+		}
+		if m.state.itemsChanges.Patch(key, state) {
+			m.state.markItemsDirty()
+		}
+	})
+	if m.state.itemsChanges.states == nil {
+		m.state.itemsChanges.states = make(map[uint64]*InventoryItemState)
+	}
+	m.state.itemsChanges.states[key] = state
+	return state, true
 }
 
 func (m GameDataItems) Store(key uint64, value *InventoryItem) {
+	delete(m.state.itemsChanges.states, key)
 	value = proto.Clone(value).(*InventoryItem)
 	if m.state.value.Items == nil {
 		m.state.value.Items = make(map[uint64]*InventoryItem)
@@ -815,6 +835,7 @@ func (m GameDataItems) Clear() {
 	if len(m.state.value.Items) == 0 {
 		return
 	}
+	clear(m.state.itemsChanges.states)
 	m.state.value.Items = nil
 	if m.state.itemsChanges.Clear() {
 		m.state.markItemsDirty()
@@ -829,111 +850,19 @@ func (m GameDataItems) Delete(key uint64) {
 	if _, ok := m.state.value.Items[key]; !ok {
 		return
 	}
+	delete(m.state.itemsChanges.states, key)
 	delete(m.state.value.Items, key)
 	if m.state.itemsChanges.Delete(key) {
 		m.state.markItemsDirty()
 	}
 }
 
-func (m GameDataItems) Range(yield func(uint64, GameDataItemsValue) bool) {
-	for key, value := range m.state.value.Items {
-		if !yield(key, GameDataItemsValue{value: value, key: key, parent: m.state}) {
+func (m GameDataItems) Range(yield func(uint64, *InventoryItemState) bool) {
+	for key := range m.state.value.Items {
+		state, _ := m.GetValue(key)
+		if !yield(key, state) {
 			return
 		}
-	}
-}
-
-func (r GameDataItemsValue) GetRawValue() *InventoryItem {
-	return r.value
-}
-
-func (r GameDataItemsValue) GetId() uint64 {
-	return r.value.Id
-}
-
-func (r GameDataItemsValue) SetId(value uint64) {
-	if r.value.Id == value {
-		return
-	}
-	r.value.Id = value
-	dirty, first := r.parent.itemsChanges.Patch(r.key)
-	if dirty != nil {
-		diff.MarkDirty(&dirty[0], 1)
-	}
-	if first {
-		r.parent.markItemsDirty()
-	}
-}
-
-func (r GameDataItemsValue) GetCount() int32 {
-	return r.value.Count
-}
-
-func (r GameDataItemsValue) SetCount(value int32) {
-	if r.value.Count == value {
-		return
-	}
-	r.value.Count = value
-	dirty, first := r.parent.itemsChanges.Patch(r.key)
-	if dirty != nil {
-		diff.MarkDirty(&dirty[0], 2)
-	}
-	if first {
-		r.parent.markItemsDirty()
-	}
-}
-
-func (r GameDataItemsValue) GetQuality() ItemQuality {
-	return r.value.Quality
-}
-
-func (r GameDataItemsValue) SetQuality(value ItemQuality) {
-	if r.value.Quality == value {
-		return
-	}
-	r.value.Quality = value
-	dirty, first := r.parent.itemsChanges.Patch(r.key)
-	if dirty != nil {
-		diff.MarkDirty(&dirty[0], 4)
-	}
-	if first {
-		r.parent.markItemsDirty()
-	}
-}
-
-func (r GameDataItemsValue) GetName() string {
-	return r.value.Name
-}
-
-func (r GameDataItemsValue) SetName(value string) {
-	if r.value.Name == value {
-		return
-	}
-	r.value.Name = value
-	dirty, first := r.parent.itemsChanges.Patch(r.key)
-	if dirty != nil {
-		diff.MarkDirty(&dirty[0], 8)
-	}
-	if first {
-		r.parent.markItemsDirty()
-	}
-}
-
-func (r GameDataItemsValue) GetPayload() []byte {
-	return bytes.Clone(r.value.Payload)
-}
-
-func (r GameDataItemsValue) SetPayload(value []byte) {
-	if bytes.Equal(r.value.Payload, value) {
-		return
-	}
-	r.value.Payload = bytes.Clone(value)
-	dirty, first := r.parent.itemsChanges.Patch(r.key)
-	if dirty != nil {
-		diff.MarkDirty(&dirty[0], 16)
-	}
-	if first {
-		r.parent.markItemsDirty()
 	}
 }
 
@@ -1399,18 +1328,41 @@ func (l GameDataLineup) Len() int {
 	return len(l.state.value.Lineup)
 }
 
-func (l GameDataLineup) GetValue(index int) (GameDataLineupValue, bool) {
+func (l GameDataLineup) GetValue(index int) (*InventoryItemState, bool) {
 	if index < 0 || index >= len(l.state.value.Lineup) {
-		var zero GameDataLineupValue
+		var zero *InventoryItemState
 		return zero, false
 	}
-	return GameDataLineupValue{value: l.state.value.Lineup[index], index: index, parent: l.state}, true
+	value := l.state.value.Lineup[index]
+	if state := l.state.lineupChanges.states[value]; state != nil {
+		return state, true
+	}
+	var state *InventoryItemState
+	state = newInventoryItemState(value, func() {
+		if l.state.lineupChanges.states[value] != state {
+			return
+		}
+		for currentIndex, currentValue := range l.state.value.Lineup {
+			if currentValue == value {
+				if l.state.lineupChanges.Patch(uint32(currentIndex), state) {
+					l.state.markLineupDirty()
+				}
+				return
+			}
+		}
+	})
+	if l.state.lineupChanges.states == nil {
+		l.state.lineupChanges.states = make(map[*InventoryItem]*InventoryItemState)
+	}
+	l.state.lineupChanges.states[value] = state
+	return state, true
 }
 
 func (l GameDataLineup) Clear() {
 	if len(l.state.value.Lineup) == 0 {
 		return
 	}
+	clear(l.state.lineupChanges.states)
 	l.state.value.Lineup = nil
 	if l.state.lineupChanges.Clear() {
 		l.state.markLineupDirty()
@@ -1421,6 +1373,7 @@ func (l GameDataLineup) Store(index int, value *InventoryItem) {
 	if proto.Equal(l.state.value.Lineup[index], value) {
 		return
 	}
+	delete(l.state.lineupChanges.states, l.state.value.Lineup[index])
 	value = proto.Clone(value).(*InventoryItem)
 	l.state.value.Lineup[index] = value
 	if l.state.lineupChanges.Store(uint32(index), value) {
@@ -1448,6 +1401,7 @@ func (l GameDataLineup) Insert(index int, value *InventoryItem) {
 }
 
 func (l GameDataLineup) Delete(index int) {
+	delete(l.state.lineupChanges.states, l.state.value.Lineup[index])
 	copy(l.state.value.Lineup[index:], l.state.value.Lineup[index+1:])
 	l.state.value.Lineup = l.state.value.Lineup[:len(l.state.value.Lineup)-1]
 	if l.state.lineupChanges.Delete(uint32(index)) {
@@ -1471,95 +1425,12 @@ func (l GameDataLineup) Move(from int, to int) {
 	}
 }
 
-func (l GameDataLineup) Range(yield func(int, GameDataLineupValue) bool) {
-	for index, value := range l.state.value.Lineup {
-		if !yield(index, GameDataLineupValue{value: value, index: index, parent: l.state}) {
+func (l GameDataLineup) Range(yield func(int, *InventoryItemState) bool) {
+	for index := range l.state.value.Lineup {
+		state, _ := l.GetValue(index)
+		if !yield(index, state) {
 			return
 		}
-	}
-}
-
-func (r GameDataLineupValue) GetRawValue() *InventoryItem {
-	return r.value
-}
-
-func (r GameDataLineupValue) GetId() uint64 {
-	return r.value.Id
-}
-
-func (r GameDataLineupValue) SetId(value uint64) {
-	if r.value.Id == value {
-		return
-	}
-	r.value.Id = value
-	dirty, first := r.parent.lineupChanges.Patch(uint32(r.index), r.value)
-	diff.MarkDirty(&dirty[0], 1)
-	if first {
-		r.parent.markLineupDirty()
-	}
-}
-
-func (r GameDataLineupValue) GetCount() int32 {
-	return r.value.Count
-}
-
-func (r GameDataLineupValue) SetCount(value int32) {
-	if r.value.Count == value {
-		return
-	}
-	r.value.Count = value
-	dirty, first := r.parent.lineupChanges.Patch(uint32(r.index), r.value)
-	diff.MarkDirty(&dirty[0], 2)
-	if first {
-		r.parent.markLineupDirty()
-	}
-}
-
-func (r GameDataLineupValue) GetQuality() ItemQuality {
-	return r.value.Quality
-}
-
-func (r GameDataLineupValue) SetQuality(value ItemQuality) {
-	if r.value.Quality == value {
-		return
-	}
-	r.value.Quality = value
-	dirty, first := r.parent.lineupChanges.Patch(uint32(r.index), r.value)
-	diff.MarkDirty(&dirty[0], 4)
-	if first {
-		r.parent.markLineupDirty()
-	}
-}
-
-func (r GameDataLineupValue) GetName() string {
-	return r.value.Name
-}
-
-func (r GameDataLineupValue) SetName(value string) {
-	if r.value.Name == value {
-		return
-	}
-	r.value.Name = value
-	dirty, first := r.parent.lineupChanges.Patch(uint32(r.index), r.value)
-	diff.MarkDirty(&dirty[0], 8)
-	if first {
-		r.parent.markLineupDirty()
-	}
-}
-
-func (r GameDataLineupValue) GetPayload() []byte {
-	return bytes.Clone(r.value.Payload)
-}
-
-func (r GameDataLineupValue) SetPayload(value []byte) {
-	if bytes.Equal(r.value.Payload, value) {
-		return
-	}
-	r.value.Payload = bytes.Clone(value)
-	dirty, first := r.parent.lineupChanges.Patch(uint32(r.index), r.value)
-	diff.MarkDirty(&dirty[0], 16)
-	if first {
-		r.parent.markLineupDirty()
 	}
 }
 
@@ -1746,21 +1617,7 @@ func (s *GameDataState) WriteDiff(writer *diff.Writer) {
 				writer.MapPatch(3, func(writer *diff.Writer) {
 					writer.AppendUint64(change.key)
 				}, func(writer *diff.Writer) {
-					if diff.HasDirty(change.dirty[0], 1) {
-						writer.Uint64(1, s.value.Items[change.key].Id)
-					}
-					if diff.HasDirty(change.dirty[0], 2) {
-						writer.Int32(2, s.value.Items[change.key].Count)
-					}
-					if diff.HasDirty(change.dirty[0], 4) {
-						writer.Enum(3, int32(s.value.Items[change.key].Quality))
-					}
-					if diff.HasDirty(change.dirty[0], 8) {
-						writer.String(4, s.value.Items[change.key].Name)
-					}
-					if diff.HasDirty(change.dirty[0], 16) {
-						writer.Bytes(5, s.value.Items[change.key].Payload)
-					}
+					change.state.WriteDiff(writer)
 				})
 			}
 		}
@@ -1929,21 +1786,7 @@ func (s *GameDataState) WriteDiff(writer *diff.Writer) {
 				writer.ListMove(10, change.index, change.to)
 			case diff.OperationListPatch:
 				writer.ListPatch(10, change.index, func(writer *diff.Writer) {
-					if diff.HasDirty(change.dirty[0], 1) {
-						writer.Uint64(1, change.value.Id)
-					}
-					if diff.HasDirty(change.dirty[0], 2) {
-						writer.Int32(2, change.value.Count)
-					}
-					if diff.HasDirty(change.dirty[0], 4) {
-						writer.Enum(3, int32(change.value.Quality))
-					}
-					if diff.HasDirty(change.dirty[0], 8) {
-						writer.String(4, change.value.Name)
-					}
-					if diff.HasDirty(change.dirty[0], 16) {
-						writer.Bytes(5, change.value.Payload)
-					}
+					change.state.WriteDiff(writer)
 				})
 			}
 		}
@@ -2159,7 +2002,11 @@ func applyGameDataDiff(value *GameData, data []byte, hooks *GameDataApplyHooks) 
 					}
 					value.Items[key] = item
 				}
-				if err := ApplyInventoryItemDiff(item, patch); err != nil {
+				var childHooks *InventoryItemApplyHooks
+				if hooks != nil && hooks.Items != nil {
+					childHooks = hooks.Items(key)
+				}
+				if err := ApplyInventoryItemDiffWithHooks(item, patch, childHooks); err != nil {
 					return err
 				}
 				if hooks != nil {
@@ -2555,7 +2402,11 @@ func applyGameDataDiff(value *GameData, data []byte, hooks *GameDataApplyHooks) 
 				if hooks != nil && (hooks.OnLineupPatch != nil || hooks.OnLineupIdChanged != nil || hooks.OnLineupCountChanged != nil || hooks.OnLineupQualityChanged != nil || hooks.OnLineupNameChanged != nil || hooks.OnLineupPayloadChanged != nil) {
 					oldItem = proto.Clone(value.Lineup[index]).(*InventoryItem)
 				}
-				if err := ApplyInventoryItemDiff(value.Lineup[index], patch); err != nil {
+				var childHooks *InventoryItemApplyHooks
+				if hooks != nil && hooks.Lineup != nil {
+					childHooks = hooks.Lineup(index)
+				}
+				if err := ApplyInventoryItemDiffWithHooks(value.Lineup[index], patch, childHooks); err != nil {
 					return err
 				}
 				if hooks != nil {
@@ -3250,7 +3101,6 @@ type profileTagsChange struct {
 	index     uint32
 	to        uint32
 	value     string
-	dirty     [1]uint64
 }
 
 type profileTagsTracker struct {
@@ -3827,12 +3677,196 @@ func (s *AddressState) ClearDirty() {
 	diff.ClearDirty(s.dirty[:])
 }
 
+type InventoryItemEffects struct {
+	state *InventoryItemState
+}
+
+type inventoryItemEffectsChange struct {
+	key       int32
+	operation diff.Operation
+	state     *ItemEffectState
+}
+
+type inventoryItemEffectsTracker struct {
+	indexes map[int32]int
+	changes []inventoryItemEffectsChange
+	states  map[int32]*ItemEffectState
+}
+
+func (t *inventoryItemEffectsTracker) Patch(key int32, state *ItemEffectState) bool {
+	if index := t.indexes[key]; index != 0 {
+		change := &t.changes[index-1]
+		if change.operation != diff.OperationMapPatch {
+			return false
+		}
+		change.state = state
+		return false
+	}
+	if t.indexes == nil {
+		t.indexes = make(map[int32]int)
+	}
+	first := len(t.changes) == 0
+	t.changes = append(t.changes, inventoryItemEffectsChange{key: key, operation: diff.OperationMapPatch, state: state})
+	t.indexes[key] = len(t.changes)
+	return first
+}
+
+func (t *inventoryItemEffectsTracker) Put(key int32) bool {
+	if index := t.indexes[key]; index != 0 {
+		change := &t.changes[index-1]
+		change.operation = diff.OperationMapPut
+		change.state = nil
+		return false
+	}
+	if t.indexes == nil {
+		t.indexes = make(map[int32]int)
+	}
+	first := len(t.changes) == 0
+	t.changes = append(t.changes, inventoryItemEffectsChange{key: key, operation: diff.OperationMapPut})
+	t.indexes[key] = len(t.changes)
+	return first
+}
+
+func (t *inventoryItemEffectsTracker) Delete(key int32) bool {
+	if index := t.indexes[key]; index != 0 {
+		change := &t.changes[index-1]
+		change.operation = diff.OperationMapDelete
+		change.state = nil
+		return false
+	}
+	if t.indexes == nil {
+		t.indexes = make(map[int32]int)
+	}
+	first := len(t.changes) == 0
+	t.changes = append(t.changes, inventoryItemEffectsChange{key: key, operation: diff.OperationMapDelete})
+	t.indexes[key] = len(t.changes)
+	return first
+}
+
+func (t *inventoryItemEffectsTracker) Clear() bool {
+	clear(t.indexes)
+	clear(t.changes)
+	t.changes = append(t.changes[:0], inventoryItemEffectsChange{operation: diff.OperationClear})
+	return true
+}
+
+func (t *inventoryItemEffectsTracker) ClearDirty() {
+	clear(t.indexes)
+	clear(t.changes)
+	t.changes = t.changes[:0]
+	for _, state := range t.states {
+		state.ClearDirty()
+	}
+}
+
+type InventoryItemGems struct {
+	state *InventoryItemState
+}
+
+type inventoryItemGemsChange struct {
+	operation diff.Operation
+	index     uint32
+	to        uint32
+	value     *ItemGem
+	state     *ItemGemState
+}
+
+func (t *inventoryItemGemsTracker) Patch(index uint32, state *ItemGemState) bool {
+	for _, change := range t.changes {
+		if (change.operation == diff.OperationListAppend || change.operation == diff.OperationListInsert || change.operation == diff.OperationListSet) && change.value == state.GetRawValue() {
+			return false
+		}
+	}
+	if _, ok := t.patches[state]; ok {
+		return false
+	}
+	if t.patches == nil {
+		t.patches = make(map[*ItemGemState]struct{})
+	}
+	first := len(t.changes) == 0
+	t.changes = append(t.changes, inventoryItemGemsChange{operation: diff.OperationListPatch, index: index, state: state})
+	t.patches[state] = struct{}{}
+	return first
+}
+
+type inventoryItemGemsTracker struct {
+	changes []inventoryItemGemsChange
+	states  map[*ItemGem]*ItemGemState
+	patches map[*ItemGemState]struct{}
+}
+
+func (t *inventoryItemGemsTracker) Append(value *ItemGem) bool {
+	first := len(t.changes) == 0
+	t.changes = append(t.changes, inventoryItemGemsChange{operation: diff.OperationListAppend, value: value})
+	return first
+}
+
+func (t *inventoryItemGemsTracker) Insert(index uint32, value *ItemGem) bool {
+	first := len(t.changes) == 0
+	t.changes = append(t.changes, inventoryItemGemsChange{operation: diff.OperationListInsert, index: index, value: value})
+	return first
+}
+
+func (t *inventoryItemGemsTracker) Store(index uint32, value *ItemGem) bool {
+	first := len(t.changes) == 0
+	t.changes = append(t.changes, inventoryItemGemsChange{operation: diff.OperationListSet, index: index, value: value})
+	return first
+}
+
+func (t *inventoryItemGemsTracker) Delete(index uint32) bool {
+	first := len(t.changes) == 0
+	t.changes = append(t.changes, inventoryItemGemsChange{operation: diff.OperationListDelete, index: index})
+	return first
+}
+
+func (t *inventoryItemGemsTracker) Move(from uint32, to uint32) bool {
+	first := len(t.changes) == 0
+	t.changes = append(t.changes, inventoryItemGemsChange{operation: diff.OperationListMove, index: from, to: to})
+	return first
+}
+
+func (t *inventoryItemGemsTracker) Clear() bool {
+	clear(t.changes)
+	t.changes = append(t.changes[:0], inventoryItemGemsChange{operation: diff.OperationClear})
+	return true
+}
+
+func (t *inventoryItemGemsTracker) ClearDirty() {
+	clear(t.changes)
+	t.changes = t.changes[:0]
+	clear(t.patches)
+	for _, state := range t.states {
+		state.ClearDirty()
+	}
+}
+
 type InventoryItemApplyHooks struct {
-	OnIdChanged      func(oldValue, newValue uint64)
-	OnCountChanged   func(oldValue, newValue int32)
-	OnQualityChanged func(oldValue, newValue ItemQuality)
-	OnNameChanged    func(oldValue, newValue string)
-	OnPayloadChanged func(oldValue, newValue []byte)
+	OnIdChanged           func(oldValue, newValue uint64)
+	OnCountChanged        func(oldValue, newValue int32)
+	OnQualityChanged      func(oldValue, newValue ItemQuality)
+	OnNameChanged         func(oldValue, newValue string)
+	OnPayloadChanged      func(oldValue, newValue []byte)
+	Attr                  *ItemAttrApplyHooks
+	OnAttrPatch           func(oldValue, newValue *ItemAttr)
+	OnAttrReplace         func(oldValue, newValue *ItemAttr)
+	OnAttrClear           func(oldValue *ItemAttr)
+	OnEffectsPut          func(key int32, oldValue, newValue *ItemEffect, replaced bool)
+	OnEffectsDelete       func(key int32, oldValue *ItemEffect)
+	OnEffectsClear        func()
+	Effects               func(key int32) *ItemEffectApplyHooks
+	OnEffectsPatch        func(key int32, oldValue, newValue *ItemEffect)
+	OnEffectsIdChanged    func(key int32, oldValue, newValue int32)
+	OnEffectsPowerChanged func(key int32, oldValue, newValue int32)
+	OnGemsAppend          func(index int, value *ItemGem)
+	OnGemsInsert          func(index int, value *ItemGem)
+	OnGemsStore           func(index int, oldValue, newValue *ItemGem)
+	OnGemsDelete          func(index int, oldValue *ItemGem)
+	OnGemsMove            func(from, to int)
+	OnGemsClear           func()
+	Gems                  func(index int) *ItemGemApplyHooks
+	OnGemsPatch           func(index int, oldValue, newValue *ItemGem)
+	OnGemsIdChanged       func(index int, oldValue, newValue int32)
+	OnGemsLevelChanged    func(index int, oldValue, newValue int32)
 }
 
 const inventoryItemStateDirtyIdWord uint32 = 0
@@ -3845,11 +3879,21 @@ const inventoryItemStateDirtyNameWord uint32 = 0
 const inventoryItemStateDirtyNameMask uint64 = 8
 const inventoryItemStateDirtyPayloadWord uint32 = 0
 const inventoryItemStateDirtyPayloadMask uint64 = 16
+const inventoryItemStateDirtyAttrWord uint32 = 0
+const inventoryItemStateDirtyAttrMask uint64 = 32
+const inventoryItemStateDirtyEffectsWord uint32 = 0
+const inventoryItemStateDirtyEffectsMask uint64 = 64
+const inventoryItemStateDirtyGemsWord uint32 = 0
+const inventoryItemStateDirtyGemsMask uint64 = 128
 
 type InventoryItemState struct {
-	value      *InventoryItem
-	dirty      [1]uint64
-	markParent func()
+	value          *InventoryItem
+	dirty          [1]uint64
+	markParent     func()
+	attr           *ItemAttrState
+	attrOperation  diff.Operation
+	effectsChanges inventoryItemEffectsTracker
+	gemsChanges    inventoryItemGemsTracker
 }
 
 func NewInventoryItemState(value *InventoryItem) *InventoryItemState {
@@ -3862,6 +3906,9 @@ func NewInventoryItemStateWithParent(value *InventoryItem, markParent func()) *I
 
 func newInventoryItemState(value *InventoryItem, markParent func()) *InventoryItemState {
 	state := &InventoryItemState{value: value, markParent: markParent}
+	if value.Attr != nil {
+		state.attr = newItemAttrState(value.Attr, state.markAttrDirty)
+	}
 	return state
 }
 
@@ -3943,6 +3990,242 @@ func (s *InventoryItemState) SetPayload(value []byte) {
 	}
 }
 
+func (s *InventoryItemState) markAttrDirty() {
+	if diff.MarkDirty(&s.dirty[inventoryItemStateDirtyAttrWord], inventoryItemStateDirtyAttrMask) {
+		s.attrOperation = diff.OperationPatch
+		if s.markParent != nil {
+			s.markParent()
+		}
+	}
+}
+
+func (s *InventoryItemState) GetAttr() *ItemAttrState {
+	return s.attr
+}
+
+func (s *InventoryItemState) SetAttr(value *ItemAttr) {
+	value = proto.Clone(value).(*ItemAttr)
+	s.value.Attr = value
+	s.attr = newItemAttrState(value, s.markAttrDirty)
+	s.attrOperation = diff.OperationReplace
+	if diff.MarkDirty(&s.dirty[inventoryItemStateDirtyAttrWord], inventoryItemStateDirtyAttrMask) && s.markParent != nil {
+		s.markParent()
+	}
+}
+
+func (s *InventoryItemState) ClearAttr() {
+	if s.attr == nil {
+		return
+	}
+	s.value.Attr = nil
+	s.attr = nil
+	s.attrOperation = diff.OperationClear
+	if diff.MarkDirty(&s.dirty[inventoryItemStateDirtyAttrWord], inventoryItemStateDirtyAttrMask) && s.markParent != nil {
+		s.markParent()
+	}
+}
+
+func (s *InventoryItemState) markEffectsDirty() {
+	if diff.MarkDirty(&s.dirty[inventoryItemStateDirtyEffectsWord], inventoryItemStateDirtyEffectsMask) && s.markParent != nil {
+		s.markParent()
+	}
+}
+
+func (s *InventoryItemState) Effects() InventoryItemEffects {
+	return InventoryItemEffects{state: s}
+}
+
+func (m InventoryItemEffects) GetValue(key int32) (*ItemEffectState, bool) {
+	value, ok := m.state.value.Effects[key]
+	if !ok {
+		return nil, false
+	}
+	if state := m.state.effectsChanges.states[key]; state != nil {
+		return state, true
+	}
+	var state *ItemEffectState
+	state = newItemEffectState(value, func() {
+		if m.state.effectsChanges.states[key] != state {
+			return
+		}
+		if m.state.effectsChanges.Patch(key, state) {
+			m.state.markEffectsDirty()
+		}
+	})
+	if m.state.effectsChanges.states == nil {
+		m.state.effectsChanges.states = make(map[int32]*ItemEffectState)
+	}
+	m.state.effectsChanges.states[key] = state
+	return state, true
+}
+
+func (m InventoryItemEffects) Store(key int32, value *ItemEffect) {
+	delete(m.state.effectsChanges.states, key)
+	value = proto.Clone(value).(*ItemEffect)
+	if m.state.value.Effects == nil {
+		m.state.value.Effects = make(map[int32]*ItemEffect)
+	}
+	m.state.value.Effects[key] = value
+	if m.state.effectsChanges.Put(key) {
+		m.state.markEffectsDirty()
+	}
+}
+
+func (m InventoryItemEffects) Clear() {
+	if len(m.state.value.Effects) == 0 {
+		return
+	}
+	clear(m.state.effectsChanges.states)
+	m.state.value.Effects = nil
+	if m.state.effectsChanges.Clear() {
+		m.state.markEffectsDirty()
+	}
+}
+
+func (m InventoryItemEffects) Len() int {
+	return len(m.state.value.Effects)
+}
+
+func (m InventoryItemEffects) Delete(key int32) {
+	if _, ok := m.state.value.Effects[key]; !ok {
+		return
+	}
+	delete(m.state.effectsChanges.states, key)
+	delete(m.state.value.Effects, key)
+	if m.state.effectsChanges.Delete(key) {
+		m.state.markEffectsDirty()
+	}
+}
+
+func (m InventoryItemEffects) Range(yield func(int32, *ItemEffectState) bool) {
+	for key := range m.state.value.Effects {
+		state, _ := m.GetValue(key)
+		if !yield(key, state) {
+			return
+		}
+	}
+}
+
+func (s *InventoryItemState) markGemsDirty() {
+	if diff.MarkDirty(&s.dirty[inventoryItemStateDirtyGemsWord], inventoryItemStateDirtyGemsMask) && s.markParent != nil {
+		s.markParent()
+	}
+}
+
+func (s *InventoryItemState) Gems() InventoryItemGems {
+	return InventoryItemGems{state: s}
+}
+
+func (l InventoryItemGems) Len() int {
+	return len(l.state.value.Gems)
+}
+
+func (l InventoryItemGems) GetValue(index int) (*ItemGemState, bool) {
+	if index < 0 || index >= len(l.state.value.Gems) {
+		var zero *ItemGemState
+		return zero, false
+	}
+	value := l.state.value.Gems[index]
+	if state := l.state.gemsChanges.states[value]; state != nil {
+		return state, true
+	}
+	var state *ItemGemState
+	state = newItemGemState(value, func() {
+		if l.state.gemsChanges.states[value] != state {
+			return
+		}
+		for currentIndex, currentValue := range l.state.value.Gems {
+			if currentValue == value {
+				if l.state.gemsChanges.Patch(uint32(currentIndex), state) {
+					l.state.markGemsDirty()
+				}
+				return
+			}
+		}
+	})
+	if l.state.gemsChanges.states == nil {
+		l.state.gemsChanges.states = make(map[*ItemGem]*ItemGemState)
+	}
+	l.state.gemsChanges.states[value] = state
+	return state, true
+}
+
+func (l InventoryItemGems) Clear() {
+	if len(l.state.value.Gems) == 0 {
+		return
+	}
+	clear(l.state.gemsChanges.states)
+	l.state.value.Gems = nil
+	if l.state.gemsChanges.Clear() {
+		l.state.markGemsDirty()
+	}
+}
+
+func (l InventoryItemGems) Store(index int, value *ItemGem) {
+	if proto.Equal(l.state.value.Gems[index], value) {
+		return
+	}
+	delete(l.state.gemsChanges.states, l.state.value.Gems[index])
+	value = proto.Clone(value).(*ItemGem)
+	l.state.value.Gems[index] = value
+	if l.state.gemsChanges.Store(uint32(index), value) {
+		l.state.markGemsDirty()
+	}
+}
+
+func (l InventoryItemGems) Append(value *ItemGem) {
+	value = proto.Clone(value).(*ItemGem)
+	l.state.value.Gems = append(l.state.value.Gems, value)
+	if l.state.gemsChanges.Append(value) {
+		l.state.markGemsDirty()
+	}
+}
+
+func (l InventoryItemGems) Insert(index int, value *ItemGem) {
+	value = proto.Clone(value).(*ItemGem)
+	var zero *ItemGem
+	l.state.value.Gems = append(l.state.value.Gems, zero)
+	copy(l.state.value.Gems[index+1:], l.state.value.Gems[index:len(l.state.value.Gems)-1])
+	l.state.value.Gems[index] = value
+	if l.state.gemsChanges.Insert(uint32(index), value) {
+		l.state.markGemsDirty()
+	}
+}
+
+func (l InventoryItemGems) Delete(index int) {
+	delete(l.state.gemsChanges.states, l.state.value.Gems[index])
+	copy(l.state.value.Gems[index:], l.state.value.Gems[index+1:])
+	l.state.value.Gems = l.state.value.Gems[:len(l.state.value.Gems)-1]
+	if l.state.gemsChanges.Delete(uint32(index)) {
+		l.state.markGemsDirty()
+	}
+}
+
+func (l InventoryItemGems) Move(from int, to int) {
+	if from == to {
+		return
+	}
+	value := l.state.value.Gems[from]
+	if from < to {
+		copy(l.state.value.Gems[from:to], l.state.value.Gems[from+1:to+1])
+	} else {
+		copy(l.state.value.Gems[to+1:from+1], l.state.value.Gems[to:from])
+	}
+	l.state.value.Gems[to] = value
+	if l.state.gemsChanges.Move(uint32(from), uint32(to)) {
+		l.state.markGemsDirty()
+	}
+}
+
+func (l InventoryItemGems) Range(yield func(int, *ItemGemState) bool) {
+	for index := range l.state.value.Gems {
+		state, _ := l.GetValue(index)
+		if !yield(index, state) {
+			return
+		}
+	}
+}
+
 func (s *InventoryItemState) WriteDiff(writer *diff.Writer) {
 	if diff.HasDirty(s.dirty[inventoryItemStateDirtyIdWord], inventoryItemStateDirtyIdMask) {
 		writer.Uint64(1, s.value.Id)
@@ -3958,6 +4241,91 @@ func (s *InventoryItemState) WriteDiff(writer *diff.Writer) {
 	}
 	if diff.HasDirty(s.dirty[inventoryItemStateDirtyPayloadWord], inventoryItemStateDirtyPayloadMask) {
 		writer.Bytes(5, s.value.Payload)
+	}
+	if diff.HasDirty(s.dirty[inventoryItemStateDirtyAttrWord], inventoryItemStateDirtyAttrMask) {
+		switch s.attrOperation {
+		case diff.OperationPatch:
+			writer.Patch(6, s.attr.WriteDiff)
+		case diff.OperationReplace:
+			data, err := proto.Marshal(s.value.Attr)
+			if err != nil {
+				panic(err)
+			}
+			writer.Replace(6, func(writer *diff.Writer) {
+				writer.AppendRaw(data)
+			})
+		case diff.OperationClear:
+			writer.Clear(6)
+		}
+	}
+	if diff.HasDirty(s.dirty[inventoryItemStateDirtyEffectsWord], inventoryItemStateDirtyEffectsMask) {
+		for index := range s.effectsChanges.changes {
+			change := &s.effectsChanges.changes[index]
+			switch change.operation {
+			case diff.OperationClear:
+				writer.Clear(7)
+			case diff.OperationMapPut:
+				data, err := proto.Marshal(s.value.Effects[change.key])
+				if err != nil {
+					panic(err)
+				}
+				writer.MapPut(7, func(writer *diff.Writer) {
+					writer.AppendInt32(change.key)
+				}, func(writer *diff.Writer) {
+					writer.AppendBytes(data)
+				})
+			case diff.OperationMapDelete:
+				writer.MapDelete(7, func(writer *diff.Writer) {
+					writer.AppendInt32(change.key)
+				})
+			case diff.OperationMapPatch:
+				writer.MapPatch(7, func(writer *diff.Writer) {
+					writer.AppendInt32(change.key)
+				}, func(writer *diff.Writer) {
+					change.state.WriteDiff(writer)
+				})
+			}
+		}
+	}
+	if diff.HasDirty(s.dirty[inventoryItemStateDirtyGemsWord], inventoryItemStateDirtyGemsMask) {
+		for _, change := range s.gemsChanges.changes {
+			switch change.operation {
+			case diff.OperationClear:
+				writer.Clear(8)
+			case diff.OperationListAppend:
+				writer.ListAppend(8, func(writer *diff.Writer) {
+					data, err := proto.Marshal(change.value)
+					if err != nil {
+						panic(err)
+					}
+					writer.AppendBytes(data)
+				})
+			case diff.OperationListInsert:
+				writer.ListInsert(8, change.index, func(writer *diff.Writer) {
+					data, err := proto.Marshal(change.value)
+					if err != nil {
+						panic(err)
+					}
+					writer.AppendBytes(data)
+				})
+			case diff.OperationListSet:
+				writer.ListSet(8, change.index, func(writer *diff.Writer) {
+					data, err := proto.Marshal(change.value)
+					if err != nil {
+						panic(err)
+					}
+					writer.AppendBytes(data)
+				})
+			case diff.OperationListDelete:
+				writer.ListDelete(8, change.index)
+			case diff.OperationListMove:
+				writer.ListMove(8, change.index, change.to)
+			case diff.OperationListPatch:
+				writer.ListPatch(8, change.index, func(writer *diff.Writer) {
+					change.state.WriteDiff(writer)
+				})
+			}
+		}
 	}
 }
 
@@ -4022,11 +4390,590 @@ func applyInventoryItemDiff(value *InventoryItem, data []byte, hooks *InventoryI
 			if hooks != nil && hooks.OnPayloadChanged != nil {
 				hooks.OnPayloadChanged(bytes.Clone(oldValue), bytes.Clone(value.Payload))
 			}
+		case 6:
+			switch operation {
+			case diff.OperationPatch:
+				var oldValue *ItemAttr
+				if hooks != nil && (hooks.OnAttrPatch != nil) && value.Attr != nil {
+					oldValue = proto.Clone(value.Attr).(*ItemAttr)
+				}
+				var childHooks *ItemAttrApplyHooks
+				if hooks != nil {
+					childHooks = hooks.Attr
+				}
+				if value.Attr == nil {
+					value.Attr = &ItemAttr{}
+				}
+				if err := ApplyItemAttrDiffWithHooks(value.Attr, payload, childHooks); err != nil {
+					return err
+				}
+				if hooks != nil {
+					if hooks.OnAttrPatch != nil {
+						hooks.OnAttrPatch(oldValue, proto.Clone(value.Attr).(*ItemAttr))
+					}
+				}
+			case diff.OperationReplace:
+				var oldValue *ItemAttr
+				if hooks != nil && (hooks.OnAttrReplace != nil) && value.Attr != nil {
+					oldValue = proto.Clone(value.Attr).(*ItemAttr)
+				}
+				value.Attr = &ItemAttr{}
+				if err := proto.Unmarshal(payload, value.Attr); err != nil {
+					return err
+				}
+				if hooks != nil && hooks.OnAttrReplace != nil {
+					hooks.OnAttrReplace(oldValue, proto.Clone(value.Attr).(*ItemAttr))
+				}
+			case diff.OperationClear:
+				var oldValue *ItemAttr
+				if hooks != nil && (hooks.OnAttrClear != nil) && value.Attr != nil {
+					oldValue = proto.Clone(value.Attr).(*ItemAttr)
+				}
+				value.Attr = nil
+				if hooks != nil && hooks.OnAttrClear != nil {
+					hooks.OnAttrClear(oldValue)
+				}
+			default:
+				return diff.ErrInvalidData
+			}
+		case 7:
+			if operation == diff.OperationClear {
+				if len(payload) != 0 {
+					return diff.ErrInvalidData
+				}
+				value.Effects = nil
+				if hooks != nil && hooks.OnEffectsClear != nil {
+					hooks.OnEffectsClear()
+				}
+				break
+			}
+			valueReader := diff.NewValueReader(payload)
+			key := valueReader.Int32()
+			switch operation {
+			case diff.OperationMapPut:
+				itemData := valueReader.Bytes()
+				item := &ItemEffect{}
+				if err := proto.Unmarshal(itemData, item); err != nil {
+					return err
+				}
+				if valueReader.Err() != nil || !valueReader.Done() {
+					return diff.ErrInvalidData
+				}
+				oldItem, replaced := value.Effects[key]
+				if value.Effects == nil {
+					value.Effects = make(map[int32]*ItemEffect)
+				}
+				value.Effects[key] = item
+				if hooks != nil && hooks.OnEffectsPut != nil {
+					var oldHookValue *ItemEffect
+					if oldItem != nil {
+						oldHookValue = proto.Clone(oldItem).(*ItemEffect)
+					}
+					hooks.OnEffectsPut(key, oldHookValue, proto.Clone(item).(*ItemEffect), replaced)
+				}
+			case diff.OperationMapDelete:
+				if valueReader.Err() != nil || !valueReader.Done() {
+					return diff.ErrInvalidData
+				}
+				oldItem, existed := value.Effects[key]
+				delete(value.Effects, key)
+				if existed && hooks != nil && hooks.OnEffectsDelete != nil {
+					hooks.OnEffectsDelete(key, proto.Clone(oldItem).(*ItemEffect))
+				}
+			case diff.OperationMapPatch:
+				patch := valueReader.Remaining()
+				if valueReader.Err() != nil {
+					return diff.ErrInvalidData
+				}
+				item := value.Effects[key]
+				var oldItem *ItemEffect
+				if hooks != nil && (hooks.OnEffectsPatch != nil || hooks.OnEffectsIdChanged != nil || hooks.OnEffectsPowerChanged != nil) && item != nil {
+					oldItem = proto.Clone(item).(*ItemEffect)
+				}
+				if item == nil {
+					item = &ItemEffect{}
+					if value.Effects == nil {
+						value.Effects = make(map[int32]*ItemEffect)
+					}
+					value.Effects[key] = item
+				}
+				var childHooks *ItemEffectApplyHooks
+				if hooks != nil && hooks.Effects != nil {
+					childHooks = hooks.Effects(key)
+				}
+				if err := ApplyItemEffectDiffWithHooks(item, patch, childHooks); err != nil {
+					return err
+				}
+				if hooks != nil {
+					if hooks.OnEffectsPatch != nil {
+						hooks.OnEffectsPatch(key, oldItem, proto.Clone(item).(*ItemEffect))
+					}
+					if hooks.OnEffectsIdChanged != nil && oldItem.GetId() != item.GetId() {
+						hooks.OnEffectsIdChanged(key, oldItem.GetId(), item.GetId())
+					}
+					if hooks.OnEffectsPowerChanged != nil && oldItem.GetPower() != item.GetPower() {
+						hooks.OnEffectsPowerChanged(key, oldItem.GetPower(), item.GetPower())
+					}
+				}
+			default:
+				return diff.ErrInvalidData
+			}
+		case 8:
+			valueReader := diff.NewValueReader(payload)
+			switch operation {
+			case diff.OperationClear:
+				value.Gems = nil
+				if hooks != nil && hooks.OnGemsClear != nil {
+					hooks.OnGemsClear()
+				}
+			case diff.OperationListAppend:
+				itemData := valueReader.Bytes()
+				item := &ItemGem{}
+				if err := proto.Unmarshal(itemData, item); err != nil {
+					return err
+				}
+				index := len(value.Gems)
+				value.Gems = append(value.Gems, item)
+				if hooks != nil && hooks.OnGemsAppend != nil {
+					hooks.OnGemsAppend(index, proto.Clone(item).(*ItemGem))
+				}
+			case diff.OperationListInsert:
+				index := int(valueReader.Uint32())
+				itemData := valueReader.Bytes()
+				item := &ItemGem{}
+				if err := proto.Unmarshal(itemData, item); err != nil {
+					return err
+				}
+				var zero *ItemGem
+				value.Gems = append(value.Gems, zero)
+				copy(value.Gems[index+1:], value.Gems[index:len(value.Gems)-1])
+				value.Gems[index] = item
+				if hooks != nil && hooks.OnGemsInsert != nil {
+					hooks.OnGemsInsert(index, proto.Clone(item).(*ItemGem))
+				}
+			case diff.OperationListSet:
+				index := int(valueReader.Uint32())
+				itemData := valueReader.Bytes()
+				item := &ItemGem{}
+				if err := proto.Unmarshal(itemData, item); err != nil {
+					return err
+				}
+				oldItem := value.Gems[index]
+				value.Gems[index] = item
+				if hooks != nil && hooks.OnGemsStore != nil {
+					hooks.OnGemsStore(index, proto.Clone(oldItem).(*ItemGem), proto.Clone(item).(*ItemGem))
+				}
+			case diff.OperationListDelete:
+				index := int(valueReader.Uint32())
+				oldItem := value.Gems[index]
+				copy(value.Gems[index:], value.Gems[index+1:])
+				value.Gems = value.Gems[:len(value.Gems)-1]
+				if hooks != nil && hooks.OnGemsDelete != nil {
+					hooks.OnGemsDelete(index, proto.Clone(oldItem).(*ItemGem))
+				}
+			case diff.OperationListMove:
+				from := int(valueReader.Uint32())
+				to := int(valueReader.Uint32())
+				item := value.Gems[from]
+				if from < to {
+					copy(value.Gems[from:to], value.Gems[from+1:to+1])
+				} else {
+					copy(value.Gems[to+1:from+1], value.Gems[to:from])
+				}
+				value.Gems[to] = item
+				if hooks != nil && hooks.OnGemsMove != nil {
+					hooks.OnGemsMove(from, to)
+				}
+			case diff.OperationListPatch:
+				index := int(valueReader.Uint32())
+				patch := valueReader.Remaining()
+				var oldItem *ItemGem
+				if hooks != nil && (hooks.OnGemsPatch != nil || hooks.OnGemsIdChanged != nil || hooks.OnGemsLevelChanged != nil) {
+					oldItem = proto.Clone(value.Gems[index]).(*ItemGem)
+				}
+				var childHooks *ItemGemApplyHooks
+				if hooks != nil && hooks.Gems != nil {
+					childHooks = hooks.Gems(index)
+				}
+				if err := ApplyItemGemDiffWithHooks(value.Gems[index], patch, childHooks); err != nil {
+					return err
+				}
+				if hooks != nil {
+					if hooks.OnGemsPatch != nil {
+						hooks.OnGemsPatch(index, oldItem, proto.Clone(value.Gems[index]).(*ItemGem))
+					}
+					if hooks.OnGemsIdChanged != nil && oldItem.GetId() != value.Gems[index].GetId() {
+						hooks.OnGemsIdChanged(index, oldItem.GetId(), value.Gems[index].GetId())
+					}
+					if hooks.OnGemsLevelChanged != nil && oldItem.GetLevel() != value.Gems[index].GetLevel() {
+						hooks.OnGemsLevelChanged(index, oldItem.GetLevel(), value.Gems[index].GetLevel())
+					}
+				}
+			default:
+				return diff.ErrInvalidData
+			}
+			if valueReader.Err() != nil || !valueReader.Done() {
+				return diff.ErrInvalidData
+			}
 		}
 	}
 }
 
 func (s *InventoryItemState) ClearDirty() {
+	diff.ClearDirty(s.dirty[:])
+	s.attrOperation = 0
+	if s.attr != nil {
+		s.attr.ClearDirty()
+	}
+	s.effectsChanges.ClearDirty()
+	s.gemsChanges.ClearDirty()
+}
+
+type ItemAttrApplyHooks struct {
+	OnLevelChanged      func(oldValue, newValue int32)
+	OnDurabilityChanged func(oldValue, newValue int32)
+}
+
+const itemAttrStateDirtyLevelWord uint32 = 0
+const itemAttrStateDirtyLevelMask uint64 = 1
+const itemAttrStateDirtyDurabilityWord uint32 = 0
+const itemAttrStateDirtyDurabilityMask uint64 = 2
+
+type ItemAttrState struct {
+	value      *ItemAttr
+	dirty      [1]uint64
+	markParent func()
+}
+
+func NewItemAttrState(value *ItemAttr) *ItemAttrState {
+	return newItemAttrState(value, nil)
+}
+
+func NewItemAttrStateWithParent(value *ItemAttr, markParent func()) *ItemAttrState {
+	return newItemAttrState(value, markParent)
+}
+
+func newItemAttrState(value *ItemAttr, markParent func()) *ItemAttrState {
+	state := &ItemAttrState{value: value, markParent: markParent}
+	return state
+}
+
+func (s *ItemAttrState) GetRawValue() *ItemAttr {
+	return s.value
+}
+
+func (s *ItemAttrState) IsDirty() bool {
+	return diff.AnyDirty(s.dirty[:])
+}
+
+func (s *ItemAttrState) GetLevel() int32 {
+	return s.value.Level
+}
+
+func (s *ItemAttrState) SetLevel(value int32) {
+	if s.value.Level == value {
+		return
+	}
+	s.value.Level = value
+	if diff.MarkDirty(&s.dirty[itemAttrStateDirtyLevelWord], itemAttrStateDirtyLevelMask) && s.markParent != nil {
+		s.markParent()
+	}
+}
+
+func (s *ItemAttrState) GetDurability() int32 {
+	return s.value.Durability
+}
+
+func (s *ItemAttrState) SetDurability(value int32) {
+	if s.value.Durability == value {
+		return
+	}
+	s.value.Durability = value
+	if diff.MarkDirty(&s.dirty[itemAttrStateDirtyDurabilityWord], itemAttrStateDirtyDurabilityMask) && s.markParent != nil {
+		s.markParent()
+	}
+}
+
+func (s *ItemAttrState) WriteDiff(writer *diff.Writer) {
+	if diff.HasDirty(s.dirty[itemAttrStateDirtyLevelWord], itemAttrStateDirtyLevelMask) {
+		writer.Int32(1, s.value.Level)
+	}
+	if diff.HasDirty(s.dirty[itemAttrStateDirtyDurabilityWord], itemAttrStateDirtyDurabilityMask) {
+		writer.Int32(2, s.value.Durability)
+	}
+}
+
+func ApplyItemAttrDiff(value *ItemAttr, data []byte) error {
+	return applyItemAttrDiff(value, data, nil)
+}
+
+func ApplyItemAttrDiffWithHooks(value *ItemAttr, data []byte, hooks *ItemAttrApplyHooks) error {
+	return applyItemAttrDiff(value, data, hooks)
+}
+
+func applyItemAttrDiff(value *ItemAttr, data []byte, hooks *ItemAttrApplyHooks) error {
+	reader := diff.NewReader(data)
+	for {
+		fieldNumber, operation, payload, ok, err := reader.Next()
+		if err != nil || !ok {
+			return err
+		}
+		switch fieldNumber {
+		case 1:
+			if operation != diff.OperationSetVarint {
+				return diff.ErrInvalidData
+			}
+			oldValue := value.Level
+			value.Level = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnLevelChanged != nil {
+				hooks.OnLevelChanged(oldValue, value.Level)
+			}
+		case 2:
+			if operation != diff.OperationSetVarint {
+				return diff.ErrInvalidData
+			}
+			oldValue := value.Durability
+			value.Durability = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnDurabilityChanged != nil {
+				hooks.OnDurabilityChanged(oldValue, value.Durability)
+			}
+		}
+	}
+}
+
+func (s *ItemAttrState) ClearDirty() {
+	diff.ClearDirty(s.dirty[:])
+}
+
+type ItemEffectApplyHooks struct {
+	OnIdChanged    func(oldValue, newValue int32)
+	OnPowerChanged func(oldValue, newValue int32)
+}
+
+const itemEffectStateDirtyIdWord uint32 = 0
+const itemEffectStateDirtyIdMask uint64 = 1
+const itemEffectStateDirtyPowerWord uint32 = 0
+const itemEffectStateDirtyPowerMask uint64 = 2
+
+type ItemEffectState struct {
+	value      *ItemEffect
+	dirty      [1]uint64
+	markParent func()
+}
+
+func NewItemEffectState(value *ItemEffect) *ItemEffectState {
+	return newItemEffectState(value, nil)
+}
+
+func NewItemEffectStateWithParent(value *ItemEffect, markParent func()) *ItemEffectState {
+	return newItemEffectState(value, markParent)
+}
+
+func newItemEffectState(value *ItemEffect, markParent func()) *ItemEffectState {
+	state := &ItemEffectState{value: value, markParent: markParent}
+	return state
+}
+
+func (s *ItemEffectState) GetRawValue() *ItemEffect {
+	return s.value
+}
+
+func (s *ItemEffectState) IsDirty() bool {
+	return diff.AnyDirty(s.dirty[:])
+}
+
+func (s *ItemEffectState) GetId() int32 {
+	return s.value.Id
+}
+
+func (s *ItemEffectState) SetId(value int32) {
+	if s.value.Id == value {
+		return
+	}
+	s.value.Id = value
+	if diff.MarkDirty(&s.dirty[itemEffectStateDirtyIdWord], itemEffectStateDirtyIdMask) && s.markParent != nil {
+		s.markParent()
+	}
+}
+
+func (s *ItemEffectState) GetPower() int32 {
+	return s.value.Power
+}
+
+func (s *ItemEffectState) SetPower(value int32) {
+	if s.value.Power == value {
+		return
+	}
+	s.value.Power = value
+	if diff.MarkDirty(&s.dirty[itemEffectStateDirtyPowerWord], itemEffectStateDirtyPowerMask) && s.markParent != nil {
+		s.markParent()
+	}
+}
+
+func (s *ItemEffectState) WriteDiff(writer *diff.Writer) {
+	if diff.HasDirty(s.dirty[itemEffectStateDirtyIdWord], itemEffectStateDirtyIdMask) {
+		writer.Int32(1, s.value.Id)
+	}
+	if diff.HasDirty(s.dirty[itemEffectStateDirtyPowerWord], itemEffectStateDirtyPowerMask) {
+		writer.Int32(2, s.value.Power)
+	}
+}
+
+func ApplyItemEffectDiff(value *ItemEffect, data []byte) error {
+	return applyItemEffectDiff(value, data, nil)
+}
+
+func ApplyItemEffectDiffWithHooks(value *ItemEffect, data []byte, hooks *ItemEffectApplyHooks) error {
+	return applyItemEffectDiff(value, data, hooks)
+}
+
+func applyItemEffectDiff(value *ItemEffect, data []byte, hooks *ItemEffectApplyHooks) error {
+	reader := diff.NewReader(data)
+	for {
+		fieldNumber, operation, payload, ok, err := reader.Next()
+		if err != nil || !ok {
+			return err
+		}
+		switch fieldNumber {
+		case 1:
+			if operation != diff.OperationSetVarint {
+				return diff.ErrInvalidData
+			}
+			oldValue := value.Id
+			value.Id = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnIdChanged != nil {
+				hooks.OnIdChanged(oldValue, value.Id)
+			}
+		case 2:
+			if operation != diff.OperationSetVarint {
+				return diff.ErrInvalidData
+			}
+			oldValue := value.Power
+			value.Power = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnPowerChanged != nil {
+				hooks.OnPowerChanged(oldValue, value.Power)
+			}
+		}
+	}
+}
+
+func (s *ItemEffectState) ClearDirty() {
+	diff.ClearDirty(s.dirty[:])
+}
+
+type ItemGemApplyHooks struct {
+	OnIdChanged    func(oldValue, newValue int32)
+	OnLevelChanged func(oldValue, newValue int32)
+}
+
+const itemGemStateDirtyIdWord uint32 = 0
+const itemGemStateDirtyIdMask uint64 = 1
+const itemGemStateDirtyLevelWord uint32 = 0
+const itemGemStateDirtyLevelMask uint64 = 2
+
+type ItemGemState struct {
+	value      *ItemGem
+	dirty      [1]uint64
+	markParent func()
+}
+
+func NewItemGemState(value *ItemGem) *ItemGemState {
+	return newItemGemState(value, nil)
+}
+
+func NewItemGemStateWithParent(value *ItemGem, markParent func()) *ItemGemState {
+	return newItemGemState(value, markParent)
+}
+
+func newItemGemState(value *ItemGem, markParent func()) *ItemGemState {
+	state := &ItemGemState{value: value, markParent: markParent}
+	return state
+}
+
+func (s *ItemGemState) GetRawValue() *ItemGem {
+	return s.value
+}
+
+func (s *ItemGemState) IsDirty() bool {
+	return diff.AnyDirty(s.dirty[:])
+}
+
+func (s *ItemGemState) GetId() int32 {
+	return s.value.Id
+}
+
+func (s *ItemGemState) SetId(value int32) {
+	if s.value.Id == value {
+		return
+	}
+	s.value.Id = value
+	if diff.MarkDirty(&s.dirty[itemGemStateDirtyIdWord], itemGemStateDirtyIdMask) && s.markParent != nil {
+		s.markParent()
+	}
+}
+
+func (s *ItemGemState) GetLevel() int32 {
+	return s.value.Level
+}
+
+func (s *ItemGemState) SetLevel(value int32) {
+	if s.value.Level == value {
+		return
+	}
+	s.value.Level = value
+	if diff.MarkDirty(&s.dirty[itemGemStateDirtyLevelWord], itemGemStateDirtyLevelMask) && s.markParent != nil {
+		s.markParent()
+	}
+}
+
+func (s *ItemGemState) WriteDiff(writer *diff.Writer) {
+	if diff.HasDirty(s.dirty[itemGemStateDirtyIdWord], itemGemStateDirtyIdMask) {
+		writer.Int32(1, s.value.Id)
+	}
+	if diff.HasDirty(s.dirty[itemGemStateDirtyLevelWord], itemGemStateDirtyLevelMask) {
+		writer.Int32(2, s.value.Level)
+	}
+}
+
+func ApplyItemGemDiff(value *ItemGem, data []byte) error {
+	return applyItemGemDiff(value, data, nil)
+}
+
+func ApplyItemGemDiffWithHooks(value *ItemGem, data []byte, hooks *ItemGemApplyHooks) error {
+	return applyItemGemDiff(value, data, hooks)
+}
+
+func applyItemGemDiff(value *ItemGem, data []byte, hooks *ItemGemApplyHooks) error {
+	reader := diff.NewReader(data)
+	for {
+		fieldNumber, operation, payload, ok, err := reader.Next()
+		if err != nil || !ok {
+			return err
+		}
+		switch fieldNumber {
+		case 1:
+			if operation != diff.OperationSetVarint {
+				return diff.ErrInvalidData
+			}
+			oldValue := value.Id
+			value.Id = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnIdChanged != nil {
+				hooks.OnIdChanged(oldValue, value.Id)
+			}
+		case 2:
+			if operation != diff.OperationSetVarint {
+				return diff.ErrInvalidData
+			}
+			oldValue := value.Level
+			value.Level = diff.DecodeInt32(payload)
+			if hooks != nil && hooks.OnLevelChanged != nil {
+				hooks.OnLevelChanged(oldValue, value.Level)
+			}
+		}
+	}
+}
+
+func (s *ItemGemState) ClearDirty() {
 	diff.ClearDirty(s.dirty[:])
 }
 

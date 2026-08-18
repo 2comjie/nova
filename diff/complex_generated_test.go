@@ -34,7 +34,12 @@ func TestGeneratedComplexStateEndToEnd(t *testing.T) {
 			Tags:     []string{"old", "vip"},
 		},
 		Items: map[uint64]*testdata.InventoryItem{
-			1001: {Id: 1001, Count: 10, Quality: testdata.ItemQuality_ITEM_QUALITY_COMMON, Name: "sword", Payload: []byte{1}},
+			1001: {
+				Id: 1001, Count: 10, Quality: testdata.ItemQuality_ITEM_QUALITY_COMMON, Name: "sword", Payload: []byte{1},
+				Attr:    &testdata.ItemAttr{Level: 1, Durability: 100},
+				Effects: map[int32]*testdata.ItemEffect{1: {Id: 1, Power: 10}},
+				Gems:    []*testdata.ItemGem{{Id: 1, Level: 1}},
+			},
 			1002: {Id: 1002, Count: 20, Quality: testdata.ItemQuality_ITEM_QUALITY_RARE, Name: "shield", Payload: []byte{2}},
 		},
 		Currencies:   map[string]int64{"gold": 100, "silver": 200},
@@ -44,7 +49,7 @@ func TestGeneratedComplexStateEndToEnd(t *testing.T) {
 		Labels:       []string{"a", "b"},
 		Packets:      [][]byte{{1}, {2}},
 		Lineup: []*testdata.InventoryItem{
-			{Id: 2001, Count: 1, Name: "first"},
+			{Id: 2001, Count: 1, Name: "first", Attr: &testdata.ItemAttr{Level: 2, Durability: 80}},
 			{Id: 2002, Count: 2, Name: "second"},
 		},
 		Qualities: []testdata.ItemQuality{
@@ -97,6 +102,18 @@ func TestGeneratedComplexStateEndToEnd(t *testing.T) {
 	item.SetCount(11)
 	item.SetQuality(testdata.ItemQuality_ITEM_QUALITY_EPIC)
 	item.SetPayload([]byte{3, 4})
+	item.GetAttr().SetDurability(90)
+	effect, ok := item.Effects().GetValue(1)
+	if !ok {
+		t.Fatal("item effect 1 not found")
+	}
+	effect.SetPower(20)
+	gem, ok := item.Gems().GetValue(0)
+	if !ok {
+		t.Fatal("item gem 0 not found")
+	}
+	gem.SetLevel(2)
+	item.Gems().Append(&testdata.ItemGem{Id: 2, Level: 1})
 	items.Delete(1002)
 	items.Store(1003, &testdata.InventoryItem{Id: 1003, Count: 30, Name: "helmet"})
 
@@ -126,8 +143,14 @@ func TestGeneratedComplexStateEndToEnd(t *testing.T) {
 	if !ok {
 		t.Fatal("lineup 0 not found")
 	}
+	secondLineupValue, ok := lineup.GetValue(1)
+	if !ok {
+		t.Fatal("lineup 1 not found")
+	}
 	lineupValue.SetCount(10)
+	lineupValue.GetAttr().SetDurability(70)
 	lineup.Move(0, 1)
+	secondLineupValue.SetCount(20)
 	replacement := &testdata.InventoryItem{Id: 3001, Count: 3, Name: "replacement"}
 	lineup.Store(0, replacement)
 	replacement.Count = 999
@@ -154,11 +177,62 @@ func TestGeneratedComplexStateEndToEnd(t *testing.T) {
 	}
 }
 
+func TestGeneratedMessageStateHandles(t *testing.T) {
+	source := &testdata.GameData{
+		Items: map[uint64]*testdata.InventoryItem{
+			1: {Id: 1, Count: 1, Attr: &testdata.ItemAttr{Level: 1}},
+		},
+		Lineup: []*testdata.InventoryItem{
+			{Id: 10, Count: 10},
+			{Id: 20, Count: 20},
+		},
+	}
+	target := proto.Clone(source).(*testdata.GameData)
+	state := testdata.NewGameDataState(source)
+
+	items := state.Items()
+	item, _ := items.GetValue(1)
+	sameItem, _ := items.GetValue(1)
+	if item != sameItem {
+		t.Fatal("map must return the same cached message state")
+	}
+	item.GetAttr().SetLevel(2)
+
+	lineup := state.Lineup()
+	moved, _ := lineup.GetValue(1)
+	lineup.Move(1, 0)
+	moved.SetCount(21)
+
+	writer := NewWriter(nil)
+	state.WriteDiff(writer)
+	if err := testdata.ApplyGameDataDiff(target, writer.Data()); err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(target, source) {
+		t.Fatalf("diff result does not match source\nsource: %v\nresult: %v", source, target)
+	}
+
+	state.ClearDirty()
+	items.Delete(1)
+	lineup.Delete(0)
+	state.ClearDirty()
+	item.SetCount(99)
+	moved.SetCount(99)
+	if state.IsDirty() {
+		t.Fatal("removed message states must not dirty their former parent")
+	}
+}
+
 func TestGeneratedApplyHooks(t *testing.T) {
 	source := &testdata.GameData{
 		Profile: &testdata.Profile{Nickname: "before"},
 		Items: map[uint64]*testdata.InventoryItem{
-			1001: {Id: 1001, Count: 10},
+			1001: {
+				Id:      1001,
+				Count:   10,
+				Attr:    &testdata.ItemAttr{Level: 1, Durability: 100},
+				Effects: map[int32]*testdata.ItemEffect{1: {Id: 1, Power: 10}},
+			},
 		},
 		Currencies:  map[string]int64{"silver": 20},
 		Snapshots:   map[int32][]byte{1: {1}},
@@ -169,6 +243,9 @@ func TestGeneratedApplyHooks(t *testing.T) {
 	state.GetProfile().SetNickname("after")
 	item, _ := state.Items().GetValue(1001)
 	item.SetCount(7)
+	item.GetAttr().SetDurability(90)
+	effect, _ := item.Effects().GetValue(1)
+	effect.SetPower(20)
 	state.Currencies().Store("gold", 100)
 	state.Currencies().Delete("silver")
 	state.Snapshots().Clear()
@@ -182,7 +259,37 @@ func TestGeneratedApplyHooks(t *testing.T) {
 	clearCount := 0
 	appendCount := 0
 	nicknameCount := 0
+	attrCount := 0
+	effectCount := 0
 	hooks := &testdata.GameDataApplyHooks{
+		Items: func(itemKey uint64) *testdata.InventoryItemApplyHooks {
+			if itemKey != 1001 {
+				t.Fatalf("unexpected item hook key: %d", itemKey)
+			}
+			return &testdata.InventoryItemApplyHooks{
+				Attr: &testdata.ItemAttrApplyHooks{
+					OnDurabilityChanged: func(oldValue, newValue int32) {
+						if oldValue != 100 || newValue != 90 {
+							t.Fatalf("unexpected durability event: old=%d new=%d", oldValue, newValue)
+						}
+						attrCount++
+					},
+				},
+				Effects: func(effectKey int32) *testdata.ItemEffectApplyHooks {
+					if effectKey != 1 {
+						t.Fatalf("unexpected effect hook key: %d", effectKey)
+					}
+					return &testdata.ItemEffectApplyHooks{
+						OnPowerChanged: func(oldValue, newValue int32) {
+							if oldValue != 10 || newValue != 20 {
+								t.Fatalf("unexpected effect event: old=%d new=%d", oldValue, newValue)
+							}
+							effectCount++
+						},
+					}
+				},
+			}
+		},
 		OnItemsCountChanged: func(key uint64, oldValue, newValue int32) {
 			if key != 1001 || oldValue != 10 || newValue != 7 {
 				t.Fatalf("unexpected item count event: key=%d old=%d new=%d", key, oldValue, newValue)
@@ -220,8 +327,8 @@ func TestGeneratedApplyHooks(t *testing.T) {
 	if err := testdata.ApplyGameDataDiffWithHooks(target, writer.Data(), hooks); err != nil {
 		t.Fatal(err)
 	}
-	if toastCount != 3 || putCount != 1 || deleteCount != 1 || clearCount != 1 || appendCount != 1 || nicknameCount != 1 {
-		t.Fatalf("unexpected hook counts: toast=%d put=%d delete=%d clear=%d append=%d nickname=%d", toastCount, putCount, deleteCount, clearCount, appendCount, nicknameCount)
+	if toastCount != 3 || putCount != 1 || deleteCount != 1 || clearCount != 1 || appendCount != 1 || nicknameCount != 1 || attrCount != 1 || effectCount != 1 {
+		t.Fatalf("unexpected hook counts: toast=%d put=%d delete=%d clear=%d append=%d nickname=%d attr=%d effect=%d", toastCount, putCount, deleteCount, clearCount, appendCount, nicknameCount, attrCount, effectCount)
 	}
 	if !proto.Equal(target, source) {
 		t.Fatalf("diff result does not match source\nsource: %v\nresult: %v", source, target)

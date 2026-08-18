@@ -496,6 +496,9 @@ type InventoryItem struct {
 	Quality       ItemQuality            `protobuf:"varint,3,opt,name=quality,proto3,enum=nova.diff.testdata.ItemQuality" json:"quality,omitempty"`
 	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
 	Payload       []byte                 `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
+	Attr          *ItemAttr              `protobuf:"bytes,6,opt,name=attr,proto3" json:"attr,omitempty"`
+	Effects       map[int32]*ItemEffect  `protobuf:"bytes,7,rep,name=effects,proto3" json:"effects,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Gems          []*ItemGem             `protobuf:"bytes,8,rep,name=gems,proto3" json:"gems,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -563,6 +566,183 @@ func (x *InventoryItem) GetPayload() []byte {
 		return x.Payload
 	}
 	return nil
+}
+
+func (x *InventoryItem) GetAttr() *ItemAttr {
+	if x != nil {
+		return x.Attr
+	}
+	return nil
+}
+
+func (x *InventoryItem) GetEffects() map[int32]*ItemEffect {
+	if x != nil {
+		return x.Effects
+	}
+	return nil
+}
+
+func (x *InventoryItem) GetGems() []*ItemGem {
+	if x != nil {
+		return x.Gems
+	}
+	return nil
+}
+
+type ItemAttr struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Level         int32                  `protobuf:"varint,1,opt,name=level,proto3" json:"level,omitempty"`
+	Durability    int32                  `protobuf:"varint,2,opt,name=durability,proto3" json:"durability,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ItemAttr) Reset() {
+	*x = ItemAttr{}
+	mi := &file_diff_testdata_complex_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ItemAttr) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ItemAttr) ProtoMessage() {}
+
+func (x *ItemAttr) ProtoReflect() protoreflect.Message {
+	mi := &file_diff_testdata_complex_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ItemAttr.ProtoReflect.Descriptor instead.
+func (*ItemAttr) Descriptor() ([]byte, []int) {
+	return file_diff_testdata_complex_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ItemAttr) GetLevel() int32 {
+	if x != nil {
+		return x.Level
+	}
+	return 0
+}
+
+func (x *ItemAttr) GetDurability() int32 {
+	if x != nil {
+		return x.Durability
+	}
+	return 0
+}
+
+type ItemEffect struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Power         int32                  `protobuf:"varint,2,opt,name=power,proto3" json:"power,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ItemEffect) Reset() {
+	*x = ItemEffect{}
+	mi := &file_diff_testdata_complex_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ItemEffect) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ItemEffect) ProtoMessage() {}
+
+func (x *ItemEffect) ProtoReflect() protoreflect.Message {
+	mi := &file_diff_testdata_complex_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ItemEffect.ProtoReflect.Descriptor instead.
+func (*ItemEffect) Descriptor() ([]byte, []int) {
+	return file_diff_testdata_complex_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ItemEffect) GetId() int32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *ItemEffect) GetPower() int32 {
+	if x != nil {
+		return x.Power
+	}
+	return 0
+}
+
+type ItemGem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Level         int32                  `protobuf:"varint,2,opt,name=level,proto3" json:"level,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ItemGem) Reset() {
+	*x = ItemGem{}
+	mi := &file_diff_testdata_complex_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ItemGem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ItemGem) ProtoMessage() {}
+
+func (x *ItemGem) ProtoReflect() protoreflect.Message {
+	mi := &file_diff_testdata_complex_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ItemGem.ProtoReflect.Descriptor instead.
+func (*ItemGem) Descriptor() ([]byte, []int) {
+	return file_diff_testdata_complex_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ItemGem) GetId() int32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *ItemGem) GetLevel() int32 {
+	if x != nil {
+		return x.Level
+	}
+	return 0
 }
 
 type WideState struct {
@@ -643,7 +823,7 @@ type WideState struct {
 
 func (x *WideState) Reset() {
 	*x = WideState{}
-	mi := &file_diff_testdata_complex_proto_msgTypes[5]
+	mi := &file_diff_testdata_complex_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -655,7 +835,7 @@ func (x *WideState) String() string {
 func (*WideState) ProtoMessage() {}
 
 func (x *WideState) ProtoReflect() protoreflect.Message {
-	mi := &file_diff_testdata_complex_proto_msgTypes[5]
+	mi := &file_diff_testdata_complex_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -668,7 +848,7 @@ func (x *WideState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WideState.ProtoReflect.Descriptor instead.
 func (*WideState) Descriptor() ([]byte, []int) {
-	return file_diff_testdata_complex_proto_rawDescGZIP(), []int{5}
+	return file_diff_testdata_complex_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *WideState) GetV1() int32 {
@@ -1224,13 +1404,31 @@ const file_diff_testdata_complex_proto_rawDesc = "" +
 	"\aAddress\x12\x18\n" +
 	"\acountry\x18\x01 \x01(\tR\acountry\x12\x12\n" +
 	"\x04city\x18\x02 \x01(\tR\x04city\x12\x19\n" +
-	"\bzip_code\x18\x03 \x01(\rR\azipCode\"\x9e\x01\n" +
+	"\bzip_code\x18\x03 \x01(\rR\azipCode\"\xa7\x03\n" +
 	"\rInventoryItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\x05R\x05count\x129\n" +
 	"\aquality\x18\x03 \x01(\x0e2\x1f.nova.diff.testdata.ItemQualityR\aquality\x12\x12\n" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x12\x18\n" +
-	"\apayload\x18\x05 \x01(\fR\apayload\"\xe5\t\n" +
+	"\apayload\x18\x05 \x01(\fR\apayload\x120\n" +
+	"\x04attr\x18\x06 \x01(\v2\x1c.nova.diff.testdata.ItemAttrR\x04attr\x12H\n" +
+	"\aeffects\x18\a \x03(\v2..nova.diff.testdata.InventoryItem.EffectsEntryR\aeffects\x12/\n" +
+	"\x04gems\x18\b \x03(\v2\x1b.nova.diff.testdata.ItemGemR\x04gems\x1aZ\n" +
+	"\fEffectsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\x05R\x03key\x124\n" +
+	"\x05value\x18\x02 \x01(\v2\x1e.nova.diff.testdata.ItemEffectR\x05value:\x028\x01\"@\n" +
+	"\bItemAttr\x12\x14\n" +
+	"\x05level\x18\x01 \x01(\x05R\x05level\x12\x1e\n" +
+	"\n" +
+	"durability\x18\x02 \x01(\x05R\n" +
+	"durability\"2\n" +
+	"\n" +
+	"ItemEffect\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x14\n" +
+	"\x05power\x18\x02 \x01(\x05R\x05power\"/\n" +
+	"\aItemGem\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x14\n" +
+	"\x05level\x18\x02 \x01(\x05R\x05level\"\xe5\t\n" +
 	"\tWideState\x12\x0e\n" +
 	"\x02v1\x18\x01 \x01(\x05R\x02v1\x12\x0e\n" +
 	"\x02v2\x18\x02 \x01(\x05R\x02v2\x12\x0e\n" +
@@ -1322,7 +1520,7 @@ func file_diff_testdata_complex_proto_rawDescGZIP() []byte {
 }
 
 var file_diff_testdata_complex_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_diff_testdata_complex_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_diff_testdata_complex_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_diff_testdata_complex_proto_goTypes = []any{
 	(ItemQuality)(0),      // 0: nova.diff.testdata.ItemQuality
 	(*GameData)(nil),      // 1: nova.diff.testdata.GameData
@@ -1330,31 +1528,39 @@ var file_diff_testdata_complex_proto_goTypes = []any{
 	(*Profile)(nil),       // 3: nova.diff.testdata.Profile
 	(*Address)(nil),       // 4: nova.diff.testdata.Address
 	(*InventoryItem)(nil), // 5: nova.diff.testdata.InventoryItem
-	(*WideState)(nil),     // 6: nova.diff.testdata.WideState
-	nil,                   // 7: nova.diff.testdata.GameData.ItemsEntry
-	nil,                   // 8: nova.diff.testdata.GameData.CurrenciesEntry
-	nil,                   // 9: nova.diff.testdata.GameData.SnapshotsEntry
-	nil,                   // 10: nova.diff.testdata.GameData.FeatureFlagsEntry
+	(*ItemAttr)(nil),      // 6: nova.diff.testdata.ItemAttr
+	(*ItemEffect)(nil),    // 7: nova.diff.testdata.ItemEffect
+	(*ItemGem)(nil),       // 8: nova.diff.testdata.ItemGem
+	(*WideState)(nil),     // 9: nova.diff.testdata.WideState
+	nil,                   // 10: nova.diff.testdata.GameData.ItemsEntry
+	nil,                   // 11: nova.diff.testdata.GameData.CurrenciesEntry
+	nil,                   // 12: nova.diff.testdata.GameData.SnapshotsEntry
+	nil,                   // 13: nova.diff.testdata.GameData.FeatureFlagsEntry
+	nil,                   // 14: nova.diff.testdata.InventoryItem.EffectsEntry
 }
 var file_diff_testdata_complex_proto_depIdxs = []int32{
 	2,  // 0: nova.diff.testdata.GameData.scalars:type_name -> nova.diff.testdata.ScalarValues
 	3,  // 1: nova.diff.testdata.GameData.profile:type_name -> nova.diff.testdata.Profile
-	7,  // 2: nova.diff.testdata.GameData.items:type_name -> nova.diff.testdata.GameData.ItemsEntry
-	8,  // 3: nova.diff.testdata.GameData.currencies:type_name -> nova.diff.testdata.GameData.CurrenciesEntry
-	9,  // 4: nova.diff.testdata.GameData.snapshots:type_name -> nova.diff.testdata.GameData.SnapshotsEntry
-	10, // 5: nova.diff.testdata.GameData.feature_flags:type_name -> nova.diff.testdata.GameData.FeatureFlagsEntry
+	10, // 2: nova.diff.testdata.GameData.items:type_name -> nova.diff.testdata.GameData.ItemsEntry
+	11, // 3: nova.diff.testdata.GameData.currencies:type_name -> nova.diff.testdata.GameData.CurrenciesEntry
+	12, // 4: nova.diff.testdata.GameData.snapshots:type_name -> nova.diff.testdata.GameData.SnapshotsEntry
+	13, // 5: nova.diff.testdata.GameData.feature_flags:type_name -> nova.diff.testdata.GameData.FeatureFlagsEntry
 	5,  // 6: nova.diff.testdata.GameData.lineup:type_name -> nova.diff.testdata.InventoryItem
 	0,  // 7: nova.diff.testdata.GameData.qualities:type_name -> nova.diff.testdata.ItemQuality
-	6,  // 8: nova.diff.testdata.GameData.wide:type_name -> nova.diff.testdata.WideState
+	9,  // 8: nova.diff.testdata.GameData.wide:type_name -> nova.diff.testdata.WideState
 	0,  // 9: nova.diff.testdata.ScalarValues.quality:type_name -> nova.diff.testdata.ItemQuality
 	4,  // 10: nova.diff.testdata.Profile.address:type_name -> nova.diff.testdata.Address
 	0,  // 11: nova.diff.testdata.InventoryItem.quality:type_name -> nova.diff.testdata.ItemQuality
-	5,  // 12: nova.diff.testdata.GameData.ItemsEntry.value:type_name -> nova.diff.testdata.InventoryItem
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	6,  // 12: nova.diff.testdata.InventoryItem.attr:type_name -> nova.diff.testdata.ItemAttr
+	14, // 13: nova.diff.testdata.InventoryItem.effects:type_name -> nova.diff.testdata.InventoryItem.EffectsEntry
+	8,  // 14: nova.diff.testdata.InventoryItem.gems:type_name -> nova.diff.testdata.ItemGem
+	5,  // 15: nova.diff.testdata.GameData.ItemsEntry.value:type_name -> nova.diff.testdata.InventoryItem
+	7,  // 16: nova.diff.testdata.InventoryItem.EffectsEntry.value:type_name -> nova.diff.testdata.ItemEffect
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_diff_testdata_complex_proto_init() }
@@ -1368,7 +1574,7 @@ func file_diff_testdata_complex_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_diff_testdata_complex_proto_rawDesc), len(file_diff_testdata_complex_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   10,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

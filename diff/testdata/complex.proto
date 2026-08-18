@@ -63,6 +63,24 @@ message InventoryItem {
   ItemQuality quality = 3;
   string name = 4;
   bytes payload = 5;
+  ItemAttr attr = 6;
+  map<int32, ItemEffect> effects = 7;
+  repeated ItemGem gems = 8;
+}
+
+message ItemAttr {
+  int32 level = 1;
+  int32 durability = 2;
+}
+
+message ItemEffect {
+  int32 id = 1;
+  int32 power = 2;
+}
+
+message ItemGem {
+  int32 id = 1;
+  int32 level = 2;
 }
 
 message WideState {

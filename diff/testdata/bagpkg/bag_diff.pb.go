@@ -13,45 +13,41 @@ type BagItems struct {
 	state *BagState
 }
 
-type BagItemsValue struct {
-	value  *Item
-	key    uint64
-	parent *BagState
-}
-
 type bagItemsChange struct {
 	key       uint64
 	operation diff.Operation
-	dirty     [1]uint64
+	state     *ItemState
 }
 
 type bagItemsTracker struct {
 	indexes map[uint64]int
 	changes []bagItemsChange
+	states  map[uint64]*ItemState
 }
 
-func (t *bagItemsTracker) Patch(key uint64) (*[1]uint64, bool) {
+func (t *bagItemsTracker) Patch(key uint64, state *ItemState) bool {
 	if index := t.indexes[key]; index != 0 {
 		change := &t.changes[index-1]
 		if change.operation != diff.OperationMapPatch {
-			return nil, false
+			return false
 		}
-		return &change.dirty, false
+		change.state = state
+		return false
 	}
 	if t.indexes == nil {
 		t.indexes = make(map[uint64]int)
 	}
 	first := len(t.changes) == 0
-	t.changes = append(t.changes, bagItemsChange{key: key, operation: diff.OperationMapPatch})
+	t.changes = append(t.changes, bagItemsChange{key: key, operation: diff.OperationMapPatch, state: state})
 	t.indexes[key] = len(t.changes)
-	return &t.changes[len(t.changes)-1].dirty, first
+	return first
 }
 
 func (t *bagItemsTracker) Put(key uint64) bool {
 	if index := t.indexes[key]; index != 0 {
 		change := &t.changes[index-1]
 		change.operation = diff.OperationMapPut
-		clear(change.dirty[:])
+		change.state = nil
 		return false
 	}
 	if t.indexes == nil {
@@ -67,7 +63,7 @@ func (t *bagItemsTracker) Delete(key uint64) bool {
 	if index := t.indexes[key]; index != 0 {
 		change := &t.changes[index-1]
 		change.operation = diff.OperationMapDelete
-		clear(change.dirty[:])
+		change.state = nil
 		return false
 	}
 	if t.indexes == nil {
@@ -90,12 +86,16 @@ func (t *bagItemsTracker) ClearDirty() {
 	clear(t.indexes)
 	clear(t.changes)
 	t.changes = t.changes[:0]
+	for _, state := range t.states {
+		state.ClearDirty()
+	}
 }
 
 type BagApplyHooks struct {
 	OnItemsPut          func(key uint64, oldValue, newValue *Item, replaced bool)
 	OnItemsDelete       func(key uint64, oldValue *Item)
 	OnItemsClear        func()
+	Items               func(key uint64) *ItemApplyHooks
 	OnItemsPatch        func(key uint64, oldValue, newValue *Item)
 	OnItemsIdChanged    func(key uint64, oldValue, newValue uint64)
 	OnItemsCountChanged func(key uint64, oldValue, newValue int32)
@@ -142,12 +142,32 @@ func (s *BagState) Items() BagItems {
 	return BagItems{state: s}
 }
 
-func (m BagItems) GetValue(key uint64) (BagItemsValue, bool) {
+func (m BagItems) GetValue(key uint64) (*ItemState, bool) {
 	value, ok := m.state.value.Items[key]
-	return BagItemsValue{value: value, key: key, parent: m.state}, ok
+	if !ok {
+		return nil, false
+	}
+	if state := m.state.itemsChanges.states[key]; state != nil {
+		return state, true
+	}
+	var state *ItemState
+	state = newItemState(value, func() {
+		if m.state.itemsChanges.states[key] != state {
+			return
+		}
+		if m.state.itemsChanges.Patch(key, state) {
+			m.state.markItemsDirty()
+		}
+	})
+	if m.state.itemsChanges.states == nil {
+		m.state.itemsChanges.states = make(map[uint64]*ItemState)
+	}
+	m.state.itemsChanges.states[key] = state
+	return state, true
 }
 
 func (m BagItems) Store(key uint64, value *Item) {
+	delete(m.state.itemsChanges.states, key)
 	value = proto.Clone(value).(*Item)
 	if m.state.value.Items == nil {
 		m.state.value.Items = make(map[uint64]*Item)
@@ -162,6 +182,7 @@ func (m BagItems) Clear() {
 	if len(m.state.value.Items) == 0 {
 		return
 	}
+	clear(m.state.itemsChanges.states)
 	m.state.value.Items = nil
 	if m.state.itemsChanges.Clear() {
 		m.state.markItemsDirty()
@@ -176,57 +197,19 @@ func (m BagItems) Delete(key uint64) {
 	if _, ok := m.state.value.Items[key]; !ok {
 		return
 	}
+	delete(m.state.itemsChanges.states, key)
 	delete(m.state.value.Items, key)
 	if m.state.itemsChanges.Delete(key) {
 		m.state.markItemsDirty()
 	}
 }
 
-func (m BagItems) Range(yield func(uint64, BagItemsValue) bool) {
-	for key, value := range m.state.value.Items {
-		if !yield(key, BagItemsValue{value: value, key: key, parent: m.state}) {
+func (m BagItems) Range(yield func(uint64, *ItemState) bool) {
+	for key := range m.state.value.Items {
+		state, _ := m.GetValue(key)
+		if !yield(key, state) {
 			return
 		}
-	}
-}
-
-func (r BagItemsValue) GetRawValue() *Item {
-	return r.value
-}
-
-func (r BagItemsValue) GetId() uint64 {
-	return r.value.Id
-}
-
-func (r BagItemsValue) SetId(value uint64) {
-	if r.value.Id == value {
-		return
-	}
-	r.value.Id = value
-	dirty, first := r.parent.itemsChanges.Patch(r.key)
-	if dirty != nil {
-		diff.MarkDirty(&dirty[0], 1)
-	}
-	if first {
-		r.parent.markItemsDirty()
-	}
-}
-
-func (r BagItemsValue) GetCount() int32 {
-	return r.value.Count
-}
-
-func (r BagItemsValue) SetCount(value int32) {
-	if r.value.Count == value {
-		return
-	}
-	r.value.Count = value
-	dirty, first := r.parent.itemsChanges.Patch(r.key)
-	if dirty != nil {
-		diff.MarkDirty(&dirty[0], 2)
-	}
-	if first {
-		r.parent.markItemsDirty()
 	}
 }
 
@@ -255,12 +238,7 @@ func (s *BagState) WriteDiff(writer *diff.Writer) {
 				writer.MapPatch(1, func(writer *diff.Writer) {
 					writer.AppendUint64(change.key)
 				}, func(writer *diff.Writer) {
-					if diff.HasDirty(change.dirty[0], 1) {
-						writer.Uint64(1, s.value.Items[change.key].Id)
-					}
-					if diff.HasDirty(change.dirty[0], 2) {
-						writer.Int32(2, s.value.Items[change.key].Count)
-					}
+					change.state.WriteDiff(writer)
 				})
 			}
 		}
@@ -344,7 +322,11 @@ func applyBagDiff(value *Bag, data []byte, hooks *BagApplyHooks) error {
 					}
 					value.Items[key] = item
 				}
-				if err := ApplyItemDiff(item, patch); err != nil {
+				var childHooks *ItemApplyHooks
+				if hooks != nil && hooks.Items != nil {
+					childHooks = hooks.Items(key)
+				}
+				if err := ApplyItemDiffWithHooks(item, patch, childHooks); err != nil {
 					return err
 				}
 				if hooks != nil {
