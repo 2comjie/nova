@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package nova.diff.testdata;
+
+option go_package = "github.com/2comjie/nova/diff/testdata;testdata";
+
+message Player {
+  Bag bag = 1;
+}
+
+message Bag {
+  int32 capacity = 1;
+  map<uint64, Item> items = 2;
+  repeated uint64 order = 3;
+}
+
+message Item {
+  uint64 id = 1;
+  int32 count = 2;
+  int32 level = 3;
+}
