@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package nova.diff.testdata;
+
+option go_package = "github.com/2comjie/nova/diff/testdata;testdata";
+
+enum ItemQuality {
+  ITEM_QUALITY_UNKNOWN = 0;
+  ITEM_QUALITY_COMMON = 1;
+  ITEM_QUALITY_RARE = 2;
+  ITEM_QUALITY_EPIC = 3;
+}
+
+message GameData {
+  ScalarValues scalars = 1;
+  Profile profile = 2;
+  map<uint64, InventoryItem> items = 3;
+  map<string, int64> currencies = 4;
+  map<int32, bytes> snapshots = 5;
+  map<bool, string> feature_flags = 6;
+  repeated int64 checkpoints = 7;
+  repeated string labels = 8;
+  repeated bytes packets = 9;
+  repeated InventoryItem lineup = 10;
+  repeated ItemQuality qualities = 11;
+  WideState wide = 12;
+}
+
+message ScalarValues {
+  bool enabled = 1;
+  ItemQuality quality = 2;
+  int32 int32_value = 3;
+  sint32 sint32_value = 4;
+  sfixed32 sfixed32_value = 5;
+  uint32 uint32_value = 6;
+  fixed32 fixed32_value = 7;
+  int64 int64_value = 8;
+  sint64 sint64_value = 9;
+  sfixed64 sfixed64_value = 10;
+  uint64 uint64_value = 11;
+  fixed64 fixed64_value = 12;
+  float float_value = 13;
+  double double_value = 14;
+  string string_value = 15;
+  bytes bytes_value = 16;
+}
+
+message Profile {
+  string nickname = 1;
+  Address address = 2;
+  repeated string tags = 3;
+}
+
+message Address {
+  string country = 1;
+  string city = 2;
+  uint32 zip_code = 3;
+}
+
+message InventoryItem {
+  uint64 id = 1;
+  int32 count = 2;
+  ItemQuality quality = 3;
+  string name = 4;
+  bytes payload = 5;
+}
+
+message WideState {
+  int32 v1 = 1;
+  int32 v2 = 2;
+  int32 v3 = 3;
+  int32 v4 = 4;
+  int32 v5 = 5;
+  int32 v6 = 6;
+  int32 v7 = 7;
+  int32 v8 = 8;
+  int32 v9 = 9;
+  int32 v10 = 10;
+  int32 v11 = 11;
+  int32 v12 = 12;
+  int32 v13 = 13;
+  int32 v14 = 14;
+  int32 v15 = 15;
+  int32 v16 = 16;
+  int32 v17 = 17;
+  int32 v18 = 18;
+  int32 v19 = 19;
+  int32 v20 = 20;
+  int32 v21 = 21;
+  int32 v22 = 22;
+  int32 v23 = 23;
+  int32 v24 = 24;
+  int32 v25 = 25;
+  int32 v26 = 26;
+  int32 v27 = 27;
+  int32 v28 = 28;
+  int32 v29 = 29;
+  int32 v30 = 30;
+  int32 v31 = 31;
+  int32 v32 = 32;
+  int32 v33 = 33;
+  int32 v34 = 34;
+  int32 v35 = 35;
+  int32 v36 = 36;
+  int32 v37 = 37;
+  int32 v38 = 38;
+  int32 v39 = 39;
+  int32 v40 = 40;
+  int32 v41 = 41;
+  int32 v42 = 42;
+  int32 v43 = 43;
+  int32 v44 = 44;
+  int32 v45 = 45;
+  int32 v46 = 46;
+  int32 v47 = 47;
+  int32 v48 = 48;
+  int32 v49 = 49;
+  int32 v50 = 50;
+  int32 v51 = 51;
+  int32 v52 = 52;
+  int32 v53 = 53;
+  int32 v54 = 54;
+  int32 v55 = 55;
+  int32 v56 = 56;
+  int32 v57 = 57;
+  int32 v58 = 58;
+  int32 v59 = 59;
+  int32 v60 = 60;
+  int32 v61 = 61;
+  int32 v62 = 62;
+  int32 v63 = 63;
+  int32 v64 = 64;
+  int32 v65 = 65;
+  int32 v66 = 66;
+  int32 v67 = 67;
+  int32 v68 = 68;
+  int32 v69 = 69;
+  int32 v70 = 70;
+}

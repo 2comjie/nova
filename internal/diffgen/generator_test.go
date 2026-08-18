@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
@@ -78,29 +79,38 @@ func TestGenerateStateAndDirtyBits(t *testing.T) {
 	}
 }
 
-func TestGeneratedBagFileIsCurrent(t *testing.T) {
-	descriptor := protodesc.ToFileDescriptorProto(testdata.File_diff_testdata_bag_proto)
-	request := &pluginpb.CodeGeneratorRequest{
-		FileToGenerate: []string{descriptor.GetName()},
-		ProtoFile:      []*descriptorpb.FileDescriptorProto{descriptor},
-		Parameter:      proto.String("paths=source_relative"),
+func TestGeneratedFilesAreCurrent(t *testing.T) {
+	files := []struct {
+		descriptor protoreflect.FileDescriptor
+		path       string
+	}{
+		{descriptor: testdata.File_diff_testdata_bag_proto, path: "../../diff/testdata/bag_diff.pb.go"},
+		{descriptor: testdata.File_diff_testdata_complex_proto, path: "../../diff/testdata/complex_diff.pb.go"},
 	}
-	plugin, err := (protogen.Options{}).New(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := Generate(plugin); err != nil {
-		t.Fatal(err)
-	}
-	response := plugin.Response()
-	if len(response.File) != 1 {
-		t.Fatalf("expected one generated file, got %d", len(response.File))
-	}
-	actual, err := os.ReadFile("../../diff/testdata/bag_diff.pb.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(actual) != response.File[0].GetContent() {
-		t.Fatal("bag_diff.pb.go is stale; regenerate it with protoc-gen-go-diff")
+	for _, file := range files {
+		descriptor := protodesc.ToFileDescriptorProto(file.descriptor)
+		request := &pluginpb.CodeGeneratorRequest{
+			FileToGenerate: []string{descriptor.GetName()},
+			ProtoFile:      []*descriptorpb.FileDescriptorProto{descriptor},
+			Parameter:      proto.String("paths=source_relative"),
+		}
+		plugin, err := (protogen.Options{}).New(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := Generate(plugin); err != nil {
+			t.Fatal(err)
+		}
+		response := plugin.Response()
+		if len(response.File) != 1 {
+			t.Fatalf("expected one generated file, got %d", len(response.File))
+		}
+		actual, err := os.ReadFile(file.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(actual) != response.File[0].GetContent() {
+			t.Fatalf("%s is stale; regenerate it with protoc-gen-go-diff", file.path)
+		}
 	}
 }

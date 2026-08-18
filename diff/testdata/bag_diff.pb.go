@@ -844,9 +844,10 @@ func (l BagSlots) Clear() {
 }
 
 func (l BagSlots) Store(index int, value *Item) {
-	if l.state.value.Slots[index] == value {
+	if proto.Equal(l.state.value.Slots[index], value) {
 		return
 	}
+	value = proto.Clone(value).(*Item)
 	l.state.value.Slots[index] = value
 	if l.state.slotsChanges.Store(uint32(index), value) {
 		l.state.markSlotsDirty()

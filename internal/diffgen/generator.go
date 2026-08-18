@@ -321,13 +321,19 @@ func generateMapField(generated *protogen.GeneratedFile, message *protogen.Messa
 	} else {
 		generated.P("func (m ", container, ") GetValue(key ", scalarGoType(generated, key), ") (", scalarGoType(generated, value), ", bool) {")
 		generated.P("value, ok := m.state.value.", field.GoName, "[key]")
-		generated.P("return value, ok")
+		if value.Desc.Kind() == protoreflect.BytesKind {
+			generated.P("return ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Clone", GoImportPath: bytesPackage}), "(value), ok")
+		} else {
+			generated.P("return value, ok")
+		}
 		generated.P("}")
 	}
 	generated.P()
 	generated.P("func (m ", container, ") Store(key ", scalarGoType(generated, key), ", value ", mapValueType(generated, value), ") {")
 	if value.Message != nil {
 		generated.P("value = ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Clone", GoImportPath: protoPackage}), "(value).(*", value.Message.GoIdent, ")")
+	} else if value.Desc.Kind() == protoreflect.BytesKind {
+		generated.P("value = ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Clone", GoImportPath: bytesPackage}), "(value)")
 	}
 	generated.P("if m.state.value.", field.GoName, " == nil {")
 	generated.P("m.state.value.", field.GoName, " = make(map[", scalarGoType(generated, key), "]", mapValueType(generated, value), ")")
@@ -369,7 +375,11 @@ func generateMapField(generated *protogen.GeneratedFile, message *protogen.Messa
 	} else {
 		generated.P("func (m ", container, ") Range(yield func(", scalarGoType(generated, key), ", ", scalarGoType(generated, value), ") bool) {")
 		generated.P("for key, value := range m.state.value.", field.GoName, " {")
-		generated.P("if !yield(key, value) {")
+		if value.Desc.Kind() == protoreflect.BytesKind {
+			generated.P("if !yield(key, ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Clone", GoImportPath: bytesPackage}), "(value)) {")
+		} else {
+			generated.P("if !yield(key, value) {")
+		}
 	}
 	generated.P("return")
 	generated.P("}")
@@ -555,14 +565,18 @@ func generateListField(generated *protogen.GeneratedFile, message *protogen.Mess
 	generated.P("}")
 	generated.P()
 	generated.P("func (l ", container, ") Store(index int, value ", valueType, ") {")
-	if field.Desc.Kind() == protoreflect.BytesKind {
+	if field.Message != nil {
+		generated.P("if ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Equal", GoImportPath: protoPackage}), "(l.state.value.", field.GoName, "[index], value) {")
+	} else if field.Desc.Kind() == protoreflect.BytesKind {
 		generated.P("if ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Equal", GoImportPath: bytesPackage}), "(l.state.value.", field.GoName, "[index], value) {")
 	} else {
 		generated.P("if l.state.value.", field.GoName, "[index] == value {")
 	}
 	generated.P("return")
 	generated.P("}")
-	if field.Desc.Kind() == protoreflect.BytesKind {
+	if field.Message != nil {
+		generated.P("value = ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Clone", GoImportPath: protoPackage}), "(value).(*", field.Message.GoIdent, ")")
+	} else if field.Desc.Kind() == protoreflect.BytesKind {
 		generated.P("value = ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Clone", GoImportPath: bytesPackage}), "(value)")
 	}
 	generated.P("l.state.value.", field.GoName, "[index] = value")
