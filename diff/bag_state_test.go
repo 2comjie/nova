@@ -1,24 +1,27 @@
-package diff
+package diff_test
 
 import (
 	"slices"
 	"testing"
 
+	. "github.com/2comjie/nova/diff"
 	"github.com/2comjie/nova/diff/testdata"
 	"google.golang.org/protobuf/proto"
 )
 
 const (
-	playerStateDirtyBagWord  uint32 = 0
-	playerStateDirtyBagMask  uint64 = 1
-	playerStateDirtyBag2Word uint32 = 0
-	playerStateDirtyBag2Mask uint64 = 2
-	bagStateDirtyItemsWord   uint32 = 0
-	bagStateDirtyItemsMask   uint64 = 1
-	bagStateDirtyOrderWord   uint32 = 0
-	bagStateDirtyOrderMask   uint64 = 2
-	itemStateDirtyCountWord  uint32 = 0
-	itemStateDirtyCountMask  uint64 = 1
+	playerStateDirtyBagWord   uint32 = 0
+	playerStateDirtyBagMask   uint64 = 1
+	playerStateDirtyBag2Word  uint32 = 0
+	playerStateDirtyBag2Mask  uint64 = 2
+	bagStateDirtyCapacityWord uint32 = 0
+	bagStateDirtyCapacityMask uint64 = 1
+	bagStateDirtyItemsWord    uint32 = 0
+	bagStateDirtyItemsMask    uint64 = 2
+	bagStateDirtyOrderWord    uint32 = 0
+	bagStateDirtyOrderMask    uint64 = 4
+	itemStateDirtyCountWord   uint32 = 0
+	itemStateDirtyCountMask   uint64 = 1
 )
 
 type itemPatch struct {
@@ -76,9 +79,12 @@ type Bag2Order struct {
 }
 
 type PlayerState struct {
-	dirty [1]uint64
-	bag   *BagState
-	bag2  *Bag2State
+	value         *testdata.Player
+	dirty         [1]uint64
+	bag           *BagState
+	bagOperation  Operation
+	bag2          *Bag2State
+	bag2Operation Operation
 }
 
 type BagState struct {
@@ -224,18 +230,26 @@ func (r Bag2ItemRef) SetCount(value int32) {
 }
 
 func NewPlayerState(value *testdata.Player) *PlayerState {
-	state := &PlayerState{}
-	state.bag = &BagState{value: value.Bag, parent: state}
-	state.bag2 = &Bag2State{value: value.Bag2, parent: state}
+	state := &PlayerState{value: value}
+	if value.Bag != nil {
+		state.bag = &BagState{value: value.Bag, parent: state}
+	}
+	if value.Bag2 != nil {
+		state.bag2 = &Bag2State{value: value.Bag2, parent: state}
+	}
 	return state
 }
 
 func (s *PlayerState) markBagDirty() {
-	MarkDirty(&s.dirty[playerStateDirtyBagWord], playerStateDirtyBagMask)
+	if MarkDirty(&s.dirty[playerStateDirtyBagWord], playerStateDirtyBagMask) {
+		s.bagOperation = OperationPatch
+	}
 }
 
 func (s *PlayerState) markBag2Dirty() {
-	MarkDirty(&s.dirty[playerStateDirtyBag2Word], playerStateDirtyBag2Mask)
+	if MarkDirty(&s.dirty[playerStateDirtyBag2Word], playerStateDirtyBag2Mask) {
+		s.bag2Operation = OperationPatch
+	}
 }
 
 func (s *BagState) markItemsDirty() {
@@ -246,6 +260,12 @@ func (s *BagState) markItemsDirty() {
 
 func (s *BagState) markOrderDirty() {
 	if MarkDirty(&s.dirty[bagStateDirtyOrderWord], bagStateDirtyOrderMask) {
+		s.parent.markBagDirty()
+	}
+}
+
+func (s *BagState) markCapacityDirty() {
+	if MarkDirty(&s.dirty[bagStateDirtyCapacityWord], bagStateDirtyCapacityMask) {
 		s.parent.markBagDirty()
 	}
 }
@@ -262,12 +282,76 @@ func (s *Bag2State) markOrderDirty() {
 	}
 }
 
-func (s *PlayerState) LoadBag() *BagState {
-	return s.bag
+func (s *Bag2State) markCapacityDirty() {
+	if MarkDirty(&s.dirty[bagStateDirtyCapacityWord], bagStateDirtyCapacityMask) {
+		s.parent.markBag2Dirty()
+	}
 }
 
-func (s *PlayerState) LoadBag2() *Bag2State {
-	return s.bag2
+func (s *PlayerState) LoadBag() (*BagState, bool) {
+	return s.bag, s.bag != nil
+}
+
+func (s *PlayerState) StoreBag(value *testdata.Bag) {
+	s.value.Bag = value
+	s.bag = &BagState{value: value, parent: s}
+	s.bagOperation = OperationReplace
+	MarkDirty(&s.dirty[playerStateDirtyBagWord], playerStateDirtyBagMask)
+}
+
+func (s *PlayerState) DeleteBag() {
+	if s.bag == nil {
+		return
+	}
+	s.bag = nil
+	s.value.Bag = nil
+	s.bagOperation = OperationClear
+	MarkDirty(&s.dirty[playerStateDirtyBagWord], playerStateDirtyBagMask)
+}
+
+func (s *PlayerState) LoadBag2() (*Bag2State, bool) {
+	return s.bag2, s.bag2 != nil
+}
+
+func (s *PlayerState) StoreBag2(value *testdata.Bag2) {
+	s.value.Bag2 = value
+	s.bag2 = &Bag2State{value: value, parent: s}
+	s.bag2Operation = OperationReplace
+	MarkDirty(&s.dirty[playerStateDirtyBag2Word], playerStateDirtyBag2Mask)
+}
+
+func (s *PlayerState) DeleteBag2() {
+	if s.bag2 == nil {
+		return
+	}
+	s.bag2 = nil
+	s.value.Bag2 = nil
+	s.bag2Operation = OperationClear
+	MarkDirty(&s.dirty[playerStateDirtyBag2Word], playerStateDirtyBag2Mask)
+}
+
+func (s *BagState) LoadCapacity() int32 {
+	return s.value.Capacity
+}
+
+func (s *BagState) StoreCapacity(value int32) {
+	if s.value.Capacity == value {
+		return
+	}
+	s.value.Capacity = value
+	s.markCapacityDirty()
+}
+
+func (s *Bag2State) LoadCapacity() int32 {
+	return s.value.Capacity
+}
+
+func (s *Bag2State) StoreCapacity(value int32) {
+	if s.value.Capacity == value {
+		return
+	}
+	s.value.Capacity = value
+	s.markCapacityDirty()
 }
 
 func (s *BagState) Items() BagItems {
@@ -492,14 +576,43 @@ func (l Bag2Order) Range(yield func(int, uint64) bool) {
 
 func (s *PlayerState) WriteDiff(writer *Writer) {
 	if HasDirty(s.dirty[playerStateDirtyBagWord], playerStateDirtyBagMask) {
-		writer.Patch(1, s.bag.WriteDiff)
+		switch s.bagOperation {
+		case OperationPatch:
+			writer.Patch(1, s.bag.WriteDiff)
+		case OperationReplace:
+			data, err := proto.Marshal(s.bag.value)
+			if err != nil {
+				panic(err)
+			}
+			writer.Replace(1, func(writer *Writer) {
+				writer.AppendRaw(data)
+			})
+		case OperationClear:
+			writer.Clear(1)
+		}
 	}
 	if HasDirty(s.dirty[playerStateDirtyBag2Word], playerStateDirtyBag2Mask) {
-		writer.Patch(2, s.bag2.WriteDiff)
+		switch s.bag2Operation {
+		case OperationPatch:
+			writer.Patch(2, s.bag2.WriteDiff)
+		case OperationReplace:
+			data, err := proto.Marshal(s.bag2.value)
+			if err != nil {
+				panic(err)
+			}
+			writer.Replace(2, func(writer *Writer) {
+				writer.AppendRaw(data)
+			})
+		case OperationClear:
+			writer.Clear(2)
+		}
 	}
 }
 
 func (s *BagState) WriteDiff(writer *Writer) {
+	if HasDirty(s.dirty[bagStateDirtyCapacityWord], bagStateDirtyCapacityMask) {
+		writer.Int32(1, s.value.Capacity)
+	}
 	for index := range s.itemChanges.changes {
 		change := &s.itemChanges.changes[index]
 		switch change.operation {
@@ -548,6 +661,9 @@ func (s *BagState) WriteDiff(writer *Writer) {
 }
 
 func (s *Bag2State) WriteDiff(writer *Writer) {
+	if HasDirty(s.dirty[bagStateDirtyCapacityWord], bagStateDirtyCapacityMask) {
+		writer.Int32(1, s.value.Capacity)
+	}
 	for index := range s.itemChanges.changes {
 		change := &s.itemChanges.changes[index]
 		switch change.operation {
@@ -603,8 +719,14 @@ func writeItemPatch(writer *Writer, item *testdata.Item, patch *itemPatch) {
 
 func (s *PlayerState) ClearDirty() {
 	ClearDirty(s.dirty[:])
-	s.bag.ClearDirty()
-	s.bag2.ClearDirty()
+	s.bagOperation = 0
+	s.bag2Operation = 0
+	if s.bag != nil {
+		s.bag.ClearDirty()
+	}
+	if s.bag2 != nil {
+		s.bag2.ClearDirty()
+	}
 }
 
 func (s *BagState) ClearDirty() {
@@ -632,8 +754,10 @@ func TestMapRefOnlyTracksChangedKeys(t *testing.T) {
 	}
 	replica := proto.Clone(original).(*testdata.Player)
 	state := NewPlayerState(original)
-	items := state.LoadBag().Items()
-	items2 := state.LoadBag2().Items()
+	bag, _ := state.LoadBag()
+	bag2, _ := state.LoadBag2()
+	items := bag.Items()
+	items2 := bag2.Items()
 
 	_, _ = items.Load(1002)
 	_, _ = items2.Load(2002)
@@ -691,8 +815,10 @@ func TestMapOperationsAndMerge(t *testing.T) {
 	}
 	replica := proto.Clone(original).(*testdata.Player)
 	state := NewPlayerState(original)
-	items := state.LoadBag().Items()
-	items2 := state.LoadBag2().Items()
+	bag, _ := state.LoadBag()
+	bag2, _ := state.LoadBag2()
+	items := bag.Items()
+	items2 := bag2.Items()
 
 	item, ok := items.Load(1001)
 	if !ok || item.LoadCount() != 10 {
@@ -759,8 +885,10 @@ func TestListOperations(t *testing.T) {
 	}
 	replica := proto.Clone(original).(*testdata.Player)
 	state := NewPlayerState(original)
-	order := state.LoadBag().Order()
-	order2 := state.LoadBag2().Order()
+	bag, _ := state.LoadBag()
+	bag2, _ := state.LoadBag2()
+	order := bag.Order()
+	order2 := bag2.Order()
 
 	if value, ok := order.Load(1); !ok || value != 20 {
 		t.Fatal("load existing index failed")
@@ -824,6 +952,75 @@ func TestListOperations(t *testing.T) {
 	}
 }
 
+func TestMessageAndScalarOperations(t *testing.T) {
+	original := &testdata.Player{
+		Bag:  &testdata.Bag{Capacity: 50},
+		Bag2: &testdata.Bag2{Capacity: 60},
+	}
+	replica := proto.Clone(original).(*testdata.Player)
+	state := NewPlayerState(original)
+
+	bag, ok := state.LoadBag()
+	if !ok || bag.LoadCapacity() != 50 {
+		t.Fatal("load bag failed")
+	}
+	bag.StoreCapacity(51)
+	bag2, _ := state.LoadBag2()
+	bag2.StoreCapacity(61)
+	if state.bagOperation != OperationPatch || state.bag2Operation != OperationPatch {
+		t.Fatal("scalar changes should patch messages")
+	}
+
+	writer := NewWriter(nil)
+	state.WriteDiff(writer)
+	if err := applyTrackedPlayerDiff(replica, writer.Data()); err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(replica, original) {
+		t.Fatalf("expected %v, got %v", original, replica)
+	}
+	state.ClearDirty()
+
+	state.StoreBag(&testdata.Bag{Capacity: 100})
+	bag, _ = state.LoadBag()
+	bag.StoreCapacity(101)
+	bag2, _ = state.LoadBag2()
+	bag2.StoreCapacity(62)
+	state.DeleteBag2()
+	if state.bagOperation != OperationReplace || state.bag2Operation != OperationClear {
+		t.Fatal("store and delete should override previous operations")
+	}
+	if _, ok := state.LoadBag2(); ok {
+		t.Fatal("deleted bag2 should not load")
+	}
+
+	writer = NewWriter(nil)
+	state.WriteDiff(writer)
+	if err := applyTrackedPlayerDiff(replica, writer.Data()); err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(replica, original) {
+		t.Fatalf("expected %v, got %v", original, replica)
+	}
+	state.ClearDirty()
+
+	state.DeleteBag()
+	state.StoreBag(&testdata.Bag{Capacity: 200})
+	state.StoreBag2(&testdata.Bag2{Capacity: 300})
+	if state.bagOperation != OperationReplace || state.bag2Operation != OperationReplace {
+		t.Fatal("store after delete should replace message")
+	}
+
+	writer = NewWriter(nil)
+	state.WriteDiff(writer)
+	if err := applyTrackedPlayerDiff(replica, writer.Data()); err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(replica, original) {
+		t.Fatalf("expected %v, got %v", original, replica)
+	}
+}
+
 func applyTrackedPlayerDiff(player *testdata.Player, data []byte) error {
 	reader := NewReader(data)
 	for {
@@ -831,17 +1028,38 @@ func applyTrackedPlayerDiff(player *testdata.Player, data []byte) error {
 		if err != nil || !ok {
 			return err
 		}
-		if operation != OperationPatch {
-			return ErrInvalidData
-		}
 		switch fieldNumber {
 		case 1:
-			if err := applyBagDiff(player.Bag, payload); err != nil {
-				return err
+			switch operation {
+			case OperationPatch:
+				if err := applyBagDiff(player.Bag, payload); err != nil {
+					return err
+				}
+			case OperationReplace:
+				player.Bag = &testdata.Bag{}
+				if err := proto.Unmarshal(payload, player.Bag); err != nil {
+					return err
+				}
+			case OperationClear:
+				player.Bag = nil
+			default:
+				return ErrInvalidData
 			}
 		case 2:
-			if err := applyBag2Diff(player.Bag2, payload); err != nil {
-				return err
+			switch operation {
+			case OperationPatch:
+				if err := applyBag2Diff(player.Bag2, payload); err != nil {
+					return err
+				}
+			case OperationReplace:
+				player.Bag2 = &testdata.Bag2{}
+				if err := proto.Unmarshal(payload, player.Bag2); err != nil {
+					return err
+				}
+			case OperationClear:
+				player.Bag2 = nil
+			default:
+				return ErrInvalidData
 			}
 		}
 	}
@@ -856,6 +1074,14 @@ func applyBag2Diff(bag *testdata.Bag2, data []byte) error {
 		}
 		valueReader := NewValueReader(payload)
 		switch fieldNumber {
+		case 1:
+			if operation != OperationSetVarint {
+				return ErrInvalidData
+			}
+			bag.Capacity = valueReader.Int32()
+			if valueReader.Err() != nil || !valueReader.Done() {
+				return ErrInvalidData
+			}
 		case 2:
 			key := valueReader.Uint64()
 			switch operation {

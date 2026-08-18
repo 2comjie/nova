@@ -13,6 +13,9 @@ message Bag {
   int32 capacity = 1;
   map<uint64, Item> items = 2;
   repeated uint64 order = 3;
+  repeated Item slots = 4;
+  repeated bytes blobs = 5;
+  map<string, int32> counters = 6;
 }
 
 message Bag2 {

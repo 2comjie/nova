@@ -1,8 +1,9 @@
-package diff
+package diff_test
 
 import (
 	"testing"
 
+	. "github.com/2comjie/nova/diff"
 	"github.com/2comjie/nova/diff/testdata"
 	"google.golang.org/protobuf/proto"
 )
