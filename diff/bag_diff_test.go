@@ -147,15 +147,39 @@ func applyBagDiff(bag *testdata.Bag, data []byte) error {
 				return ErrInvalidData
 			}
 		case 3:
-			if operation != OperationListAppend {
+			valueReader := NewValueReader(payload)
+			switch operation {
+			case OperationListAppend:
+				bag.Order = append(bag.Order, valueReader.Uint64())
+			case OperationListInsert:
+				index := int(valueReader.Uint32())
+				value := valueReader.Uint64()
+				bag.Order = append(bag.Order, 0)
+				copy(bag.Order[index+1:], bag.Order[index:len(bag.Order)-1])
+				bag.Order[index] = value
+			case OperationListSet:
+				index := int(valueReader.Uint32())
+				bag.Order[index] = valueReader.Uint64()
+			case OperationListDelete:
+				index := int(valueReader.Uint32())
+				copy(bag.Order[index:], bag.Order[index+1:])
+				bag.Order = bag.Order[:len(bag.Order)-1]
+			case OperationListMove:
+				from := int(valueReader.Uint32())
+				to := int(valueReader.Uint32())
+				value := bag.Order[from]
+				if from < to {
+					copy(bag.Order[from:to], bag.Order[from+1:to+1])
+				} else {
+					copy(bag.Order[to+1:from+1], bag.Order[to:from])
+				}
+				bag.Order[to] = value
+			default:
 				return ErrInvalidData
 			}
-			valueReader := NewValueReader(payload)
-			value := valueReader.Uint64()
 			if valueReader.Err() != nil || !valueReader.Done() {
 				return ErrInvalidData
 			}
-			bag.Order = append(bag.Order, value)
 		}
 	}
 }
