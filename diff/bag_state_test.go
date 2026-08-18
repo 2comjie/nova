@@ -193,7 +193,7 @@ func (t *listTracker[T]) ClearDirty() {
 	t.changes = t.changes[:0]
 }
 
-func (r BagItemRef) LoadCount() int32 {
+func (r BagItemRef) GetCount() int32 {
 	return r.value.Count
 }
 
@@ -211,7 +211,7 @@ func (r BagItemRef) SetCount(value int32) {
 	}
 }
 
-func (r Bag2ItemRef) LoadCount() int32 {
+func (r Bag2ItemRef) GetCount() int32 {
 	return r.value.Count
 }
 
@@ -288,18 +288,18 @@ func (s *Bag2State) markCapacityDirty() {
 	}
 }
 
-func (s *PlayerState) LoadBag() (*BagState, bool) {
-	return s.bag, s.bag != nil
+func (s *PlayerState) GetBag() *BagState {
+	return s.bag
 }
 
-func (s *PlayerState) StoreBag(value *testdata.Bag) {
+func (s *PlayerState) SetBag(value *testdata.Bag) {
 	s.value.Bag = value
 	s.bag = &BagState{value: value, parent: s}
 	s.bagOperation = OperationReplace
 	MarkDirty(&s.dirty[playerStateDirtyBagWord], playerStateDirtyBagMask)
 }
 
-func (s *PlayerState) DeleteBag() {
+func (s *PlayerState) ClearBag() {
 	if s.bag == nil {
 		return
 	}
@@ -309,18 +309,18 @@ func (s *PlayerState) DeleteBag() {
 	MarkDirty(&s.dirty[playerStateDirtyBagWord], playerStateDirtyBagMask)
 }
 
-func (s *PlayerState) LoadBag2() (*Bag2State, bool) {
-	return s.bag2, s.bag2 != nil
+func (s *PlayerState) GetBag2() *Bag2State {
+	return s.bag2
 }
 
-func (s *PlayerState) StoreBag2(value *testdata.Bag2) {
+func (s *PlayerState) SetBag2(value *testdata.Bag2) {
 	s.value.Bag2 = value
 	s.bag2 = &Bag2State{value: value, parent: s}
 	s.bag2Operation = OperationReplace
 	MarkDirty(&s.dirty[playerStateDirtyBag2Word], playerStateDirtyBag2Mask)
 }
 
-func (s *PlayerState) DeleteBag2() {
+func (s *PlayerState) ClearBag2() {
 	if s.bag2 == nil {
 		return
 	}
@@ -330,11 +330,11 @@ func (s *PlayerState) DeleteBag2() {
 	MarkDirty(&s.dirty[playerStateDirtyBag2Word], playerStateDirtyBag2Mask)
 }
 
-func (s *BagState) LoadCapacity() int32 {
+func (s *BagState) GetCapacity() int32 {
 	return s.value.Capacity
 }
 
-func (s *BagState) StoreCapacity(value int32) {
+func (s *BagState) SetCapacity(value int32) {
 	if s.value.Capacity == value {
 		return
 	}
@@ -342,11 +342,11 @@ func (s *BagState) StoreCapacity(value int32) {
 	s.markCapacityDirty()
 }
 
-func (s *Bag2State) LoadCapacity() int32 {
+func (s *Bag2State) GetCapacity() int32 {
 	return s.value.Capacity
 }
 
-func (s *Bag2State) StoreCapacity(value int32) {
+func (s *Bag2State) SetCapacity(value int32) {
 	if s.value.Capacity == value {
 		return
 	}
@@ -358,7 +358,7 @@ func (s *BagState) Items() BagItems {
 	return BagItems{state: s}
 }
 
-func (m BagItems) Load(key uint64) (BagItemRef, bool) {
+func (m BagItems) GetValue(key uint64) (BagItemRef, bool) {
 	value, ok := m.state.value.Items[key]
 	return BagItemRef{value: value, key: key, parent: m.state}, ok
 }
@@ -399,7 +399,7 @@ func (l BagOrder) Len() int {
 	return len(l.state.value.Order)
 }
 
-func (l BagOrder) Load(index int) (uint64, bool) {
+func (l BagOrder) GetValue(index int) (uint64, bool) {
 	if index < 0 || index >= len(l.state.value.Order) {
 		return 0, false
 	}
@@ -468,7 +468,7 @@ func (s *Bag2State) Items() Bag2Items {
 	return Bag2Items{state: s}
 }
 
-func (m Bag2Items) Load(key uint64) (Bag2ItemRef, bool) {
+func (m Bag2Items) GetValue(key uint64) (Bag2ItemRef, bool) {
 	value, ok := m.state.value.Items[key]
 	return Bag2ItemRef{value: value, key: key, parent: m.state}, ok
 }
@@ -509,7 +509,7 @@ func (l Bag2Order) Len() int {
 	return len(l.state.value.Order)
 }
 
-func (l Bag2Order) Load(index int) (uint64, bool) {
+func (l Bag2Order) GetValue(index int) (uint64, bool) {
 	if index < 0 || index >= len(l.state.value.Order) {
 		return 0, false
 	}
@@ -754,21 +754,21 @@ func TestMapRefOnlyTracksChangedKeys(t *testing.T) {
 	}
 	replica := proto.Clone(original).(*testdata.Player)
 	state := NewPlayerState(original)
-	bag, _ := state.LoadBag()
-	bag2, _ := state.LoadBag2()
+	bag := state.GetBag()
+	bag2 := state.GetBag2()
 	items := bag.Items()
 	items2 := bag2.Items()
 
-	_, _ = items.Load(1002)
-	_, _ = items2.Load(2002)
+	_, _ = items.GetValue(1002)
+	_, _ = items2.GetValue(2002)
 	if len(state.bag.itemChanges.changes) != 0 || len(state.bag2.itemChanges.changes) != 0 {
 		t.Fatal("reading items must not create changes")
 	}
 
-	bagItem, _ := items.Load(1001)
+	bagItem, _ := items.GetValue(1001)
 	bagItem.SetCount(11)
 	bagItem.SetCount(12)
-	bag2Item, _ := items2.Load(2001)
+	bag2Item, _ := items2.GetValue(2001)
 	bag2Item.SetCount(31)
 
 	if len(state.bag.itemChanges.changes) != 1 || len(state.bag2.itemChanges.changes) != 1 {
@@ -795,7 +795,7 @@ func TestMapRefOnlyTracksChangedKeys(t *testing.T) {
 		t.Fatal("changes should be empty")
 	}
 
-	bagItem, _ = items.Load(1001)
+	bagItem, _ = items.GetValue(1001)
 	bagItem.SetCount(13)
 	if len(state.bag.itemChanges.changes) != 1 || !HasDirty(state.dirty[playerStateDirtyBagWord], playerStateDirtyBagMask) {
 		t.Fatal("change should bubble again after clear")
@@ -815,23 +815,23 @@ func TestMapOperationsAndMerge(t *testing.T) {
 	}
 	replica := proto.Clone(original).(*testdata.Player)
 	state := NewPlayerState(original)
-	bag, _ := state.LoadBag()
-	bag2, _ := state.LoadBag2()
+	bag := state.GetBag()
+	bag2 := state.GetBag2()
 	items := bag.Items()
 	items2 := bag2.Items()
 
-	item, ok := items.Load(1001)
-	if !ok || item.LoadCount() != 10 {
+	item, ok := items.GetValue(1001)
+	if !ok || item.GetCount() != 10 {
 		t.Fatal("load existing item failed")
 	}
 	item.SetCount(11)
 	items.Store(1001, &testdata.Item{Id: 1001, Count: 12})
 
 	items.Store(2001, &testdata.Item{Id: 2001, Count: 1})
-	item, _ = items.Load(2001)
+	item, _ = items.GetValue(2001)
 	item.SetCount(2)
 
-	item, _ = items.Load(1002)
+	item, _ = items.GetValue(1002)
 	item.SetCount(21)
 	items.Delete(1002)
 
@@ -885,15 +885,15 @@ func TestListOperations(t *testing.T) {
 	}
 	replica := proto.Clone(original).(*testdata.Player)
 	state := NewPlayerState(original)
-	bag, _ := state.LoadBag()
-	bag2, _ := state.LoadBag2()
+	bag := state.GetBag()
+	bag2 := state.GetBag2()
 	order := bag.Order()
 	order2 := bag2.Order()
 
-	if value, ok := order.Load(1); !ok || value != 20 {
+	if value, ok := order.GetValue(1); !ok || value != 20 {
 		t.Fatal("load existing index failed")
 	}
-	if _, ok := order.Load(3); ok {
+	if _, ok := order.GetValue(3); ok {
 		t.Fatal("load missing index should return false")
 	}
 
@@ -960,13 +960,13 @@ func TestMessageAndScalarOperations(t *testing.T) {
 	replica := proto.Clone(original).(*testdata.Player)
 	state := NewPlayerState(original)
 
-	bag, ok := state.LoadBag()
-	if !ok || bag.LoadCapacity() != 50 {
+	bag := state.GetBag()
+	if bag == nil || bag.GetCapacity() != 50 {
 		t.Fatal("load bag failed")
 	}
-	bag.StoreCapacity(51)
-	bag2, _ := state.LoadBag2()
-	bag2.StoreCapacity(61)
+	bag.SetCapacity(51)
+	bag2 := state.GetBag2()
+	bag2.SetCapacity(61)
 	if state.bagOperation != OperationPatch || state.bag2Operation != OperationPatch {
 		t.Fatal("scalar changes should patch messages")
 	}
@@ -981,16 +981,16 @@ func TestMessageAndScalarOperations(t *testing.T) {
 	}
 	state.ClearDirty()
 
-	state.StoreBag(&testdata.Bag{Capacity: 100})
-	bag, _ = state.LoadBag()
-	bag.StoreCapacity(101)
-	bag2, _ = state.LoadBag2()
-	bag2.StoreCapacity(62)
-	state.DeleteBag2()
+	state.SetBag(&testdata.Bag{Capacity: 100})
+	bag = state.GetBag()
+	bag.SetCapacity(101)
+	bag2 = state.GetBag2()
+	bag2.SetCapacity(62)
+	state.ClearBag2()
 	if state.bagOperation != OperationReplace || state.bag2Operation != OperationClear {
 		t.Fatal("store and delete should override previous operations")
 	}
-	if _, ok := state.LoadBag2(); ok {
+	if state.GetBag2() != nil {
 		t.Fatal("deleted bag2 should not load")
 	}
 
@@ -1004,9 +1004,9 @@ func TestMessageAndScalarOperations(t *testing.T) {
 	}
 	state.ClearDirty()
 
-	state.DeleteBag()
-	state.StoreBag(&testdata.Bag{Capacity: 200})
-	state.StoreBag2(&testdata.Bag2{Capacity: 300})
+	state.ClearBag()
+	state.SetBag(&testdata.Bag{Capacity: 200})
+	state.SetBag2(&testdata.Bag2{Capacity: 300})
 	if state.bagOperation != OperationReplace || state.bag2Operation != OperationReplace {
 		t.Fatal("store after delete should replace message")
 	}

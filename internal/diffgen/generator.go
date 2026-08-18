@@ -92,6 +92,14 @@ func generateMessage(generated *protogen.GeneratedFile, message *protogen.Messag
 	generated.P("return state")
 	generated.P("}")
 	generated.P()
+	generated.P("func (s *", stateName, ") GetRawValue() *", message.GoIdent, " {")
+	generated.P("return s.value")
+	generated.P("}")
+	generated.P()
+	generated.P("func (s *", stateName, ") IsDirty() bool {")
+	generated.P("return ", generated.QualifiedGoIdent(diffIdent("AnyDirty")), "(s.dirty[:])")
+	generated.P("}")
+	generated.P()
 
 	for _, field := range message.Fields {
 		if isScalar(field) {
@@ -125,7 +133,7 @@ func generateMessage(generated *protogen.GeneratedFile, message *protogen.Messag
 func generateScalarField(generated *protogen.GeneratedFile, message *protogen.Message, field *protogen.Field) {
 	stateName := message.GoIdent.GoName + "State"
 	fieldType := scalarGoType(generated, field)
-	generated.P("func (s *", stateName, ") Load", field.GoName, "() ", fieldType, " {")
+	generated.P("func (s *", stateName, ") Get", field.GoName, "() ", fieldType, " {")
 	if field.Desc.Kind() == protoreflect.BytesKind {
 		generated.P("return ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Clone", GoImportPath: bytesPackage}), "(s.value.", field.GoName, ")")
 	} else {
@@ -134,7 +142,7 @@ func generateScalarField(generated *protogen.GeneratedFile, message *protogen.Me
 	generated.P("}")
 	generated.P()
 
-	generated.P("func (s *", stateName, ") Store", field.GoName, "(value ", fieldType, ") {")
+	generated.P("func (s *", stateName, ") Set", field.GoName, "(value ", fieldType, ") {")
 	if field.Desc.Kind() == protoreflect.BytesKind {
 		generated.P("if ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Equal", GoImportPath: bytesPackage}), "(s.value.", field.GoName, ", value) {")
 	} else {
@@ -171,12 +179,12 @@ func generateMessageField(generated *protogen.GeneratedFile, message *protogen.M
 	generated.P("}")
 	generated.P()
 
-	generated.P("func (s *", stateName, ") Load", field.GoName, "() (*", childState, ", bool) {")
-	generated.P("return s.", privateName, ", s.", privateName, " != nil")
+	generated.P("func (s *", stateName, ") Get", field.GoName, "() *", childState, " {")
+	generated.P("return s.", privateName)
 	generated.P("}")
 	generated.P()
 
-	generated.P("func (s *", stateName, ") Store", field.GoName, "(value *", field.Message.GoIdent, ") {")
+	generated.P("func (s *", stateName, ") Set", field.GoName, "(value *", field.Message.GoIdent, ") {")
 	generated.P("value = ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Clone", GoImportPath: protoPackage}), "(value).(*", field.Message.GoIdent, ")")
 	generated.P("s.value.", field.GoName, " = value")
 	generated.P("s.", privateName, " = ", childStateConstructor(generated, message, field, "value", "s.mark"+field.GoName+"Dirty"))
@@ -187,7 +195,7 @@ func generateMessageField(generated *protogen.GeneratedFile, message *protogen.M
 	generated.P("}")
 	generated.P()
 
-	generated.P("func (s *", stateName, ") Delete", field.GoName, "() {")
+	generated.P("func (s *", stateName, ") Clear", field.GoName, "() {")
 	generated.P("if s.", privateName, " == nil {")
 	generated.P("return")
 	generated.P("}")
@@ -259,6 +267,13 @@ func generateMapTypes(generated *protogen.GeneratedFile, message *protogen.Messa
 	}
 	generateMapTrackerOperation(generated, tracker, change, key, "Put", "OperationMapPut")
 	generateMapTrackerOperation(generated, tracker, change, key, "Delete", "OperationMapDelete")
+	generated.P("func (t *", tracker, ") Clear() bool {")
+	generated.P("clear(t.indexes)")
+	generated.P("clear(t.changes)")
+	generated.P("t.changes = append(t.changes[:0], ", change, "{operation: ", generated.QualifiedGoIdent(diffIdent("OperationClear")), "})")
+	generated.P("return true")
+	generated.P("}")
+	generated.P()
 	generated.P("func (t *", tracker, ") ClearDirty() {")
 	generated.P("clear(t.indexes)")
 	generated.P("clear(t.changes)")
@@ -299,12 +314,12 @@ func generateMapField(generated *protogen.GeneratedFile, message *protogen.Messa
 	generated.P("}")
 	generated.P()
 	if value.Message != nil {
-		generated.P("func (m ", container, ") Load(key ", scalarGoType(generated, key), ") (", container, "Value, bool) {")
+		generated.P("func (m ", container, ") GetValue(key ", scalarGoType(generated, key), ") (", container, "Value, bool) {")
 		generated.P("value, ok := m.state.value.", field.GoName, "[key]")
 		generated.P("return ", container, "Value{value: value, key: key, parent: m.state}, ok")
 		generated.P("}")
 	} else {
-		generated.P("func (m ", container, ") Load(key ", scalarGoType(generated, key), ") (", scalarGoType(generated, value), ", bool) {")
+		generated.P("func (m ", container, ") GetValue(key ", scalarGoType(generated, key), ") (", scalarGoType(generated, value), ", bool) {")
 		generated.P("value, ok := m.state.value.", field.GoName, "[key]")
 		generated.P("return value, ok")
 		generated.P("}")
@@ -321,6 +336,20 @@ func generateMapField(generated *protogen.GeneratedFile, message *protogen.Messa
 	generated.P("if m.state.", changes, ".Put(key) {")
 	generated.P("m.state.mark", field.GoName, "Dirty()")
 	generated.P("}")
+	generated.P("}")
+	generated.P()
+	generated.P("func (m ", container, ") Clear() {")
+	generated.P("if len(m.state.value.", field.GoName, ") == 0 {")
+	generated.P("return")
+	generated.P("}")
+	generated.P("m.state.value.", field.GoName, " = nil")
+	generated.P("if m.state.", changes, ".Clear() {")
+	generated.P("m.state.mark", field.GoName, "Dirty()")
+	generated.P("}")
+	generated.P("}")
+	generated.P()
+	generated.P("func (m ", container, ") Len() int {")
+	generated.P("return len(m.state.value.", field.GoName, ")")
 	generated.P("}")
 	generated.P()
 	generated.P("func (m ", container, ") Delete(key ", scalarGoType(generated, key), ") {")
@@ -355,12 +384,16 @@ func generateMapField(generated *protogen.GeneratedFile, message *protogen.Messa
 func generateMapValueRef(generated *protogen.GeneratedFile, parent *protogen.Message, mapField *protogen.Field, value *protogen.Message) {
 	container := parent.GoIdent.GoName + mapField.GoName
 	changes := lowerFirst(mapField.GoName) + "Changes"
+	generated.P("func (r ", container, "Value) GetRawValue() *", value.GoIdent, " {")
+	generated.P("return r.value")
+	generated.P("}")
+	generated.P()
 	for index, field := range value.Fields {
 		if !isScalar(field) {
 			continue
 		}
 		fieldType := scalarGoType(generated, field)
-		generated.P("func (r ", container, "Value) Load", field.GoName, "() ", fieldType, " {")
+		generated.P("func (r ", container, "Value) Get", field.GoName, "() ", fieldType, " {")
 		if field.Desc.Kind() == protoreflect.BytesKind {
 			generated.P("return ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Clone", GoImportPath: bytesPackage}), "(r.value.", field.GoName, ")")
 		} else {
@@ -368,7 +401,7 @@ func generateMapValueRef(generated *protogen.GeneratedFile, parent *protogen.Mes
 		}
 		generated.P("}")
 		generated.P()
-		generated.P("func (r ", container, "Value) Store", field.GoName, "(value ", fieldType, ") {")
+		generated.P("func (r ", container, "Value) Set", field.GoName, "(value ", fieldType, ") {")
 		if field.Desc.Kind() == protoreflect.BytesKind {
 			generated.P("if ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Equal", GoImportPath: bytesPackage}), "(r.value.", field.GoName, ", value) {")
 		} else {
@@ -466,6 +499,12 @@ func generateListTypes(generated *protogen.GeneratedFile, message *protogen.Mess
 		generated.P("}")
 		generated.P()
 	}
+	generated.P("func (t *", tracker, ") Clear() bool {")
+	generated.P("clear(t.changes)")
+	generated.P("t.changes = append(t.changes[:0], ", change, "{operation: ", generated.QualifiedGoIdent(diffIdent("OperationClear")), "})")
+	generated.P("return true")
+	generated.P("}")
+	generated.P()
 	generated.P("func (t *", tracker, ") ClearDirty() {")
 	generated.P("clear(t.changes)")
 	generated.P("t.changes = t.changes[:0]")
@@ -491,7 +530,7 @@ func generateListField(generated *protogen.GeneratedFile, message *protogen.Mess
 	if field.Message != nil {
 		loadType = container + "Value"
 	}
-	generated.P("func (l ", container, ") Load(index int) (", loadType, ", bool) {")
+	generated.P("func (l ", container, ") GetValue(index int) (", loadType, ", bool) {")
 	generated.P("if index < 0 || index >= len(l.state.value.", field.GoName, ") {")
 	generated.P("var zero ", loadType)
 	generated.P("return zero, false")
@@ -503,6 +542,16 @@ func generateListField(generated *protogen.GeneratedFile, message *protogen.Mess
 	} else {
 		generated.P("return l.state.value.", field.GoName, "[index], true")
 	}
+	generated.P("}")
+	generated.P()
+	generated.P("func (l ", container, ") Clear() {")
+	generated.P("if len(l.state.value.", field.GoName, ") == 0 {")
+	generated.P("return")
+	generated.P("}")
+	generated.P("l.state.value.", field.GoName, " = nil")
+	generated.P("if l.state.", changes, ".Clear() {")
+	generated.P("l.state.mark", field.GoName, "Dirty()")
+	generated.P("}")
 	generated.P("}")
 	generated.P()
 	generated.P("func (l ", container, ") Store(index int, value ", valueType, ") {")
@@ -595,12 +644,16 @@ func generateListField(generated *protogen.GeneratedFile, message *protogen.Mess
 func generateListValueRef(generated *protogen.GeneratedFile, parent *protogen.Message, listField *protogen.Field) {
 	container := parent.GoIdent.GoName + listField.GoName
 	changes := lowerFirst(listField.GoName) + "Changes"
+	generated.P("func (r ", container, "Value) GetRawValue() *", listField.Message.GoIdent, " {")
+	generated.P("return r.value")
+	generated.P("}")
+	generated.P()
 	for index, field := range listField.Message.Fields {
 		if !isScalar(field) {
 			continue
 		}
 		fieldType := scalarGoType(generated, field)
-		generated.P("func (r ", container, "Value) Load", field.GoName, "() ", fieldType, " {")
+		generated.P("func (r ", container, "Value) Get", field.GoName, "() ", fieldType, " {")
 		if field.Desc.Kind() == protoreflect.BytesKind {
 			generated.P("return ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Clone", GoImportPath: bytesPackage}), "(r.value.", field.GoName, ")")
 		} else {
@@ -608,7 +661,7 @@ func generateListValueRef(generated *protogen.GeneratedFile, parent *protogen.Me
 		}
 		generated.P("}")
 		generated.P()
-		generated.P("func (r ", container, "Value) Store", field.GoName, "(value ", fieldType, ") {")
+		generated.P("func (r ", container, "Value) Set", field.GoName, "(value ", fieldType, ") {")
 		if field.Desc.Kind() == protoreflect.BytesKind {
 			generated.P("if ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Equal", GoImportPath: bytesPackage}), "(r.value.", field.GoName, ", value) {")
 		} else {
@@ -638,6 +691,8 @@ func generateWriteMapField(generated *protogen.GeneratedFile, message *protogen.
 	generated.P("for index := range s.", changes, ".changes {")
 	generated.P("change := &s.", changes, ".changes[index]")
 	generated.P("switch change.operation {")
+	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationClear")), ":")
+	generated.P("writer.Clear(", field.Desc.Number(), ")")
 	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationMapPut")), ":")
 	if value.Message != nil {
 		generated.P("data, err := ", generated.QualifiedGoIdent(protogen.GoIdent{GoName: "Marshal", GoImportPath: protoPackage}), "(s.value.", field.GoName, "[change.key])")
@@ -681,6 +736,8 @@ func generateWriteListField(generated *protogen.GeneratedFile, message *protogen
 	changes := lowerFirst(field.GoName) + "Changes"
 	generated.P("for _, change := range s.", changes, ".changes {")
 	generated.P("switch change.operation {")
+	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationClear")), ":")
+	generated.P("writer.Clear(", field.Desc.Number(), ")")
 	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationListAppend")), ":")
 	generated.P("writer.ListAppend(", field.Desc.Number(), ", func(writer *", generated.QualifiedGoIdent(diffIdent("Writer")), ") {")
 	appendListValue(generated, "writer", "change.value", field)
@@ -717,6 +774,13 @@ func generateWriteListField(generated *protogen.GeneratedFile, message *protogen
 func generateApplyMapField(generated *protogen.GeneratedFile, field *protogen.Field) {
 	key := field.Message.Fields[0]
 	value := field.Message.Fields[1]
+	generated.P("if operation == ", generated.QualifiedGoIdent(diffIdent("OperationClear")), " {")
+	generated.P("if len(payload) != 0 {")
+	generated.P("return ", generated.QualifiedGoIdent(diffIdent("ErrInvalidData")))
+	generated.P("}")
+	generated.P("value.", field.GoName, " = nil")
+	generated.P("break")
+	generated.P("}")
 	generated.P("valueReader := ", generated.QualifiedGoIdent(diffIdent("NewValueReader")), "(payload)")
 	generated.P("key := ", readScalar(generated, "valueReader", key))
 	generated.P("switch operation {")
@@ -768,6 +832,8 @@ func generateApplyMapField(generated *protogen.GeneratedFile, field *protogen.Fi
 func generateApplyListField(generated *protogen.GeneratedFile, field *protogen.Field) {
 	generated.P("valueReader := ", generated.QualifiedGoIdent(diffIdent("NewValueReader")), "(payload)")
 	generated.P("switch operation {")
+	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationClear")), ":")
+	generated.P("value.", field.GoName, " = nil")
 	generated.P("case ", generated.QualifiedGoIdent(diffIdent("OperationListAppend")), ":")
 	generateReadListValue(generated, "valueReader", field, "item")
 	generated.P("value.", field.GoName, " = append(value.", field.GoName, ", item)")

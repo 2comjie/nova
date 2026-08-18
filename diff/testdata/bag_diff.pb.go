@@ -44,6 +44,14 @@ func newPlayerState(value *Player, markParent func()) *PlayerState {
 	return state
 }
 
+func (s *PlayerState) GetRawValue() *Player {
+	return s.value
+}
+
+func (s *PlayerState) IsDirty() bool {
+	return diff.AnyDirty(s.dirty[:])
+}
+
 func (s *PlayerState) markBagDirty() {
 	if diff.MarkDirty(&s.dirty[playerStateDirtyBagWord], playerStateDirtyBagMask) {
 		s.bagOperation = diff.OperationPatch
@@ -53,11 +61,11 @@ func (s *PlayerState) markBagDirty() {
 	}
 }
 
-func (s *PlayerState) LoadBag() (*BagState, bool) {
-	return s.bag, s.bag != nil
+func (s *PlayerState) GetBag() *BagState {
+	return s.bag
 }
 
-func (s *PlayerState) StoreBag(value *Bag) {
+func (s *PlayerState) SetBag(value *Bag) {
 	value = proto.Clone(value).(*Bag)
 	s.value.Bag = value
 	s.bag = newBagState(value, s.markBagDirty)
@@ -67,7 +75,7 @@ func (s *PlayerState) StoreBag(value *Bag) {
 	}
 }
 
-func (s *PlayerState) DeleteBag() {
+func (s *PlayerState) ClearBag() {
 	if s.bag == nil {
 		return
 	}
@@ -88,11 +96,11 @@ func (s *PlayerState) markBag2Dirty() {
 	}
 }
 
-func (s *PlayerState) LoadBag2() (*Bag2State, bool) {
-	return s.bag2, s.bag2 != nil
+func (s *PlayerState) GetBag2() *Bag2State {
+	return s.bag2
 }
 
-func (s *PlayerState) StoreBag2(value *Bag2) {
+func (s *PlayerState) SetBag2(value *Bag2) {
 	value = proto.Clone(value).(*Bag2)
 	s.value.Bag2 = value
 	s.bag2 = newBag2State(value, s.markBag2Dirty)
@@ -102,7 +110,7 @@ func (s *PlayerState) StoreBag2(value *Bag2) {
 	}
 }
 
-func (s *PlayerState) DeleteBag2() {
+func (s *PlayerState) ClearBag2() {
 	if s.bag2 == nil {
 		return
 	}
@@ -281,6 +289,13 @@ func (t *bagItemsTracker) Delete(key uint64) bool {
 	return first
 }
 
+func (t *bagItemsTracker) Clear() bool {
+	clear(t.indexes)
+	clear(t.changes)
+	t.changes = append(t.changes[:0], bagItemsChange{operation: diff.OperationClear})
+	return true
+}
+
 func (t *bagItemsTracker) ClearDirty() {
 	clear(t.indexes)
 	clear(t.changes)
@@ -331,6 +346,12 @@ func (t *bagOrderTracker) Move(from uint32, to uint32) bool {
 	first := len(t.changes) == 0
 	t.changes = append(t.changes, bagOrderChange{operation: diff.OperationListMove, index: from, to: to})
 	return first
+}
+
+func (t *bagOrderTracker) Clear() bool {
+	clear(t.changes)
+	t.changes = append(t.changes[:0], bagOrderChange{operation: diff.OperationClear})
+	return true
 }
 
 func (t *bagOrderTracker) ClearDirty() {
@@ -396,6 +417,12 @@ func (t *bagSlotsTracker) Move(from uint32, to uint32) bool {
 	return first
 }
 
+func (t *bagSlotsTracker) Clear() bool {
+	clear(t.changes)
+	t.changes = append(t.changes[:0], bagSlotsChange{operation: diff.OperationClear})
+	return true
+}
+
 func (t *bagSlotsTracker) ClearDirty() {
 	clear(t.changes)
 	t.changes = t.changes[:0]
@@ -445,6 +472,12 @@ func (t *bagBlobsTracker) Move(from uint32, to uint32) bool {
 	first := len(t.changes) == 0
 	t.changes = append(t.changes, bagBlobsChange{operation: diff.OperationListMove, index: from, to: to})
 	return first
+}
+
+func (t *bagBlobsTracker) Clear() bool {
+	clear(t.changes)
+	t.changes = append(t.changes[:0], bagBlobsChange{operation: diff.OperationClear})
+	return true
 }
 
 func (t *bagBlobsTracker) ClearDirty() {
@@ -499,6 +532,13 @@ func (t *bagCountersTracker) Delete(key string) bool {
 	return first
 }
 
+func (t *bagCountersTracker) Clear() bool {
+	clear(t.indexes)
+	clear(t.changes)
+	t.changes = append(t.changes[:0], bagCountersChange{operation: diff.OperationClear})
+	return true
+}
+
 func (t *bagCountersTracker) ClearDirty() {
 	clear(t.indexes)
 	clear(t.changes)
@@ -542,11 +582,19 @@ func newBagState(value *Bag, markParent func()) *BagState {
 	return state
 }
 
-func (s *BagState) LoadCapacity() int32 {
+func (s *BagState) GetRawValue() *Bag {
+	return s.value
+}
+
+func (s *BagState) IsDirty() bool {
+	return diff.AnyDirty(s.dirty[:])
+}
+
+func (s *BagState) GetCapacity() int32 {
 	return s.value.Capacity
 }
 
-func (s *BagState) StoreCapacity(value int32) {
+func (s *BagState) SetCapacity(value int32) {
 	if s.value.Capacity == value {
 		return
 	}
@@ -566,7 +614,7 @@ func (s *BagState) Items() BagItems {
 	return BagItems{state: s}
 }
 
-func (m BagItems) Load(key uint64) (BagItemsValue, bool) {
+func (m BagItems) GetValue(key uint64) (BagItemsValue, bool) {
 	value, ok := m.state.value.Items[key]
 	return BagItemsValue{value: value, key: key, parent: m.state}, ok
 }
@@ -580,6 +628,20 @@ func (m BagItems) Store(key uint64, value *Item) {
 	if m.state.itemsChanges.Put(key) {
 		m.state.markItemsDirty()
 	}
+}
+
+func (m BagItems) Clear() {
+	if len(m.state.value.Items) == 0 {
+		return
+	}
+	m.state.value.Items = nil
+	if m.state.itemsChanges.Clear() {
+		m.state.markItemsDirty()
+	}
+}
+
+func (m BagItems) Len() int {
+	return len(m.state.value.Items)
 }
 
 func (m BagItems) Delete(key uint64) {
@@ -600,11 +662,15 @@ func (m BagItems) Range(yield func(uint64, BagItemsValue) bool) {
 	}
 }
 
-func (r BagItemsValue) LoadId() uint64 {
+func (r BagItemsValue) GetRawValue() *Item {
+	return r.value
+}
+
+func (r BagItemsValue) GetId() uint64 {
 	return r.value.Id
 }
 
-func (r BagItemsValue) StoreId(value uint64) {
+func (r BagItemsValue) SetId(value uint64) {
 	if r.value.Id == value {
 		return
 	}
@@ -618,11 +684,11 @@ func (r BagItemsValue) StoreId(value uint64) {
 	}
 }
 
-func (r BagItemsValue) LoadCount() int32 {
+func (r BagItemsValue) GetCount() int32 {
 	return r.value.Count
 }
 
-func (r BagItemsValue) StoreCount(value int32) {
+func (r BagItemsValue) SetCount(value int32) {
 	if r.value.Count == value {
 		return
 	}
@@ -636,11 +702,11 @@ func (r BagItemsValue) StoreCount(value int32) {
 	}
 }
 
-func (r BagItemsValue) LoadLevel() int32 {
+func (r BagItemsValue) GetLevel() int32 {
 	return r.value.Level
 }
 
-func (r BagItemsValue) StoreLevel(value int32) {
+func (r BagItemsValue) SetLevel(value int32) {
 	if r.value.Level == value {
 		return
 	}
@@ -668,12 +734,22 @@ func (l BagOrder) Len() int {
 	return len(l.state.value.Order)
 }
 
-func (l BagOrder) Load(index int) (uint64, bool) {
+func (l BagOrder) GetValue(index int) (uint64, bool) {
 	if index < 0 || index >= len(l.state.value.Order) {
 		var zero uint64
 		return zero, false
 	}
 	return l.state.value.Order[index], true
+}
+
+func (l BagOrder) Clear() {
+	if len(l.state.value.Order) == 0 {
+		return
+	}
+	l.state.value.Order = nil
+	if l.state.orderChanges.Clear() {
+		l.state.markOrderDirty()
+	}
 }
 
 func (l BagOrder) Store(index int, value uint64) {
@@ -749,12 +825,22 @@ func (l BagSlots) Len() int {
 	return len(l.state.value.Slots)
 }
 
-func (l BagSlots) Load(index int) (BagSlotsValue, bool) {
+func (l BagSlots) GetValue(index int) (BagSlotsValue, bool) {
 	if index < 0 || index >= len(l.state.value.Slots) {
 		var zero BagSlotsValue
 		return zero, false
 	}
 	return BagSlotsValue{value: l.state.value.Slots[index], index: index, parent: l.state}, true
+}
+
+func (l BagSlots) Clear() {
+	if len(l.state.value.Slots) == 0 {
+		return
+	}
+	l.state.value.Slots = nil
+	if l.state.slotsChanges.Clear() {
+		l.state.markSlotsDirty()
+	}
 }
 
 func (l BagSlots) Store(index int, value *Item) {
@@ -818,11 +904,15 @@ func (l BagSlots) Range(yield func(int, BagSlotsValue) bool) {
 	}
 }
 
-func (r BagSlotsValue) LoadId() uint64 {
+func (r BagSlotsValue) GetRawValue() *Item {
+	return r.value
+}
+
+func (r BagSlotsValue) GetId() uint64 {
 	return r.value.Id
 }
 
-func (r BagSlotsValue) StoreId(value uint64) {
+func (r BagSlotsValue) SetId(value uint64) {
 	if r.value.Id == value {
 		return
 	}
@@ -834,11 +924,11 @@ func (r BagSlotsValue) StoreId(value uint64) {
 	}
 }
 
-func (r BagSlotsValue) LoadCount() int32 {
+func (r BagSlotsValue) GetCount() int32 {
 	return r.value.Count
 }
 
-func (r BagSlotsValue) StoreCount(value int32) {
+func (r BagSlotsValue) SetCount(value int32) {
 	if r.value.Count == value {
 		return
 	}
@@ -850,11 +940,11 @@ func (r BagSlotsValue) StoreCount(value int32) {
 	}
 }
 
-func (r BagSlotsValue) LoadLevel() int32 {
+func (r BagSlotsValue) GetLevel() int32 {
 	return r.value.Level
 }
 
-func (r BagSlotsValue) StoreLevel(value int32) {
+func (r BagSlotsValue) SetLevel(value int32) {
 	if r.value.Level == value {
 		return
 	}
@@ -880,12 +970,22 @@ func (l BagBlobs) Len() int {
 	return len(l.state.value.Blobs)
 }
 
-func (l BagBlobs) Load(index int) ([]byte, bool) {
+func (l BagBlobs) GetValue(index int) ([]byte, bool) {
 	if index < 0 || index >= len(l.state.value.Blobs) {
 		var zero []byte
 		return zero, false
 	}
 	return bytes.Clone(l.state.value.Blobs[index]), true
+}
+
+func (l BagBlobs) Clear() {
+	if len(l.state.value.Blobs) == 0 {
+		return
+	}
+	l.state.value.Blobs = nil
+	if l.state.blobsChanges.Clear() {
+		l.state.markBlobsDirty()
+	}
 }
 
 func (l BagBlobs) Store(index int, value []byte) {
@@ -960,7 +1060,7 @@ func (s *BagState) Counters() BagCounters {
 	return BagCounters{state: s}
 }
 
-func (m BagCounters) Load(key string) (int32, bool) {
+func (m BagCounters) GetValue(key string) (int32, bool) {
 	value, ok := m.state.value.Counters[key]
 	return value, ok
 }
@@ -973,6 +1073,20 @@ func (m BagCounters) Store(key string, value int32) {
 	if m.state.countersChanges.Put(key) {
 		m.state.markCountersDirty()
 	}
+}
+
+func (m BagCounters) Clear() {
+	if len(m.state.value.Counters) == 0 {
+		return
+	}
+	m.state.value.Counters = nil
+	if m.state.countersChanges.Clear() {
+		m.state.markCountersDirty()
+	}
+}
+
+func (m BagCounters) Len() int {
+	return len(m.state.value.Counters)
 }
 
 func (m BagCounters) Delete(key string) {
@@ -1001,6 +1115,8 @@ func (s *BagState) WriteDiff(writer *diff.Writer) {
 		for index := range s.itemsChanges.changes {
 			change := &s.itemsChanges.changes[index]
 			switch change.operation {
+			case diff.OperationClear:
+				writer.Clear(2)
 			case diff.OperationMapPut:
 				data, err := proto.Marshal(s.value.Items[change.key])
 				if err != nil {
@@ -1035,6 +1151,8 @@ func (s *BagState) WriteDiff(writer *diff.Writer) {
 	if diff.HasDirty(s.dirty[bagStateDirtyOrderWord], bagStateDirtyOrderMask) {
 		for _, change := range s.orderChanges.changes {
 			switch change.operation {
+			case diff.OperationClear:
+				writer.Clear(3)
 			case diff.OperationListAppend:
 				writer.ListAppend(3, func(writer *diff.Writer) {
 					writer.AppendUint64(change.value)
@@ -1057,6 +1175,8 @@ func (s *BagState) WriteDiff(writer *diff.Writer) {
 	if diff.HasDirty(s.dirty[bagStateDirtySlotsWord], bagStateDirtySlotsMask) {
 		for _, change := range s.slotsChanges.changes {
 			switch change.operation {
+			case diff.OperationClear:
+				writer.Clear(4)
 			case diff.OperationListAppend:
 				writer.ListAppend(4, func(writer *diff.Writer) {
 					data, err := proto.Marshal(change.value)
@@ -1103,6 +1223,8 @@ func (s *BagState) WriteDiff(writer *diff.Writer) {
 	if diff.HasDirty(s.dirty[bagStateDirtyBlobsWord], bagStateDirtyBlobsMask) {
 		for _, change := range s.blobsChanges.changes {
 			switch change.operation {
+			case diff.OperationClear:
+				writer.Clear(5)
 			case diff.OperationListAppend:
 				writer.ListAppend(5, func(writer *diff.Writer) {
 					writer.AppendBytes(change.value)
@@ -1126,6 +1248,8 @@ func (s *BagState) WriteDiff(writer *diff.Writer) {
 		for index := range s.countersChanges.changes {
 			change := &s.countersChanges.changes[index]
 			switch change.operation {
+			case diff.OperationClear:
+				writer.Clear(6)
 			case diff.OperationMapPut:
 				writer.MapPut(6, func(writer *diff.Writer) {
 					writer.AppendString(change.key)
@@ -1155,6 +1279,13 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 			}
 			value.Capacity = diff.DecodeInt32(payload)
 		case 2:
+			if operation == diff.OperationClear {
+				if len(payload) != 0 {
+					return diff.ErrInvalidData
+				}
+				value.Items = nil
+				break
+			}
 			valueReader := diff.NewValueReader(payload)
 			key := valueReader.Uint64()
 			switch operation {
@@ -1198,6 +1329,8 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 		case 3:
 			valueReader := diff.NewValueReader(payload)
 			switch operation {
+			case diff.OperationClear:
+				value.Order = nil
 			case diff.OperationListAppend:
 				item := valueReader.Uint64()
 				value.Order = append(value.Order, item)
@@ -1235,6 +1368,8 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 		case 4:
 			valueReader := diff.NewValueReader(payload)
 			switch operation {
+			case diff.OperationClear:
+				value.Slots = nil
 			case diff.OperationListAppend:
 				itemData := valueReader.Bytes()
 				item := &Item{}
@@ -1290,6 +1425,8 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 		case 5:
 			valueReader := diff.NewValueReader(payload)
 			switch operation {
+			case diff.OperationClear:
+				value.Blobs = nil
 			case diff.OperationListAppend:
 				item := bytes.Clone(valueReader.Bytes())
 				value.Blobs = append(value.Blobs, item)
@@ -1325,6 +1462,13 @@ func ApplyBagDiff(value *Bag, data []byte) error {
 				return diff.ErrInvalidData
 			}
 		case 6:
+			if operation == diff.OperationClear {
+				if len(payload) != 0 {
+					return diff.ErrInvalidData
+				}
+				value.Counters = nil
+				break
+			}
 			valueReader := diff.NewValueReader(payload)
 			key := valueReader.String()
 			switch operation {
@@ -1428,6 +1572,13 @@ func (t *bag2ItemsTracker) Delete(key uint64) bool {
 	return first
 }
 
+func (t *bag2ItemsTracker) Clear() bool {
+	clear(t.indexes)
+	clear(t.changes)
+	t.changes = append(t.changes[:0], bag2ItemsChange{operation: diff.OperationClear})
+	return true
+}
+
 func (t *bag2ItemsTracker) ClearDirty() {
 	clear(t.indexes)
 	clear(t.changes)
@@ -1480,6 +1631,12 @@ func (t *bag2OrderTracker) Move(from uint32, to uint32) bool {
 	return first
 }
 
+func (t *bag2OrderTracker) Clear() bool {
+	clear(t.changes)
+	t.changes = append(t.changes[:0], bag2OrderChange{operation: diff.OperationClear})
+	return true
+}
+
 func (t *bag2OrderTracker) ClearDirty() {
 	clear(t.changes)
 	t.changes = t.changes[:0]
@@ -1513,11 +1670,19 @@ func newBag2State(value *Bag2, markParent func()) *Bag2State {
 	return state
 }
 
-func (s *Bag2State) LoadCapacity() int32 {
+func (s *Bag2State) GetRawValue() *Bag2 {
+	return s.value
+}
+
+func (s *Bag2State) IsDirty() bool {
+	return diff.AnyDirty(s.dirty[:])
+}
+
+func (s *Bag2State) GetCapacity() int32 {
 	return s.value.Capacity
 }
 
-func (s *Bag2State) StoreCapacity(value int32) {
+func (s *Bag2State) SetCapacity(value int32) {
 	if s.value.Capacity == value {
 		return
 	}
@@ -1537,7 +1702,7 @@ func (s *Bag2State) Items() Bag2Items {
 	return Bag2Items{state: s}
 }
 
-func (m Bag2Items) Load(key uint64) (Bag2ItemsValue, bool) {
+func (m Bag2Items) GetValue(key uint64) (Bag2ItemsValue, bool) {
 	value, ok := m.state.value.Items[key]
 	return Bag2ItemsValue{value: value, key: key, parent: m.state}, ok
 }
@@ -1551,6 +1716,20 @@ func (m Bag2Items) Store(key uint64, value *Item) {
 	if m.state.itemsChanges.Put(key) {
 		m.state.markItemsDirty()
 	}
+}
+
+func (m Bag2Items) Clear() {
+	if len(m.state.value.Items) == 0 {
+		return
+	}
+	m.state.value.Items = nil
+	if m.state.itemsChanges.Clear() {
+		m.state.markItemsDirty()
+	}
+}
+
+func (m Bag2Items) Len() int {
+	return len(m.state.value.Items)
 }
 
 func (m Bag2Items) Delete(key uint64) {
@@ -1571,11 +1750,15 @@ func (m Bag2Items) Range(yield func(uint64, Bag2ItemsValue) bool) {
 	}
 }
 
-func (r Bag2ItemsValue) LoadId() uint64 {
+func (r Bag2ItemsValue) GetRawValue() *Item {
+	return r.value
+}
+
+func (r Bag2ItemsValue) GetId() uint64 {
 	return r.value.Id
 }
 
-func (r Bag2ItemsValue) StoreId(value uint64) {
+func (r Bag2ItemsValue) SetId(value uint64) {
 	if r.value.Id == value {
 		return
 	}
@@ -1589,11 +1772,11 @@ func (r Bag2ItemsValue) StoreId(value uint64) {
 	}
 }
 
-func (r Bag2ItemsValue) LoadCount() int32 {
+func (r Bag2ItemsValue) GetCount() int32 {
 	return r.value.Count
 }
 
-func (r Bag2ItemsValue) StoreCount(value int32) {
+func (r Bag2ItemsValue) SetCount(value int32) {
 	if r.value.Count == value {
 		return
 	}
@@ -1607,11 +1790,11 @@ func (r Bag2ItemsValue) StoreCount(value int32) {
 	}
 }
 
-func (r Bag2ItemsValue) LoadLevel() int32 {
+func (r Bag2ItemsValue) GetLevel() int32 {
 	return r.value.Level
 }
 
-func (r Bag2ItemsValue) StoreLevel(value int32) {
+func (r Bag2ItemsValue) SetLevel(value int32) {
 	if r.value.Level == value {
 		return
 	}
@@ -1639,12 +1822,22 @@ func (l Bag2Order) Len() int {
 	return len(l.state.value.Order)
 }
 
-func (l Bag2Order) Load(index int) (uint64, bool) {
+func (l Bag2Order) GetValue(index int) (uint64, bool) {
 	if index < 0 || index >= len(l.state.value.Order) {
 		var zero uint64
 		return zero, false
 	}
 	return l.state.value.Order[index], true
+}
+
+func (l Bag2Order) Clear() {
+	if len(l.state.value.Order) == 0 {
+		return
+	}
+	l.state.value.Order = nil
+	if l.state.orderChanges.Clear() {
+		l.state.markOrderDirty()
+	}
 }
 
 func (l Bag2Order) Store(index int, value uint64) {
@@ -1714,6 +1907,8 @@ func (s *Bag2State) WriteDiff(writer *diff.Writer) {
 		for index := range s.itemsChanges.changes {
 			change := &s.itemsChanges.changes[index]
 			switch change.operation {
+			case diff.OperationClear:
+				writer.Clear(2)
 			case diff.OperationMapPut:
 				data, err := proto.Marshal(s.value.Items[change.key])
 				if err != nil {
@@ -1748,6 +1943,8 @@ func (s *Bag2State) WriteDiff(writer *diff.Writer) {
 	if diff.HasDirty(s.dirty[bag2StateDirtyOrderWord], bag2StateDirtyOrderMask) {
 		for _, change := range s.orderChanges.changes {
 			switch change.operation {
+			case diff.OperationClear:
+				writer.Clear(3)
 			case diff.OperationListAppend:
 				writer.ListAppend(3, func(writer *diff.Writer) {
 					writer.AppendUint64(change.value)
@@ -1783,6 +1980,13 @@ func ApplyBag2Diff(value *Bag2, data []byte) error {
 			}
 			value.Capacity = diff.DecodeInt32(payload)
 		case 2:
+			if operation == diff.OperationClear {
+				if len(payload) != 0 {
+					return diff.ErrInvalidData
+				}
+				value.Items = nil
+				break
+			}
 			valueReader := diff.NewValueReader(payload)
 			key := valueReader.Uint64()
 			switch operation {
@@ -1826,6 +2030,8 @@ func ApplyBag2Diff(value *Bag2, data []byte) error {
 		case 3:
 			valueReader := diff.NewValueReader(payload)
 			switch operation {
+			case diff.OperationClear:
+				value.Order = nil
 			case diff.OperationListAppend:
 				item := valueReader.Uint64()
 				value.Order = append(value.Order, item)
@@ -1896,11 +2102,19 @@ func newItemState(value *Item, markParent func()) *ItemState {
 	return state
 }
 
-func (s *ItemState) LoadId() uint64 {
+func (s *ItemState) GetRawValue() *Item {
+	return s.value
+}
+
+func (s *ItemState) IsDirty() bool {
+	return diff.AnyDirty(s.dirty[:])
+}
+
+func (s *ItemState) GetId() uint64 {
 	return s.value.Id
 }
 
-func (s *ItemState) StoreId(value uint64) {
+func (s *ItemState) SetId(value uint64) {
 	if s.value.Id == value {
 		return
 	}
@@ -1910,11 +2124,11 @@ func (s *ItemState) StoreId(value uint64) {
 	}
 }
 
-func (s *ItemState) LoadCount() int32 {
+func (s *ItemState) GetCount() int32 {
 	return s.value.Count
 }
 
-func (s *ItemState) StoreCount(value int32) {
+func (s *ItemState) SetCount(value int32) {
 	if s.value.Count == value {
 		return
 	}
@@ -1924,11 +2138,11 @@ func (s *ItemState) StoreCount(value int32) {
 	}
 }
 
-func (s *ItemState) LoadLevel() int32 {
+func (s *ItemState) GetLevel() int32 {
 	return s.value.Level
 }
 
-func (s *ItemState) StoreLevel(value int32) {
+func (s *ItemState) SetLevel(value int32) {
 	if s.value.Level == value {
 		return
 	}

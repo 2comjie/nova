@@ -22,12 +22,12 @@ func TestGeneratedStateEndToEnd(t *testing.T) {
 	}
 	replica := proto.Clone(original).(*testdata.Player)
 	state := testdata.NewPlayerState(original)
-	bag, _ := state.LoadBag()
+	bag := state.GetBag()
 
-	bag.StoreCapacity(6)
+	bag.SetCapacity(6)
 	items := bag.Items()
-	item, _ := items.Load(1)
-	item.StoreCount(11)
+	item, _ := items.GetValue(1)
+	item.SetCount(11)
 	items.Store(3, &testdata.Item{Id: 3, Count: 30})
 	items.Delete(2)
 
@@ -42,8 +42,8 @@ func TestGeneratedStateEndToEnd(t *testing.T) {
 	slots := bag.Slots()
 	slots.Append(slotValue)
 	slotValue.Count = 99
-	slot, _ := slots.Load(0)
-	slot.StoreCount(2)
+	slot, _ := slots.GetValue(0)
+	slot.SetCount(2)
 	slots.Append(&testdata.Item{Id: 11, Count: 3})
 	slots.Move(1, 0)
 
@@ -69,12 +69,50 @@ func TestGeneratedStateEndToEnd(t *testing.T) {
 	}
 	state.ClearDirty()
 
-	state.StoreBag(&testdata.Bag{Capacity: 100})
-	bag, _ = state.LoadBag()
-	bag.StoreCapacity(101)
-	state.DeleteBag2()
+	state.SetBag(&testdata.Bag{Capacity: 100})
+	bag = state.GetBag()
+	bag.SetCapacity(101)
+	state.ClearBag2()
 
 	writer = NewWriter(nil)
+	state.WriteDiff(writer)
+	if err := testdata.ApplyPlayerDiff(replica, writer.Data()); err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(replica, original) {
+		t.Fatalf("expected %v, got %v", original, replica)
+	}
+}
+
+func TestDiff(t *testing.T) {
+	state := testdata.NewPlayerState(&testdata.Player{})
+	if state.GetRawValue() == nil {
+		t.Fatal("raw value is nil")
+	}
+}
+
+func TestGeneratedCollectionClear(t *testing.T) {
+	original := &testdata.Player{Bag: &testdata.Bag{
+		Items:    map[uint64]*testdata.Item{1: {Id: 1}},
+		Order:    []uint64{1, 2},
+		Slots:    []*testdata.Item{{Id: 2}},
+		Blobs:    [][]byte{{1, 2}},
+		Counters: map[string]int32{"gold": 10},
+	}}
+	replica := proto.Clone(original).(*testdata.Player)
+	state := testdata.NewPlayerState(original)
+	bag := state.GetBag()
+
+	bag.Items().Clear()
+	bag.Order().Clear()
+	bag.Slots().Clear()
+	bag.Blobs().Clear()
+	bag.Counters().Clear()
+	if !state.IsDirty() {
+		t.Fatal("clear must mark player dirty")
+	}
+
+	writer := NewWriter(nil)
 	state.WriteDiff(writer)
 	if err := testdata.ApplyPlayerDiff(replica, writer.Data()); err != nil {
 		t.Fatal(err)
