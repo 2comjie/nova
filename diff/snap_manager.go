@@ -1,101 +1,109 @@
 package diff
 
-type SnapManager struct {
+import "google.golang.org/protobuf/proto"
+
+type SnapState[T proto.Message] interface {
+	GetRawValue() T
+	IsDirty() bool
+	WriteDiff(writer *Writer)
+	ClearDirty()
+}
+
+type SnapManager[T proto.Message] struct {
+	state     SnapState[T]
 	diffCount uint64
 	version   uint64
 
-	hasFull        bool
-	curFullVersion uint64
-	curFullBytes   []byte
-	diffMap        map[uint64][]byte // base->base+1
+	fullVersion uint64
+	fullData    []byte
+	diffMap     map[uint64][]byte
 }
 
-func NewSnapManager(diffCount uint64) *SnapManager {
+func NewSnapManager[T proto.Message](state SnapState[T], version uint64, diffCount uint64) *SnapManager[T] {
 	if diffCount == 0 {
-		panic("diff: SnapManager diffCount必须大于0")
+		panic("diff: diffCount必须大于0")
 	}
-	return &SnapManager{
+	return &SnapManager[T]{
+		state:     state,
 		diffCount: diffCount,
+		version:   version,
 		diffMap:   make(map[uint64][]byte, diffCount),
 	}
 }
 
-func (s *SnapManager) Version() uint64 {
+func (s *SnapManager[T]) Version() uint64 {
 	return s.version
 }
 
-func (s *SnapManager) UpdateFull(version uint64, data []byte) {
-	if s.hasFull && version < s.curFullVersion {
-		return
-	}
-	// 如果全量 超过了
-	if version > s.version {
-		clear(s.diffMap)
-		s.version = version
-	}
-	s.hasFull = true
-	s.curFullVersion = version
-	s.curFullBytes = data
-}
-
-func (s *SnapManager) UpdateDiff(baseVersion uint64, version uint64, data []byte) {
-	if version != baseVersion+1 {
-		panic("diff: Delta必须是单步增量")
-	}
-	if baseVersion != s.version {
-		panic("diff: Delta版本不连续")
+// Commit 把当前脏数据提交为 version -> version+1 的单步增量
+func (s *SnapManager[T]) Commit() bool {
+	if !s.state.IsDirty() {
+		return false
 	}
 
-	s.diffMap[baseVersion] = data
-	s.version = version
-	if version <= s.diffCount {
-		return
-	}
+	writer := NewWriter(nil)
+	s.state.WriteDiff(writer)
+	s.diffMap[s.version] = writer.Data()
+	s.version++
+	s.state.ClearDirty()
 
-	oldestBaseVersion := version - s.diffCount
-	for currentBaseVersion := range s.diffMap {
-		if currentBaseVersion < oldestBaseVersion {
-			delete(s.diffMap, currentBaseVersion)
+	if s.version <= s.diffCount {
+		return true
+	}
+	oldestBaseVersion := s.version - s.diffCount
+	for baseVersion := range s.diffMap {
+		if baseVersion < oldestBaseVersion {
+			delete(s.diffMap, baseVersion)
 		}
 	}
+	return true
 }
 
-func (s *SnapManager) Get(clientVersion uint64) (fullVersion uint64, fullBytes []byte, diffs []Delta, ok bool) {
+// BuildFull缓存当前版本的Proto全量。生成全量不会改变版本号。
+func (s *SnapManager[T]) BuildFull() {
+	data, err := proto.Marshal(s.state.GetRawValue())
+	if err != nil {
+		panic(err)
+	}
+	s.fullVersion = s.version
+	s.fullData = data
+}
+
+// Get返回客户端追赶到当前版本所需的数据。
+// fullData不为空时先覆盖全量，再按顺序应用diffs；fullData为空时只应用diffs。
+// 返回的字节切片由SnapManager持有，调用方只能读取。
+func (s *SnapManager[T]) Get(clientVersion uint64) (fullVersion uint64, fullData []byte, diffs []Delta) {
 	if clientVersion == s.version {
-		return 0, nil, nil, true
+		return 0, nil, nil
 	}
 	if clientVersion < s.version {
-		if diffs, found := s.getDiffs(clientVersion); found {
-			return 0, nil, diffs, true
+		if diffs, ok := s.getDiffs(clientVersion); ok {
+			return 0, nil, diffs
 		}
 	}
-	if !s.hasFull {
-		return 0, nil, nil, false
+
+	if s.fullData != nil {
+		if diffs, ok := s.getDiffs(s.fullVersion); ok {
+			return s.fullVersion, s.fullData, diffs
+		}
 	}
 
-	diffs, found := s.getDiffs(s.curFullVersion)
-	if !found {
-		return 0, nil, nil, false
-	}
-	return s.curFullVersion, s.curFullBytes, diffs, true
+	s.BuildFull()
+	return s.fullVersion, s.fullData, nil
 }
 
-func (s *SnapManager) Reset() {
-	s.version = 0
-	s.hasFull = false
-	s.curFullVersion = 0
-	s.curFullBytes = nil
-	clear(s.diffMap)
-}
-
-func (s *SnapManager) getDiffs(baseVersion uint64) ([]Delta, bool) {
+func (s *SnapManager[T]) getDiffs(baseVersion uint64) ([]Delta, bool) {
 	if baseVersion > s.version {
 		return nil, false
 	}
-	diffs := make([]Delta, 0, len(s.diffMap))
+	if baseVersion == s.version {
+		return nil, true
+	}
+
+	diffs := make([]Delta, 0, s.version-baseVersion)
 	for version := baseVersion; version < s.version; version++ {
-		data, exists := s.diffMap[version]
-		if !exists {
+		data, ok := s.diffMap[version]
+		if !ok {
 			return nil, false
 		}
 		diffs = append(diffs, Delta{
