@@ -14,6 +14,7 @@ type SnapManager[T proto.Message] struct {
 	diffCount uint64
 	version   uint64
 
+	hasFull     bool
 	fullVersion uint64
 	fullData    []byte
 	diffMap     map[uint64][]byte
@@ -59,19 +60,21 @@ func (s *SnapManager[T]) Commit() bool {
 	return true
 }
 
-// BuildFull缓存当前版本的Proto全量。生成全量不会改变版本号。
+// BuildFull 缓存当前版本的Proto全量。生成全量不会改变版本号
 func (s *SnapManager[T]) BuildFull() {
 	data, err := proto.Marshal(s.state.GetRawValue())
 	if err != nil {
 		panic(err)
 	}
+	if data == nil {
+		data = []byte{}
+	}
+	s.hasFull = true
 	s.fullVersion = s.version
 	s.fullData = data
 }
 
-// Get返回客户端追赶到当前版本所需的数据。
-// fullData不为空时先覆盖全量，再按顺序应用diffs；fullData为空时只应用diffs。
-// 返回的字节切片由SnapManager持有，调用方只能读取。
+// Get 返回增量
 func (s *SnapManager[T]) Get(clientVersion uint64) (fullVersion uint64, fullData []byte, diffs []Delta) {
 	if clientVersion == s.version {
 		return 0, nil, nil
@@ -82,7 +85,7 @@ func (s *SnapManager[T]) Get(clientVersion uint64) (fullVersion uint64, fullData
 		}
 	}
 
-	if s.fullData != nil {
+	if s.hasFull {
 		if diffs, ok := s.getDiffs(s.fullVersion); ok {
 			return s.fullVersion, s.fullData, diffs
 		}
