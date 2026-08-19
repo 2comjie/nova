@@ -37,19 +37,25 @@ func (s *SnapManager[T]) Version() uint64 {
 }
 
 // Commit 把当前脏数据提交为 version -> version+1 的单步增量
-func (s *SnapManager[T]) Commit() bool {
+func (s *SnapManager[T]) Commit() (Delta, bool) {
 	if !s.state.IsDirty() {
-		return false
+		return Delta{}, false
 	}
 
+	baseVersion := s.version
 	writer := NewWriter(nil)
 	s.state.WriteDiff(writer)
-	s.diffMap[s.version] = writer.Data()
-	s.version++
+	delta := Delta{
+		BaseVersion: baseVersion,
+		Version:     baseVersion + 1,
+		Data:        writer.Data(),
+	}
+	s.diffMap[baseVersion] = delta.Data
+	s.version = delta.Version
 	s.state.ClearDirty()
 
 	if s.version <= s.diffCount {
-		return true
+		return delta, true
 	}
 	oldestBaseVersion := s.version - s.diffCount
 	for baseVersion := range s.diffMap {
@@ -57,11 +63,30 @@ func (s *SnapManager[T]) Commit() bool {
 			delete(s.diffMap, baseVersion)
 		}
 	}
-	return true
+	return delta, true
 }
 
-// BuildFull 缓存当前版本的Proto全量。生成全量不会改变版本号
-func (s *SnapManager[T]) BuildFull() {
+func (s *SnapManager[T]) BuildSnapshot() (uint64, []byte) {
+	s.buildFull()
+	return s.fullVersion, s.fullData
+}
+
+func (s *SnapManager[T]) WriteSync(clientVersion uint64, buffer []byte) ([]byte, bool) {
+	fullVersion, fullData, deltas := s.get(clientVersion)
+	if fullData == nil && len(deltas) == 0 {
+		return nil, false
+	}
+
+	writer := NewSyncWriter(buffer)
+	if fullData != nil {
+		writer.WriteFull(fullVersion, fullData, deltas)
+	} else {
+		writer.WriteDiff(deltas)
+	}
+	return writer.Data(), true
+}
+
+func (s *SnapManager[T]) buildFull() {
 	data, err := proto.Marshal(s.state.GetRawValue())
 	if err != nil {
 		panic(err)
@@ -74,8 +99,7 @@ func (s *SnapManager[T]) BuildFull() {
 	s.fullData = data
 }
 
-// Get 返回增量
-func (s *SnapManager[T]) Get(clientVersion uint64) (fullVersion uint64, fullData []byte, diffs []Delta) {
+func (s *SnapManager[T]) get(clientVersion uint64) (fullVersion uint64, fullData []byte, diffs []Delta) {
 	if clientVersion == s.version {
 		return 0, nil, nil
 	}
@@ -91,7 +115,7 @@ func (s *SnapManager[T]) Get(clientVersion uint64) (fullVersion uint64, fullData
 		}
 	}
 
-	s.BuildFull()
+	s.buildFull()
 	return s.fullVersion, s.fullData, nil
 }
 

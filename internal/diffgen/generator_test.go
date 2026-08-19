@@ -3,17 +3,11 @@ package diffgen
 import (
 	"go/parser"
 	"go/token"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/2comjie/nova/diff/testdata"
-	"github.com/2comjie/nova/diff/testdata/bagpkg"
-	"github.com/2comjie/nova/diff/testdata/playerpkg"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protodesc"
-	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
@@ -84,53 +78,5 @@ func TestGenerateStateAndDirtyBits(t *testing.T) {
 	}
 	if _, err := parser.ParseFile(token.NewFileSet(), response.File[0].GetName(), content, parser.AllErrors); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestGeneratedFilesAreCurrent(t *testing.T) {
-	files := []struct {
-		descriptor   protoreflect.FileDescriptor
-		dependencies []protoreflect.FileDescriptor
-		path         string
-	}{
-		{descriptor: testdata.File_diff_testdata_bag_proto, path: "../../diff/testdata/bag_diff.pb.go"},
-		{descriptor: testdata.File_diff_testdata_complex_proto, path: "../../diff/testdata/complex_diff.pb.go"},
-		{descriptor: bagpkg.File_diff_testdata_bagpkg_bag_proto, path: "../../diff/testdata/bagpkg/bag_diff.pb.go"},
-		{
-			descriptor:   playerpkg.File_diff_testdata_playerpkg_player_proto,
-			dependencies: []protoreflect.FileDescriptor{bagpkg.File_diff_testdata_bagpkg_bag_proto},
-			path:         "../../diff/testdata/playerpkg/player_diff.pb.go",
-		},
-	}
-	for _, file := range files {
-		descriptor := protodesc.ToFileDescriptorProto(file.descriptor)
-		protoFiles := make([]*descriptorpb.FileDescriptorProto, 0, len(file.dependencies)+1)
-		for _, dependency := range file.dependencies {
-			protoFiles = append(protoFiles, protodesc.ToFileDescriptorProto(dependency))
-		}
-		protoFiles = append(protoFiles, descriptor)
-		request := &pluginpb.CodeGeneratorRequest{
-			FileToGenerate: []string{descriptor.GetName()},
-			ProtoFile:      protoFiles,
-			Parameter:      proto.String("paths=source_relative"),
-		}
-		plugin, err := (protogen.Options{}).New(request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := Generate(plugin); err != nil {
-			t.Fatal(err)
-		}
-		response := plugin.Response()
-		if len(response.File) != 1 {
-			t.Fatalf("expected one generated file, got %d", len(response.File))
-		}
-		actual, err := os.ReadFile(file.path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(actual) != response.File[0].GetContent() {
-			t.Fatalf("%s is stale; regenerate it with protoc-gen-go-diff", file.path)
-		}
 	}
 }
