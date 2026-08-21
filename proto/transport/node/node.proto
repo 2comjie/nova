@@ -6,7 +6,7 @@ option go_package = "github.com/2comjie/nova/internal/pb/transport/node;node";
 
 
 message Request {
-  string uid = 1;
+  uint64 uid = 1;
   uint32 route = 2;
   bytes body = 3;
   string gate_service_name = 4;

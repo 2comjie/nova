@@ -39,14 +39,14 @@ go run ./game/player
 启动接收聊天的玩家：
 
 ```bash
-go run ./game/client --uid=user-2
+go run ./game/client --uid=2
 ```
 
 再启动另一个玩家，并给 `user-2` 发消息：
 
 ```bash
 go run ./game/client \
-  --uid=user-1 \
+  --uid=1 \
   --to=user-2 \
   --message="组队吗？"
 ```

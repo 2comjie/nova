@@ -24,7 +24,7 @@ const (
 
 type PushRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	Uid             string                 `protobuf:"bytes,1,opt,name=uid,proto3" json:"uid,omitempty"`
+	Uid             uint64                 `protobuf:"varint,1,opt,name=uid,proto3" json:"uid,omitempty"`
 	Route           uint32                 `protobuf:"varint,2,opt,name=route,proto3" json:"route,omitempty"`
 	Body            []byte                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
 	NodeServiceName string                 `protobuf:"bytes,4,opt,name=node_service_name,json=nodeServiceName,proto3" json:"node_service_name,omitempty"`
@@ -63,11 +63,11 @@ func (*PushRequest) Descriptor() ([]byte, []int) {
 	return file_transport_gate_gate_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *PushRequest) GetUid() string {
+func (x *PushRequest) GetUid() uint64 {
 	if x != nil {
 		return x.Uid
 	}
-	return ""
+	return 0
 }
 
 func (x *PushRequest) GetRoute() uint32 {
@@ -100,7 +100,7 @@ func (x *PushRequest) GetNodeInstanceId() string {
 
 type KickRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	Uid             string                 `protobuf:"bytes,1,opt,name=uid,proto3" json:"uid,omitempty"`
+	Uid             uint64                 `protobuf:"varint,1,opt,name=uid,proto3" json:"uid,omitempty"`
 	NodeServiceName string                 `protobuf:"bytes,2,opt,name=node_service_name,json=nodeServiceName,proto3" json:"node_service_name,omitempty"`
 	NodeInstanceId  string                 `protobuf:"bytes,3,opt,name=node_instance_id,json=nodeInstanceId,proto3" json:"node_instance_id,omitempty"`
 	SessionId       uint64                 `protobuf:"varint,4,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -138,11 +138,11 @@ func (*KickRequest) Descriptor() ([]byte, []int) {
 	return file_transport_gate_gate_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *KickRequest) GetUid() string {
+func (x *KickRequest) GetUid() uint64 {
 	if x != nil {
 		return x.Uid
 	}
-	return ""
+	return 0
 }
 
 func (x *KickRequest) GetNodeServiceName() string {
@@ -280,7 +280,7 @@ func (x *BroadcastResponse) GetCount() uint32 {
 
 type MultiPushRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	UidList         []string               `protobuf:"bytes,1,rep,name=uid_list,json=uidList,proto3" json:"uid_list,omitempty"`
+	UidList         []uint64               `protobuf:"varint,1,rep,packed,name=uid_list,json=uidList,proto3" json:"uid_list,omitempty"`
 	Route           uint32                 `protobuf:"varint,2,opt,name=route,proto3" json:"route,omitempty"`
 	Body            []byte                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
 	NodeServiceName string                 `protobuf:"bytes,4,opt,name=node_service_name,json=nodeServiceName,proto3" json:"node_service_name,omitempty"`
@@ -319,7 +319,7 @@ func (*MultiPushRequest) Descriptor() ([]byte, []int) {
 	return file_transport_gate_gate_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *MultiPushRequest) GetUidList() []string {
+func (x *MultiPushRequest) GetUidList() []uint64 {
 	if x != nil {
 		return x.UidList
 	}
@@ -400,7 +400,7 @@ func (x *MultiPushResponse) GetCount() uint32 {
 
 type MockCallRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	Uid             string                 `protobuf:"bytes,1,opt,name=uid,proto3" json:"uid,omitempty"`
+	Uid             uint64                 `protobuf:"varint,1,opt,name=uid,proto3" json:"uid,omitempty"`
 	Route           uint32                 `protobuf:"varint,2,opt,name=route,proto3" json:"route,omitempty"`
 	Body            []byte                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
 	NodeServiceName string                 `protobuf:"bytes,4,opt,name=node_service_name,json=nodeServiceName,proto3" json:"node_service_name,omitempty"`
@@ -439,11 +439,11 @@ func (*MockCallRequest) Descriptor() ([]byte, []int) {
 	return file_transport_gate_gate_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *MockCallRequest) GetUid() string {
+func (x *MockCallRequest) GetUid() uint64 {
 	if x != nil {
 		return x.Uid
 	}
-	return ""
+	return 0
 }
 
 func (x *MockCallRequest) GetRoute() uint32 {
@@ -532,13 +532,13 @@ const file_transport_gate_gate_proto_rawDesc = "" +
 	"\n" +
 	"\x19transport/gate/gate.proto\x12\x13nova.transport.gate\x1a\x1bgoogle/protobuf/empty.proto\"\x9f\x01\n" +
 	"\vPushRequest\x12\x10\n" +
-	"\x03uid\x18\x01 \x01(\tR\x03uid\x12\x14\n" +
+	"\x03uid\x18\x01 \x01(\x04R\x03uid\x12\x14\n" +
 	"\x05route\x18\x02 \x01(\rR\x05route\x12\x12\n" +
 	"\x04body\x18\x03 \x01(\fR\x04body\x12*\n" +
 	"\x11node_service_name\x18\x04 \x01(\tR\x0fnodeServiceName\x12(\n" +
 	"\x10node_instance_id\x18\x05 \x01(\tR\x0enodeInstanceId\"\x94\x01\n" +
 	"\vKickRequest\x12\x10\n" +
-	"\x03uid\x18\x01 \x01(\tR\x03uid\x12*\n" +
+	"\x03uid\x18\x01 \x01(\x04R\x03uid\x12*\n" +
 	"\x11node_service_name\x18\x02 \x01(\tR\x0fnodeServiceName\x12(\n" +
 	"\x10node_instance_id\x18\x03 \x01(\tR\x0enodeInstanceId\x12\x1d\n" +
 	"\n" +
@@ -551,7 +551,7 @@ const file_transport_gate_gate_proto_rawDesc = "" +
 	"\x11BroadcastResponse\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\rR\x05count\"\xad\x01\n" +
 	"\x10MultiPushRequest\x12\x19\n" +
-	"\buid_list\x18\x01 \x03(\tR\auidList\x12\x14\n" +
+	"\buid_list\x18\x01 \x03(\x04R\auidList\x12\x14\n" +
 	"\x05route\x18\x02 \x01(\rR\x05route\x12\x12\n" +
 	"\x04body\x18\x03 \x01(\fR\x04body\x12*\n" +
 	"\x11node_service_name\x18\x04 \x01(\tR\x0fnodeServiceName\x12(\n" +
@@ -559,7 +559,7 @@ const file_transport_gate_gate_proto_rawDesc = "" +
 	"\x11MultiPushResponse\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\rR\x05count\"\xa3\x01\n" +
 	"\x0fMockCallRequest\x12\x10\n" +
-	"\x03uid\x18\x01 \x01(\tR\x03uid\x12\x14\n" +
+	"\x03uid\x18\x01 \x01(\x04R\x03uid\x12\x14\n" +
 	"\x05route\x18\x02 \x01(\rR\x05route\x12\x12\n" +
 	"\x04body\x18\x03 \x01(\fR\x04body\x12*\n" +
 	"\x11node_service_name\x18\x04 \x01(\tR\x0fnodeServiceName\x12(\n" +

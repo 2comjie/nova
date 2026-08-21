@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/2comjie/nova/registry"
 )
@@ -74,19 +75,19 @@ func NewNodeLocator(provider Locator) *NodeLocator {
 	return &NodeLocator{provider: provider}
 }
 
-func (l *GateLocator) Bind(ctx context.Context, uid string, binding GateBinding) (GateBinding, error) {
+func (l *GateLocator) Bind(ctx context.Context, uid uint64, binding GateBinding) (GateBinding, error) {
 	value, err := encodeGateBinding(binding)
 	if err != nil {
 		return GateBinding{}, err
 	}
-	previous, err := l.provider.Bind(ctx, GateName, uid, value)
+	previous, err := l.provider.Bind(ctx, GateName, strconv.FormatUint(uid, 10), value)
 	if err != nil || previous == "" {
 		return GateBinding{}, err
 	}
 	return decodeGateBinding(previous)
 }
 
-func (l *GateLocator) Restore(ctx context.Context, uid string, current GateBinding, previous GateBinding) (bool, error) {
+func (l *GateLocator) Restore(ctx context.Context, uid uint64, current GateBinding, previous GateBinding) (bool, error) {
 	currentValue, err := encodeGateBinding(current)
 	if err != nil {
 		return false, err
@@ -95,19 +96,19 @@ func (l *GateLocator) Restore(ctx context.Context, uid string, current GateBindi
 	if err != nil {
 		return false, err
 	}
-	return l.provider.Restore(ctx, GateName, uid, currentValue, previousValue)
+	return l.provider.Restore(ctx, GateName, strconv.FormatUint(uid, 10), currentValue, previousValue)
 }
 
-func (l *GateLocator) Unbind(ctx context.Context, uid string, binding GateBinding) error {
+func (l *GateLocator) Unbind(ctx context.Context, uid uint64, binding GateBinding) error {
 	value, err := encodeGateBinding(binding)
 	if err != nil {
 		return err
 	}
-	return l.provider.Unbind(ctx, GateName, uid, value)
+	return l.provider.Unbind(ctx, GateName, strconv.FormatUint(uid, 10), value)
 }
 
-func (l *GateLocator) Locate(ctx context.Context, uid string) (string, error) {
-	value, err := l.provider.Locate(ctx, GateName, uid)
+func (l *GateLocator) Locate(ctx context.Context, uid uint64) (string, error) {
+	value, err := l.provider.Locate(ctx, GateName, strconv.FormatUint(uid, 10))
 	if err != nil || value == "" {
 		return "", err
 	}

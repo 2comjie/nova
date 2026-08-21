@@ -189,7 +189,7 @@ func (s *Server) handleReq(session *Session, message *packet.Message) {
 	}
 }
 
-func (s *Server) PushUID(ctx context.Context, uid string, route uint32, body []byte) error {
+func (s *Server) PushUID(ctx context.Context, uid uint64, route uint32, body []byte) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -209,7 +209,7 @@ func (s *Server) PushUID(ctx context.Context, uid string, route uint32, body []b
 	})
 }
 
-func (s *Server) KickUID(uid string) bool {
+func (s *Server) KickUID(uid uint64) bool {
 	return s.manager.KickUID(uid)
 }
 
@@ -217,7 +217,7 @@ func (s *Server) KickSession(id uint64) bool {
 	return s.manager.KickSession(id)
 }
 
-func (s *Server) KickUIDSession(uid string, id uint64) bool {
+func (s *Server) KickUIDSession(uid uint64, id uint64) bool {
 	return s.manager.KickUIDSession(uid, id)
 }
 
@@ -248,7 +248,7 @@ func (s *Server) Broadcast(ctx context.Context, route uint32, body []byte) (uint
 	return s.pushSessions(ctx, sessions, route, body)
 }
 
-func (s *Server) MultiPush(ctx context.Context, uidList []string, route uint32, body []byte) (uint32, error) {
+func (s *Server) MultiPush(ctx context.Context, uidList []uint64, route uint32, body []byte) (uint32, error) {
 	sessions := s.manager.ByUIDs(uidList)
 	return s.pushSessions(ctx, sessions, route, body)
 }

@@ -52,7 +52,7 @@ func onChatSend(ctx *node.Context) error {
 	if err := ctx.App.Push(ctx, request.ToUID, shared.RouteChatPush, pushBody); err != nil {
 		return replyChat(ctx, shared.ChatSendResponse{Error: err.Error()})
 	}
-	logx.Infof("聊天发送 from=%s to=%s text=%s", ctx.Request.UID, request.ToUID, request.Text)
+	logx.Infof("聊天发送 from=%d to=%d text=%s", ctx.Request.UID, request.ToUID, request.Text)
 	return replyChat(ctx, shared.ChatSendResponse{Success: true})
 }
 

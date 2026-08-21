@@ -3,6 +3,7 @@ package gate
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	pbGate "github.com/2comjie/nova/internal/pb/transport/gate"
 	"github.com/2comjie/nova/network"
@@ -12,7 +13,7 @@ import (
 )
 
 func (g *Gate) Push(ctx context.Context, request *pbGate.PushRequest) (*emptypb.Empty, rpcerr.Err) {
-	if request == nil || request.Uid == "" || request.Route == 0 ||
+	if request == nil || request.Uid == 0 || request.Route == 0 ||
 		request.NodeServiceName == "" || request.NodeInstanceId == "" {
 		return nil, rpcerr.NewGRPC(codes.InvalidArgument, "gate: Push参数无效")
 	}
@@ -29,7 +30,7 @@ func (g *Gate) Kick(ctx context.Context, request *pbGate.KickRequest) (*emptypb.
 	if err := ctx.Err(); err != nil {
 		return nil, rpcerr.Wrap(err)
 	}
-	if request == nil || request.Uid == "" ||
+	if request == nil || request.Uid == 0 ||
 		request.NodeServiceName == "" || request.NodeInstanceId == "" {
 		return nil, rpcerr.NewGRPC(codes.InvalidArgument, "gate: Kick参数无效")
 	}
@@ -69,7 +70,7 @@ func (g *Gate) MultiPush(ctx context.Context, request *pbGate.MultiPushRequest) 
 }
 
 func (g *Gate) MockCall(ctx context.Context, request *pbGate.MockCallRequest) (*pbGate.MockCallResponse, rpcerr.Err) {
-	if request == nil || request.Uid == "" || request.Route == 0 ||
+	if request == nil || request.Uid == 0 || request.Route == 0 ||
 		request.NodeServiceName == "" || request.NodeInstanceId == "" {
 		return nil, rpcerr.NewGRPC(codes.InvalidArgument, "gate: MockCall参数无效")
 	}
@@ -79,7 +80,7 @@ func (g *Gate) MockCall(ctx context.Context, request *pbGate.MockCallRequest) (*
 		Uid:        request.Uid,
 		Route:      request.Route,
 		Body:       request.Body,
-		BindingKey: request.Uid,
+		BindingKey: strconv.FormatUint(request.Uid, 10),
 		needReply:  true,
 		forward:    g.forward,
 	}

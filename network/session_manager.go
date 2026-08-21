@@ -13,7 +13,7 @@ type sessionManager struct {
 	mutex            sync.RWMutex
 	byConn           map[transport.Conn]*Session
 	byID             map[uint64]*Session
-	byUID            map[string]*Session
+	byUID            map[uint64]*Session
 	sequence         atomic.Uint64
 	auther           Auther
 	hooks            Hooks
@@ -27,7 +27,7 @@ func newSessionManager(options options) *sessionManager {
 	return &sessionManager{
 		byConn:           make(map[transport.Conn]*Session),
 		byID:             make(map[uint64]*Session),
-		byUID:            make(map[string]*Session),
+		byUID:            make(map[uint64]*Session),
 		auther:           options.auther,
 		hooks:            options.hooks,
 		bindTimeout:      options.bindTimeout,
@@ -101,19 +101,18 @@ func (m *sessionManager) Add(conn transport.Conn) *Session {
 }
 
 func (m *sessionManager) Bind(session *Session, token []byte) error {
-	var uid string
+	var uid uint64
 	var authErr error
 	completed := false
 	help.SafeRun(func() {
 		uid, authErr = m.auther.Auth(token)
 		completed = true
 	})
-	if !completed || authErr != nil || uid == "" {
+	if !completed || authErr != nil || uid == 0 {
 		return ErrUnauthorized
 	}
 
 	now := time.Now()
-	uidValue := uid
 	var old *Session
 	m.mutex.Lock()
 	current, exists := m.byConn[session.Conn]
@@ -125,7 +124,7 @@ func (m *sessionManager) Bind(session *Session, token []byte) error {
 		m.mutex.Unlock()
 		return ErrAlreadyBound
 	}
-	session.uid.Store(&uidValue)
+	session.uid.Store(uid)
 	session.boundAt.Store(now.UnixNano())
 	session.heartbeatAt.Store(now.UnixNano())
 	old = m.byUID[uid]
@@ -163,7 +162,7 @@ func (m *sessionManager) Remove(conn transport.Conn) {
 	delete(m.byConn, conn)
 	delete(m.byID, session.ID)
 	uid := session.UID()
-	if uid != "" && m.byUID[uid] == session {
+	if uid != 0 && m.byUID[uid] == session {
 		delete(m.byUID, uid)
 	}
 	m.mutex.Unlock()
@@ -182,14 +181,14 @@ func (m *sessionManager) ByConn(conn transport.Conn) *Session {
 	return session
 }
 
-func (m *sessionManager) ByUID(uid string) *Session {
+func (m *sessionManager) ByUID(uid uint64) *Session {
 	m.mutex.RLock()
 	session := m.byUID[uid]
 	m.mutex.RUnlock()
 	return session
 }
 
-func (m *sessionManager) KickUID(uid string) bool {
+func (m *sessionManager) KickUID(uid uint64) bool {
 	session := m.ByUID(uid)
 	if session == nil {
 		return false
@@ -209,7 +208,7 @@ func (m *sessionManager) KickSession(id uint64) bool {
 	return true
 }
 
-func (m *sessionManager) KickUIDSession(uid string, id uint64) bool {
+func (m *sessionManager) KickUIDSession(uid uint64, id uint64) bool {
 	m.mutex.RLock()
 	session := m.byID[id]
 	m.mutex.RUnlock()
@@ -246,7 +245,7 @@ func (m *sessionManager) BoundSessions() []*Session {
 	return sessions
 }
 
-func (m *sessionManager) ByUIDs(uidList []string) []*Session {
+func (m *sessionManager) ByUIDs(uidList []uint64) []*Session {
 	m.mutex.RLock()
 	sessions := make([]*Session, 0, len(uidList))
 	seen := make(map[*Session]struct{}, len(uidList))

@@ -12,7 +12,7 @@ var (
 
 type Request struct {
 	Route           uint32
-	UID             string
+	UID             uint64
 	Body            []byte
 	GateServiceName string
 	GateInstanceID  string

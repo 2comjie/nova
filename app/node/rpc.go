@@ -34,7 +34,7 @@ func (n *Node) Tell(ctx context.Context, request *pbNode.Request) (*pbNode.Respo
 }
 
 func (n *Node) handle(ctx context.Context, request *pbNode.Request, needReply bool) (*Context, error) {
-	if request == nil || request.Uid == "" || request.Route == 0 || request.GateServiceName != locator.GateName || request.GateInstanceId == "" {
+	if request == nil || request.Uid == 0 || request.Route == 0 || request.GateServiceName != locator.GateName || request.GateInstanceId == "" {
 		return nil, status.Error(codes.InvalidArgument, "node: 请求参数无效")
 	}
 

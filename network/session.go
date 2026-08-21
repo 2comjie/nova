@@ -12,24 +12,20 @@ type Session struct {
 	Conn transport.Conn
 
 	acceptedAt  time.Time
-	uid         atomic.Pointer[string]
+	uid         atomic.Uint64
 	boundAt     atomic.Int64
 	heartbeatAt atomic.Int64
 }
 
-func (s *Session) UID() string {
+func (s *Session) UID() uint64 {
 	if s == nil {
-		return ""
+		return 0
 	}
-	value := s.uid.Load()
-	if value == nil {
-		return ""
-	}
-	return *value
+	return s.uid.Load()
 }
 
 func (s *Session) IsBound() bool {
-	return s != nil && s.uid.Load() != nil
+	return s != nil && s.uid.Load() != 0
 }
 
 func (s *Session) BoundAt() time.Time {

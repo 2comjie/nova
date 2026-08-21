@@ -1,11 +1,11 @@
 package network
 
 type Auther interface {
-	Auth(token []byte) (uid string, err error)
+	Auth(token []byte) (uid uint64, err error)
 }
 
-type AuthFunc func(token []byte) (uid string, err error)
+type AuthFunc func(token []byte) (uid uint64, err error)
 
-func (f AuthFunc) Auth(token []byte) (string, error) {
+func (f AuthFunc) Auth(token []byte) (uint64, error) {
 	return f(token)
 }

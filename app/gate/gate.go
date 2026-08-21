@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -363,7 +364,7 @@ func (g *Gate) onReq(request *network.ReqContext) {
 		Route:      message.Route,
 		Seq:        message.Seq,
 		Body:       message.Body,
-		BindingKey: request.Session.UID(),
+		BindingKey: strconv.FormatUint(request.Session.UID(), 10),
 		needReply:  request.NeedReply,
 		forward:    g.forward,
 	}
@@ -454,7 +455,7 @@ func (g *Gate) forward(ctx *Context) error {
 
 func (g *Gate) onSessionBind(session *network.Session) error {
 	uid := session.UID()
-	if uid == "" {
+	if uid == 0 {
 		return network.ErrUnauthorized
 	}
 	g.sessions.Store(uid, session.ID)
@@ -467,7 +468,7 @@ func (g *Gate) onSessionBind(session *network.Session) error {
 	previous, err := g.locator.Bind(ctx, uid, current)
 	cancel()
 	if err != nil {
-		logx.Errorf("gate: 绑定UID定位失败 uid=%s instance=%s err=%v", uid, g.instance.ID, err)
+		logx.Errorf("gate: 绑定UID定位失败 uid=%d instance=%s err=%v", uid, g.instance.ID, err)
 		return err
 	}
 	if previous.InstanceID == "" || previous.InstanceID == current.InstanceID {
@@ -485,24 +486,24 @@ func (g *Gate) onSessionBind(session *network.Session) error {
 	if kickErr == nil {
 		return nil
 	}
-	logx.Errorf("gate: 踢出旧Gate Session失败 uid=%s instance=%s session=%d err=%v", uid, previous.InstanceID, previous.SessionID, kickErr)
+	logx.Errorf("gate: 踢出旧Gate Session失败 uid=%d instance=%s session=%d err=%v", uid, previous.InstanceID, previous.SessionID, kickErr)
 
 	ctx, cancel = context.WithTimeout(context.Background(), g.locatorTimeout)
 	restored, restoreErr := g.locator.Restore(ctx, uid, current, previous)
 	cancel()
 	if restoreErr != nil {
-		logx.Errorf("gate: 恢复UID旧定位失败 uid=%s current=%s previous=%s err=%v", uid, current.InstanceID, previous.InstanceID, restoreErr)
+		logx.Errorf("gate: 恢复UID旧定位失败 uid=%d current=%s previous=%s err=%v", uid, current.InstanceID, previous.InstanceID, restoreErr)
 		return errors.Join(kickErr, restoreErr)
 	}
 	if !restored {
-		logx.Warnf("gate: UID定位已被更新，忽略旧定位恢复 uid=%s current=%s previous=%s", uid, current.InstanceID, previous.InstanceID)
+		logx.Warnf("gate: UID定位已被更新，忽略旧定位恢复 uid=%d current=%s previous=%s", uid, current.InstanceID, previous.InstanceID)
 	}
 	return kickErr
 }
 
 func (g *Gate) onSessionEnd(session *network.Session) {
 	uid := session.UID()
-	if uid == "" || !g.sessions.CompareAndDelete(uid, session.ID) {
+	if uid == 0 || !g.sessions.CompareAndDelete(uid, session.ID) {
 		return
 	}
 
@@ -513,13 +514,13 @@ func (g *Gate) onSessionEnd(session *network.Session) {
 	})
 	cancel()
 	if err != nil {
-		logx.Errorf("gate: 解绑UID定位失败 uid=%s instance=%s err=%v", uid, g.instance.ID, err)
+		logx.Errorf("gate: 解绑UID定位失败 uid=%d instance=%s err=%v", uid, g.instance.ID, err)
 	}
 }
 
 func defaultErrorHandler(ctx *Context, err error) {
 	logx.Errorf(
-		"gate: 请求处理失败 uid=%s route=%d routeID=%s targetService=%s targetNode=%s err=%v",
+		"gate: 请求处理失败 uid=%d route=%d routeID=%s targetService=%s targetNode=%s err=%v",
 		ctx.Session.UID(),
 		ctx.Route,
 		ctx.RouteID,

@@ -7,7 +7,7 @@ option go_package = "github.com/2comjie/nova/internal/pb/transport/gate;gate";
 import "google/protobuf/empty.proto";
 
 message PushRequest{
-  string uid = 1;
+  uint64 uid = 1;
   uint32 route = 2;
   bytes body = 3;
   string node_service_name = 4;
@@ -15,7 +15,7 @@ message PushRequest{
 }
 
 message KickRequest {
-  string uid = 1;
+  uint64 uid = 1;
   string node_service_name = 2;
   string node_instance_id = 3;
   uint64 session_id = 4;
@@ -32,7 +32,7 @@ message BroadcastResponse {
 }
 
 message MultiPushRequest {
-  repeated string uid_list = 1;
+  repeated uint64 uid_list = 1;
   uint32 route = 2;
   bytes body = 3;
   string node_service_name = 4;
@@ -43,7 +43,7 @@ message MultiPushResponse {
 }
 
 message MockCallRequest {
-  string uid = 1;
+  uint64 uid = 1;
   uint32 route = 2;
   bytes body = 3;
   string node_service_name = 4;

@@ -22,7 +22,7 @@ func main() {
 		panic(err)
 	}
 
-	err = netClient.Bind(context.Background(), []byte("demo-uid-01"))
+	err = netClient.Bind(context.Background(), []byte("1"))
 	if err != nil {
 		panic(err)
 	}

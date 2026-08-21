@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/2comjie/nova/config"
 	"github.com/2comjie/nova/config/file"
@@ -37,21 +38,24 @@ func main() {
 		deploy.WithConfig(configCenter),
 		deploy.WithNetworkOptions(
 			network.WithListener(clientListener),
-			network.WithAuther(network.AuthFunc(func(token []byte) (string, error) {
+			network.WithAuther(network.AuthFunc(func(token []byte) (uint64, error) {
 				if len(token) == 0 {
-					return "", errors.New("token不能为空")
+					return 0, errors.New("token不能为空")
 				}
-				// 演示环境直接把token作为UID，生产环境应校验并解析正式token。
-				return string(token), nil
+				uid, err := strconv.ParseUint(string(token), 10, 64)
+				if err != nil {
+					return 0, errors.New("token中的UID无效")
+				}
+				return uid, nil
 			})),
 		),
 		deploy.WithGateHooks(network.Hooks{
 			OnSessionBind: func(session *network.Session) error {
-				logx.Infof("玩家连接 uid=%s session=%d", session.UID(), session.ID)
+				logx.Infof("玩家连接 uid=%d session=%d", session.UID(), session.ID)
 				return nil
 			},
 			OnSessionEnd: func(session *network.Session) {
-				logx.Infof("玩家断开 uid=%s session=%d", session.UID(), session.ID)
+				logx.Infof("玩家断开 uid=%d session=%d", session.UID(), session.ID)
 			},
 		}),
 	)

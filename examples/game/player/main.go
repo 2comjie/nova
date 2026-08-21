@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -26,7 +27,7 @@ func main() {
 
 	store := &playerStore{
 		redis:    infrastructure.Redis,
-		profiles: make(map[string]shared.PlayerProfile),
+		profiles: make(map[uint64]shared.PlayerProfile),
 	}
 	router := node.NewRouter()
 	if err := router.Handle(shared.RoutePlayerGet, store.onGet); err != nil {
@@ -64,7 +65,7 @@ func main() {
 type playerStore struct {
 	redis    redis.UniversalClient
 	mutex    sync.Mutex
-	profiles map[string]shared.PlayerProfile
+	profiles map[uint64]shared.PlayerProfile
 }
 
 func (s *playerStore) Name() string {
@@ -111,7 +112,7 @@ func (s *playerStore) onAddExp(ctx *node.Context) error {
 	return s.reply(ctx, profile)
 }
 
-func (s *playerStore) profile(ctx context.Context, uid string) (shared.PlayerProfile, error) {
+func (s *playerStore) profile(ctx context.Context, uid uint64) (shared.PlayerProfile, error) {
 	s.mutex.Lock()
 	profile, exists := s.profiles[uid]
 	s.mutex.Unlock()
@@ -119,7 +120,7 @@ func (s *playerStore) profile(ctx context.Context, uid string) (shared.PlayerPro
 		return profile, nil
 	}
 
-	data, err := s.redis.HGet(ctx, playerDataKey, uid).Bytes()
+	data, err := s.redis.HGet(ctx, playerDataKey, strconv.FormatUint(uid, 10)).Bytes()
 	if err == nil {
 		if err := json.Unmarshal(data, &profile); err != nil {
 			return shared.PlayerProfile{}, err
@@ -185,7 +186,7 @@ func (s *playerStore) flush(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		values[profile.UID] = data
+		values[strconv.FormatUint(profile.UID, 10)] = data
 	}
 	if err := s.redis.HSet(ctx, playerDataKey, values).Err(); err != nil {
 		return err

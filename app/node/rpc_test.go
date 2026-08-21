@@ -44,7 +44,7 @@ func TestRPCReturnsActorRedirect(t *testing.T) {
 		router:   router,
 	}
 	request := &pbNode.Request{
-		Uid:             "uid-1001",
+		Uid:             1001,
 		Route:           1001,
 		GateServiceName: locator.GateName,
 		GateInstanceId:  "gate-1",

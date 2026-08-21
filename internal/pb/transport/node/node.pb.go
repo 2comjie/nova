@@ -23,7 +23,7 @@ const (
 
 type Request struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	Uid             string                 `protobuf:"bytes,1,opt,name=uid,proto3" json:"uid,omitempty"`
+	Uid             uint64                 `protobuf:"varint,1,opt,name=uid,proto3" json:"uid,omitempty"`
 	Route           uint32                 `protobuf:"varint,2,opt,name=route,proto3" json:"route,omitempty"`
 	Body            []byte                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
 	GateServiceName string                 `protobuf:"bytes,4,opt,name=gate_service_name,json=gateServiceName,proto3" json:"gate_service_name,omitempty"`
@@ -63,11 +63,11 @@ func (*Request) Descriptor() ([]byte, []int) {
 	return file_transport_node_node_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Request) GetUid() string {
+func (x *Request) GetUid() uint64 {
 	if x != nil {
 		return x.Uid
 	}
-	return ""
+	return 0
 }
 
 func (x *Request) GetRoute() uint32 {
@@ -179,7 +179,7 @@ const file_transport_node_node_proto_rawDesc = "" +
 	"\n" +
 	"\x19transport/node/node.proto\x12\x13nova.transport.node\"\xb8\x01\n" +
 	"\aRequest\x12\x10\n" +
-	"\x03uid\x18\x01 \x01(\tR\x03uid\x12\x14\n" +
+	"\x03uid\x18\x01 \x01(\x04R\x03uid\x12\x14\n" +
 	"\x05route\x18\x02 \x01(\rR\x05route\x12\x12\n" +
 	"\x04body\x18\x03 \x01(\fR\x04body\x12*\n" +
 	"\x11gate_service_name\x18\x04 \x01(\tR\x0fgateServiceName\x12(\n" +
