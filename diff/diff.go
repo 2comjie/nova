@@ -2,22 +2,47 @@ package diff
 
 type DirtyObject struct {
 	parents []ParentLink
-	root    *DirtyObject
 	bits    Bits
 }
 
 type Parent interface {
 	DiffObject() *DirtyObject
-	MarkDiffChildDirty(slot uint32)
+	MarkDiffChildDirty(linkId uint32)
 }
 
 type ParentLink struct {
 	parent Parent
-	slot   uint32
+	linkId uint32
 }
 
-func (o *DirtyObject) InitBits(filedCount uint32) {
-	o.bits.Init(filedCount)
+func (o *DirtyObject) Init(fieldCount uint32) {
+	o.parents = nil
+	o.bits.Init(fieldCount)
+}
+
+func (o *DirtyObject) AddParent(parent Parent, linkId uint32) {
+	parentObject := parent.DiffObject()
+	for _, link := range o.parents {
+		if link.parent.DiffObject() == parentObject && link.linkId == linkId {
+			return
+		}
+	}
+	o.parents = append(o.parents, ParentLink{parent: parent, linkId: linkId})
+}
+
+func (o *DirtyObject) RemoveParent(parent Parent, linkId uint32) {
+	parentObject := parent.DiffObject()
+	for index, link := range o.parents {
+		if link.parent.DiffObject() != parentObject || link.linkId != linkId {
+			continue
+		}
+
+		lastIndex := len(o.parents) - 1
+		o.parents[index] = o.parents[lastIndex]
+		o.parents[lastIndex] = ParentLink{}
+		o.parents = o.parents[:lastIndex]
+		return
+	}
 }
 
 func (o *DirtyObject) Mark(word uint32, mask uint64) {
@@ -27,7 +52,7 @@ func (o *DirtyObject) Mark(word uint32, mask uint64) {
 	}
 
 	for _, link := range o.parents {
-		link.parent.MarkDiffChildDirty(link.slot)
+		link.parent.MarkDiffChildDirty(link.linkId)
 	}
 }
 
