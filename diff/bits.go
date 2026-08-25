@@ -7,51 +7,53 @@ type Bits struct {
 	overflow *bitWords
 }
 
-func (b *Bits) Init(fieldCount uint32) {
+func (b *Bits) Init(size uint32) {
 	b.first = 0
-	if fieldCount <= 64 {
+	if size <= 64 {
 		b.overflow = nil
 		return
 	}
 
-	words := make(bitWords, (fieldCount-1)>>6)
+	words := make(bitWords, (size-1)>>6)
 	b.overflow = &words
 }
 
-func (b *Bits) Mark(word uint32, mask uint64) (marked bool, firstDirty bool) {
-	if b.Has(word, mask) {
+func (b *Bits) Mark(diffIndex uint32) (marked bool, firstDirty bool) {
+	word := diffIndex >> 6
+	mask := uint64(1) << (diffIndex & 63)
+
+	target := &b.first
+
+	if word != 0 {
+		target = &(*b.overflow)[word-1]
+	}
+
+	if *target&mask != 0 {
 		return false, false
 	}
 
-	firstDirty = !b.Any()
-	if word == 0 {
-		b.first |= mask
-		return true, firstDirty
+	firstDirty = b.first == 0
+	if firstDirty && b.overflow != nil {
+		for _, value := range *b.overflow {
+			if value != 0 {
+				firstDirty = false
+				break
+			}
+		}
 	}
-	(*b.overflow)[word-1] |= mask
+
+	*target |= mask
 	return true, firstDirty
 }
 
-func (b *Bits) Has(word uint32, mask uint64) bool {
+func (b *Bits) IsDirty(diffIndex uint32) bool {
+	word := diffIndex >> 6
+	mask := uint64(1) << (diffIndex & 63)
+
 	if word == 0 {
 		return b.first&mask != 0
 	}
 	return (*b.overflow)[word-1]&mask != 0
-}
-
-func (b *Bits) Any() bool {
-	if b.first != 0 {
-		return true
-	}
-	if b.overflow == nil {
-		return false
-	}
-	for _, word := range *b.overflow {
-		if word != 0 {
-			return true
-		}
-	}
-	return false
 }
 
 func (b *Bits) Clear() {
