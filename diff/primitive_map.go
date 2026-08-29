@@ -5,106 +5,93 @@ import "github.com/2comjie/nova/generic"
 type PrimitiveMap[K generic.Primitive, V generic.Primitive] struct {
 	_ noCopy
 
-	values     map[K]V
-	operations *mapOperationEntries[K]
+	values map[K]V
 
-	parent    *Object // 父对象
+	parent    *Object
 	diffIndex uint32
-	cleared   bool
 }
 
 func (m *PrimitiveMap[K, V]) Init(parent *Object, diffIndex uint32) {
 	m.parent = parent
 	m.diffIndex = diffIndex
-	m.operations = nil
-	m.cleared = false
 }
 
 func (m *PrimitiveMap[K, V]) Len() int {
 	return len(m.values)
 }
 
-func (m *PrimitiveMap[K, V]) Load(k K) (V, bool) {
-	v, ok := m.values[k]
-	return v, ok
+func (m *PrimitiveMap[K, V]) Load(key K) (V, bool) {
+	value, exists := m.values[key]
+	return value, exists
 }
 
-func (m *PrimitiveMap[K, V]) Store(k K, v V) bool {
-	old, ex := m.values[k]
-	if ex && old == v {
+func (m *PrimitiveMap[K, V]) Store(key K, value V) bool {
+	oldValue, exists := m.values[key]
+	if exists && oldValue == value {
 		return false
 	}
 
 	if m.values == nil {
 		m.values = make(map[K]V)
 	}
-	m.values[k] = v
-	m.recordOperation(k, MapOperationStore) // store 操作
-	m.parent.MarkDirty(m.diffIndex)
+	m.values[key] = value
+
+	m.writePatch(key, MapSet, value)
 	return true
 }
 
-func (m *PrimitiveMap[K, V]) Delete(k K) bool {
-	_, ex := m.values[k]
-	if !ex {
+func (m *PrimitiveMap[K, V]) Delete(key K) bool {
+	if _, exists := m.values[key]; !exists {
 		return false
 	}
 
-	delete(m.values, k)
-	m.recordOperation(k, MapOperationDelete)
-	m.parent.MarkDirty(m.diffIndex)
+	delete(m.values, key)
+	m.writePatch(key, MapDelete, nil)
 	return true
 }
 
 func (m *PrimitiveMap[K, V]) Clear() bool {
-	if len(m.values) == 0 && m.operations == nil {
+	if len(m.values) == 0 {
 		return false
 	}
 
 	m.values = nil
-	m.operations = nil
-	m.cleared = true
-	m.parent.MarkDirty(m.diffIndex)
+	m.parent.writeChildPatch(m.diffIndex, nil, MapClear, nil)
 	return true
 }
 
-func (m *PrimitiveMap[K, V]) Range(f func(K, V) bool) {
-	if len(m.values) == 0 && m.operations == nil {
-		return
-	}
-	for k, v := range m.values {
-		if !f(k, v) {
+func (m *PrimitiveMap[K, V]) Range(fn func(K, V) bool) {
+	for key, value := range m.values {
+		if !fn(key, value) {
 			return
 		}
 	}
 }
 
-func (m *PrimitiveMap[K, V]) IsCleared() bool {
-	return m.cleared
-}
-
-func (m *PrimitiveMap[K, V]) RangeOperations(fn func(key K, operation MapOperation) bool) {
-	if m.operations == nil {
-		return
+func (m *PrimitiveMap[K, V]) AppendValue(data []byte, diffIndex uint32) []byte {
+	if len(m.values) == 0 {
+		return data
 	}
 
-	for _, entry := range *m.operations {
-		if !fn(entry.key, entry.operation) {
-			return
-		}
+	data, fieldLengthIndex := beginField(data, diffIndex)
+	for key, value := range m.values {
+		var lengthIndex int
+		data, lengthIndex = beginValue(data)
+		data = appendPrimitive(data, key)
+		data = endValue(data, lengthIndex)
+
+		data, lengthIndex = beginValue(data)
+		data = appendPrimitive(data, value)
+		data = endValue(data, lengthIndex)
 	}
+	return endValue(data, fieldLengthIndex)
 }
 
-func (m *PrimitiveMap[K, V]) ClearDirty() {
-	m.operations = nil
-	m.cleared = false
-}
-
-func (m *PrimitiveMap[K, V]) recordOperation(key K, operation MapOperation) {
-	if m.operations == nil {
-		entries := make(mapOperationEntries[K], 0, 1)
-		m.operations = &entries
+func (m *PrimitiveMap[K, V]) writePatch(key K, operation Operation, value any) {
+	node := pathNode{
+		fieldIndex: m.diffIndex,
+		keyType:    PathMap,
+		key:        key,
 	}
-
-	m.operations.record(key, operation)
+	m.parent.writePatch(&node, operation, value)
 }

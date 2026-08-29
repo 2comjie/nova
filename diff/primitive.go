@@ -25,6 +25,17 @@ func (p *Primitive[T]) SetValue(value T) bool {
 	}
 
 	p.value = value
-	p.parent.MarkDirty(p.diffIndex)
+	p.parent.writeChildPatch(p.diffIndex, nil, PrimitiveSet, value)
 	return true
+}
+
+func (p *Primitive[T]) AppendValue(data []byte, diffIndex uint32) []byte {
+	var zero T
+	if p.value == zero {
+		return data
+	}
+
+	data, lengthIndex := beginField(data, diffIndex)
+	data = appendPrimitive(data, p.value)
+	return endValue(data, lengthIndex)
 }
