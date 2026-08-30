@@ -23,6 +23,10 @@ func (m *PointerMap[K, V]) Init(parent *Object, diffIndex uint32) {
 	}
 }
 
+func (m *PointerMap[K, V]) Initialized() bool {
+	return m.parent != nil
+}
+
 func (m *PointerMap[K, V]) Len() int {
 	return len(m.values)
 }
@@ -64,6 +68,7 @@ func (m *PointerMap[K, V]) Store(key K, value V) bool {
 		oldValue.RemoveParent(m, key)
 	}
 
+	value.EnsureDiffLink()
 	if m.values == nil {
 		m.values = make(map[K]V)
 	}
@@ -91,6 +96,7 @@ func (m *PointerMap[K, V]) Delete(key K) bool {
 			return false
 		}
 		value.RemoveParent(m, key)
+		newValue.EnsureDiffLink()
 		m.values[key] = newValue
 		newValue.AddParent(m, key)
 		event.operation = ChangeMapStore

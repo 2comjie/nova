@@ -6,6 +6,17 @@ func (value *{{.Receiver}}) InitLink(writer *{{.DiffAlias}}.Writer) {
 	value.InitDiffLink(writer, make(map[*{{.DiffAlias}}.Object]struct{}))
 }
 
+func (value *{{.Receiver}}) EnsureDiffLink() {
+	if value == nil {
+		return
+	}
+{{if .InitField}}	if value.{{.InitField}}.Initialized() {
+		return
+	}
+	value.InitDiffLink(nil, make(map[*{{.DiffAlias}}.Object]struct{}))
+{{else}}	return
+{{end}}}
+
 func (value *{{.Receiver}}) InitDiffLink(writer *{{.DiffAlias}}.Writer, visited map[*{{.DiffAlias}}.Object]struct{}) {
 	if value == nil {
 		return

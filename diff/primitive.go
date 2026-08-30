@@ -15,6 +15,10 @@ func (p *Primitive[T]) Init(parent *Object, diffIndex uint32) {
 	p.diffIndex = diffIndex
 }
 
+func (p *Primitive[T]) Initialized() bool {
+	return p.parent != nil
+}
+
 func (p *Primitive[T]) GetValue() T {
 	return p.value
 }

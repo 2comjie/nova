@@ -2,6 +2,7 @@ package diff
 
 type PointerValue interface {
 	comparable
+	EnsureDiffLink()
 	AddParent(parent Parent, key any)
 	RemoveParent(parent Parent, key any)
 	AppendDiffValue(data []byte) []byte
@@ -22,6 +23,10 @@ func (p *Pointer[T]) Init(parent *Object, diffIndex uint32) {
 	if p.value != zero {
 		p.value.AddParent(parent, diffIndex)
 	}
+}
+
+func (p *Pointer[T]) Initialized() bool {
+	return p.parent != nil
 }
 
 func (p *Pointer[T]) GetValue() T {
@@ -58,6 +63,7 @@ func (p *Pointer[T]) SetValue(value T) bool {
 	p.value = value
 
 	if value != zero {
+		value.EnsureDiffLink()
 		value.AddParent(p.parent, p.diffIndex)
 		p.parent.writeChildPatch(p.diffIndex, nil, PointerSet, value)
 	} else {

@@ -49,6 +49,7 @@ type Player[T ~int32] struct {
 	content := string(data)
 	for _, expected := range []string{
 		"func (value *Player[T]) InitLink(writer *diff.Writer)",
+		"func (value *Player[T]) EnsureDiffLink()",
 		"func (value *Player[T]) InitDiffLink(writer *diff.Writer, visited map[*diff.Object]struct{})",
 		"child.InitDiffLink(nil, visited)",
 		"value.Level.Init(&value.Object, 1)",
@@ -283,10 +284,8 @@ func init() {
 func TestLinks(t *testing.T) {
 	afterCount = 0
 	item := &Item{}
-	item.InitLink(nil)
 	item.SetCount(1)
 	bag := &Bag{}
-	bag.InitLink(nil)
 	bag.Items().Store(7, item)
 	bag.Order().Append(item)
 	player := &Player{}
@@ -313,7 +312,6 @@ func TestLinks(t *testing.T) {
 		t.Fatal("canceled bag clear was applied")
 	}
 	blockedItem := &Item{}
-	blockedItem.InitLink(nil)
 	if player.GetBag().Items().Store(8, blockedItem) {
 		t.Fatal("canceled pointer map store was applied")
 	}
@@ -412,7 +410,6 @@ func init() {
 
 func TestGenericPath(t *testing.T) {
 	child := &Node[int32]{}
-	child.InitLink(nil)
 	box := &Box[int32]{}
 	box.InitLink(diff.NewWriter())
 	box.SetChild(child)

@@ -21,6 +21,10 @@ func (s *PointerSlice[V]) Init(parent *Object, diffIndex uint32) {
 	}
 }
 
+func (s *PointerSlice[V]) Initialized() bool {
+	return s.parent != nil
+}
+
 func (s *PointerSlice[V]) Len() int {
 	return len(s.values)
 }
@@ -47,6 +51,7 @@ func (s *PointerSlice[V]) SetValue(index int, value V) bool {
 
 	s.values[index] = value
 	if value != zero {
+		value.EnsureDiffLink()
 		value.AddParent(s, index)
 	}
 
@@ -66,6 +71,7 @@ func (s *PointerSlice[V]) Append(value V) {
 	s.values = append(s.values, value)
 
 	if value != zero {
+		value.EnsureDiffLink()
 		value.AddParent(s, index)
 	}
 	s.writePatch()
@@ -92,6 +98,7 @@ func (s *PointerSlice[V]) Insert(index int, value V) {
 	s.values[index] = value
 
 	if value != zero {
+		value.EnsureDiffLink()
 		value.AddParent(s, index)
 	}
 	s.writePatch()
@@ -165,6 +172,7 @@ func (s *PointerSlice[V]) Move(index int, toIndex int) bool {
 
 	s.values[toIndex] = value
 	if value != zero {
+		value.EnsureDiffLink()
 		value.AddParent(s, toIndex)
 	}
 

@@ -16,6 +16,10 @@ func (m *PrimitiveMap[K, V]) Init(parent *Object, diffIndex uint32) {
 	m.diffIndex = diffIndex
 }
 
+func (m *PrimitiveMap[K, V]) Initialized() bool {
+	return m.parent != nil
+}
+
 func (m *PrimitiveMap[K, V]) Len() int {
 	return len(m.values)
 }

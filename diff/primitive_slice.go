@@ -18,6 +18,10 @@ func (s *PrimitiveSlice[T]) Init(parent *Object, diffIndex uint32) {
 	s.diffIndex = diffIndex
 }
 
+func (s *PrimitiveSlice[T]) Initialized() bool {
+	return s.parent != nil
+}
+
 func (s *PrimitiveSlice[T]) Len() int {
 	return len(s.values)
 }

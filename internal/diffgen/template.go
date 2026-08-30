@@ -37,6 +37,7 @@ type templateType struct {
 	PathTypeArgs     string
 	PathRootTypeArgs string
 	Generic          bool
+	InitField        string
 	Fields           []templateField
 }
 
@@ -151,6 +152,9 @@ func buildTemplateFile(source sourceFile) templateFile {
 			}
 			fieldModel.RuntimeType = runtimeFieldType(source, field, diffAlias)
 			typeModel.Fields = append(typeModel.Fields, fieldModel)
+		}
+		if len(typeModel.Fields) != 0 {
+			typeModel.InitField = typeModel.Fields[0].RuntimeName
 		}
 		model.Types = append(model.Types, typeModel)
 	}

@@ -599,6 +599,10 @@ func writeFile(path string, data []byte) error {
 		temporary.Close()
 		return err
 	}
+	if err := temporary.Chmod(0o644); err != nil {
+		temporary.Close()
+		return err
+	}
 	if err := temporary.Close(); err != nil {
 		return err
 	}
