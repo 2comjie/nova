@@ -1,6 +1,6 @@
 module github.com/2comjie/nova
 
-go 1.24.3
+go 1.27.0
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0

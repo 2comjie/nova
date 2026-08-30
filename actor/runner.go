@@ -16,7 +16,7 @@ type RunnerConfig struct {
 }
 
 type Runner[T actorDef.Actor] struct {
-	self   actorDef.PID
+	self   actorDef.Pid
 	actor  T
 	config RunnerConfig
 
@@ -31,12 +31,9 @@ type Runner[T actorDef.Actor] struct {
 	stopped bool
 
 	stopReason actorDef.StopReason
-
-	errMu sync.Mutex
-	err   error
 }
 
-func NewRunner[T actorDef.Actor](parentCtx context.Context, self actorDef.PID, actorValue T, config RunnerConfig) *Runner[T] {
+func NewRunner[T actorDef.Actor](parentCtx context.Context, self actorDef.Pid, actorValue T, config RunnerConfig) *Runner[T] {
 	if config.QueueCap == 0 {
 		config.QueueCap = 1024
 	}
@@ -95,14 +92,7 @@ func (r *Runner[T]) WaitResultOnMainLoop(waitCtx context.Context, fn func(T)) er
 	done := make(chan struct{}, 1)
 
 	err := r.RunOnMainLoop(func(actorValue T) {
-		defer func() {
-			done <- struct{}{}
-		}()
-
-		if waitCtx.Err() != nil {
-			return
-		}
-
+		defer func() { done <- struct{}{} }()
 		fn(actorValue)
 	})
 	if err != nil {
@@ -111,23 +101,20 @@ func (r *Runner[T]) WaitResultOnMainLoop(waitCtx context.Context, fn func(T)) er
 
 	select {
 	case <-done:
-		return waitCtx.Err()
+		return nil
 	case <-waitCtx.Done():
 		return waitCtx.Err()
 	case <-r.done:
 		select {
 		case <-done:
-			return waitCtx.Err()
+			return nil
 		default:
-		}
-		if err := r.Err(); err != nil {
-			return err
 		}
 		return errors.New("runner stopped")
 	}
 }
 
-func (r *Runner[T]) Stop(reason actorDef.StopReason) error {
+func (r *Runner[T]) Stop(reason actorDef.StopReason) {
 	r.RequestStop(reason)
 
 	r.stateMu.Lock()
@@ -137,7 +124,6 @@ func (r *Runner[T]) Stop(reason actorDef.StopReason) error {
 	if started {
 		<-r.done
 	}
-	return r.Err()
 }
 
 func (r *Runner[T]) RequestStop(reason actorDef.StopReason) {
@@ -172,7 +158,6 @@ func (r *Runner[T]) loop() {
 	})
 
 	if startErr != nil {
-		r.setErr(startErr)
 		r.markStopped()
 		r.start <- startErr
 		return
@@ -182,19 +167,13 @@ func (r *Runner[T]) loop() {
 
 	defer func() {
 		r.markStopped()
-
-		stopErr := errors.New("actor stop panic")
 		help.SafeRun(func() {
-			stopErr = r.actor.OnStop(actorDef.ActorStopCtx{
+			r.actor.OnStop(actorDef.ActorStopCtx{
 				Context: context.WithoutCancel(r.runCtx),
 				Self:    r.self,
 				Reason:  r.stopReason,
 			})
 		})
-
-		if stopErr != nil {
-			r.setErr(stopErr)
-		}
 	}()
 
 	lastUpdate := time.Now()
@@ -259,14 +238,6 @@ func (r *Runner[T]) loop() {
 	}
 }
 
-func (r *Runner[T]) setErr(err error) {
-	r.errMu.Lock()
-	if r.err == nil {
-		r.err = err
-	}
-	r.errMu.Unlock()
-}
-
 func (r *Runner[T]) markStopped() {
 	r.stateMu.Lock()
 	r.stopped = true
@@ -282,10 +253,4 @@ func (r *Runner[T]) Running() bool {
 	r.stateMu.Lock()
 	defer r.stateMu.Unlock()
 	return r.started && !r.stopped
-}
-
-func (r *Runner[T]) Err() error {
-	r.errMu.Lock()
-	defer r.errMu.Unlock()
-	return r.err
 }

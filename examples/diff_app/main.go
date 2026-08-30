@@ -25,13 +25,13 @@ func init() {
 		}
 	})
 
-	diff.ListenMapBefore(player.PlayerDiff.Bag().Items().Changes(), func(change *diff.MapChange[uint64, *item.Item[int32]]) {
+	diff.ListenMapBefore(player.PlayerDiff.Bag().Items().Changes(), func(change *diff.MapChange[uint64, *item.Item]) {
 		if change.Operation == diff.ChangeMapStore && change.Key != change.NewValue.GetItemId() {
 			change.Cancel("ItemId必须和Map key一致")
 		}
 	})
 
-	diff.ListenBefore(item.ItemDiff[int64]().Count(), func(change *diff.Change[int64]) {
+	diff.ListenBefore(item.ItemDiff.Count(), func(change *diff.Change[int32]) {
 		if change.NewValue > 999 {
 			change.Replace(999)
 		}
@@ -46,7 +46,7 @@ func main() {
 	bagValue := &bag.Bag{}
 	playerValue.SetBag(bagValue)
 
-	itemValue := &item.Item[int32]{}
+	itemValue := &item.Item{}
 	itemValue.SetItemId(1001)
 	itemValue.SetCount(5)
 
@@ -83,13 +83,4 @@ func main() {
 	fmt.Printf("跨包合并: uid=%d level=%d itemCount=%d score=%d recentLevel=%d deltaBytes=%d\n",
 		replica.GetUid(), replica.GetLevel(), replicaItem.GetCount(), score, latestLevel, len(delta))
 
-	genericWriter := diff.NewWriter()
-	genericItem := &item.Item[int64]{}
-	genericItem.InitLink(genericWriter)
-	genericItem.SetItemId(2001)
-	genericItem.SetCount(1200)
-	genericDelta := genericItem.Commit()
-	fmt.Println(genericDelta.String())
-	fmt.Printf("范型Item: id=%d count=%d deltaBytes=%d\n",
-		genericItem.GetItemId(), genericItem.GetCount(), len(genericDelta))
 }

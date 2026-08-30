@@ -8,13 +8,13 @@ import (
 )
 
 func TestAddComponentBeforeStart(t *testing.T) {
-	gateApp := &Gate{}
-	component := &app.CommonComponent{MName: "actor"}
+	gateApp := &Gate{App: app.New()}
+	component := &app.CommonComponent{}
 	if err := gateApp.AddComponent(component); err != nil {
 		t.Fatal(err)
 	}
-	if len(gateApp.components) != 1 || gateApp.components[0] != component {
-		t.Fatalf("components=%v", gateApp.components)
+	if got, ok := gateApp.GetComponent[*app.CommonComponent](); !ok || got != component {
+		t.Fatalf("component=%v exists=%v", got, ok)
 	}
 
 	gateApp.started.Store(true)

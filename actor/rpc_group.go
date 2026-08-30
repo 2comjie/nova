@@ -4,10 +4,9 @@ import (
 	"context"
 
 	"github.com/2comjie/nova/actor/actorDef"
-	"github.com/2comjie/nova/core/help"
 )
 
-type RPCHandler[T actorDef.Actor] func(actorValue T, pid actorDef.PID, ctx context.Context, message Message) ([]byte, error)
+type RPCHandler[T actorDef.Actor] func(actorValue T, pid actorDef.Pid, ctx context.Context, message Message) ([]byte, error)
 
 type RPCMiddleware[T actorDef.Actor] func(next RPCHandler[T]) RPCHandler[T]
 
@@ -46,9 +45,7 @@ func (g *RPCRouteGroup[T]) Handle(route uint32, handler RPCHandler[T]) {
 		var body []byte
 		var handleErr error = ErrMessageHandlerPanic
 		err = runner.WaitResultOnMainLoop(ctx, func(actorValue T) {
-			help.SafeRun(func() {
-				body, handleErr = handler(actorValue, runner.self, ctx, message)
-			})
+			body, handleErr = handler(actorValue, runner.self, ctx, message)
 		})
 		if err != nil {
 			return nil, false, err

@@ -27,9 +27,6 @@ func (g *Gate) Push(ctx context.Context, request *pbGate.PushRequest) (*emptypb.
 }
 
 func (g *Gate) Kick(ctx context.Context, request *pbGate.KickRequest) (*emptypb.Empty, rpcerr.Err) {
-	if err := ctx.Err(); err != nil {
-		return nil, rpcerr.Wrap(err)
-	}
 	if request == nil || request.Uid == 0 ||
 		request.NodeServiceName == "" || request.NodeInstanceId == "" {
 		return nil, rpcerr.NewGRPC(codes.InvalidArgument, "gate: Kick参数无效")

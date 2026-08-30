@@ -85,6 +85,14 @@ func Generate(dir string) ([]string, error) {
 			return nil, err
 		}
 		generatedFiles = append(generatedFiles, output)
+
+		if source.schema {
+			protoFiles, err := generateProtoFiles(source)
+			if err != nil {
+				return nil, err
+			}
+			generatedFiles = append(generatedFiles, protoFiles...)
+		}
 	}
 	return generatedFiles, nil
 }
@@ -150,6 +158,9 @@ func parseDataType(source sourceFile, typeSpec *ast.TypeSpec, structure *ast.Str
 	}
 
 	if source.schema {
+		if typeSpec.TypeParams != nil {
+			return dataType{}, false, fmt.Errorf("diffgen: %s: diff数据类型不支持泛型，请使用具体类型和组合", data.name)
+		}
 		return parseSchemaType(source, data, structure)
 	}
 
@@ -216,6 +227,9 @@ func parseDataType(source sourceFile, typeSpec *ast.TypeSpec, structure *ast.Str
 		}
 		return dataType{}, false, nil
 	}
+	if typeSpec.TypeParams != nil {
+		return dataType{}, false, fmt.Errorf("diffgen: %s: diff数据类型不支持泛型，请使用具体类型和组合", data.name)
+	}
 	sort.Slice(data.fields, func(left int, right int) bool {
 		return data.fields[left].diffIndex < data.fields[right].diffIndex
 	})
@@ -271,6 +285,9 @@ func parseSchemaType(source sourceFile, data dataType, structure *ast.StructType
 }
 
 func classifySchemaType(expression ast.Expr) (wrapperKind, ast.Expr, ast.Expr, error) {
+	if containsGenericType(expression) {
+		return 0, nil, nil, errors.New("diff字段不支持泛型实例，请使用具体类型和组合")
+	}
 	switch value := expression.(type) {
 	case *ast.StarExpr:
 		if !isNamedType(value.X) {
@@ -278,8 +295,8 @@ func classifySchemaType(expression ast.Expr) (wrapperKind, ast.Expr, ast.Expr, e
 		}
 		return pointerKind, nil, expression, nil
 	case *ast.MapType:
-		if !isPrimitiveType(value.Key) {
-			return 0, nil, nil, errors.New("Map的Key必须是基础类型")
+		if !isProtoMapKey(value.Key) {
+			return 0, nil, nil, errors.New("Map的Key必须是bool、int32、int64、uint32、uint64或string")
 		}
 		if pointer, ok := value.Value.(*ast.StarExpr); ok {
 			if !isNamedType(pointer.X) {
@@ -294,6 +311,9 @@ func classifySchemaType(expression ast.Expr) (wrapperKind, ast.Expr, ast.Expr, e
 	case *ast.ArrayType:
 		if value.Len != nil {
 			return 0, nil, nil, errors.New("不支持定长数组")
+		}
+		if identifier, ok := value.Elt.(*ast.Ident); ok && identifier.Name == "byte" {
+			return primitiveSliceKind, nil, value.Elt, nil
 		}
 		if pointer, ok := value.Elt.(*ast.StarExpr); ok {
 			if !isNamedType(pointer.X) {
@@ -314,8 +334,12 @@ func classifySchemaType(expression ast.Expr) (wrapperKind, ast.Expr, ast.Expr, e
 }
 
 func isPrimitiveType(expression ast.Expr) bool {
-	switch expression.(type) {
-	case *ast.Ident, *ast.SelectorExpr, *ast.IndexExpr, *ast.IndexListExpr:
+	identifier, ok := expression.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	switch identifier.Name {
+	case "bool", "int32", "int64", "uint32", "uint64", "float32", "float64", "string":
 		return true
 	default:
 		return false
@@ -324,11 +348,38 @@ func isPrimitiveType(expression ast.Expr) bool {
 
 func isNamedType(expression ast.Expr) bool {
 	switch expression.(type) {
-	case *ast.Ident, *ast.SelectorExpr, *ast.IndexExpr, *ast.IndexListExpr:
+	case *ast.Ident, *ast.SelectorExpr:
 		return true
 	default:
 		return false
 	}
+}
+
+func isProtoMapKey(expression ast.Expr) bool {
+	identifier, ok := expression.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	switch identifier.Name {
+	case "bool", "int32", "int64", "uint32", "uint64", "string":
+		return true
+	default:
+		return false
+	}
+}
+
+func containsGenericType(expression ast.Expr) bool {
+	found := false
+	ast.Inspect(expression, func(node ast.Node) bool {
+		switch node.(type) {
+		case *ast.IndexExpr, *ast.IndexListExpr:
+			found = true
+			return false
+		default:
+			return true
+		}
+	})
+	return found
 }
 
 func hasDiffFastBuildTag(file *ast.File) bool {

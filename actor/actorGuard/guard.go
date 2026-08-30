@@ -4,7 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"errors"
-	"sync"
 	"time"
 
 	"github.com/2comjie/nova/actor/actorDef"
@@ -62,7 +61,7 @@ func (g *Guard) InstanceId() string {
 	return g.instanceId
 }
 
-func (g *Guard) TryAcquire(runCtx context.Context, pid actorDef.PID) (*Lease, string, bool, error) {
+func (g *Guard) TryAcquire(runCtx context.Context, pid actorDef.Pid) (*Lease, string, bool, error) {
 	key := g.keyPrefix + pid.String()
 	ownerInstanceId, err := acquireScriptSHA.Run(runCtx, g.rc, []string{key}, g.instanceId, g.ttl.Milliseconds()).Text()
 	if err != nil {
@@ -84,7 +83,7 @@ func (g *Guard) TryAcquire(runCtx context.Context, pid actorDef.PID) (*Lease, st
 	return lease, ownerInstanceId, true, nil
 }
 
-func (g *Guard) Owner(ctx context.Context, pid actorDef.PID) (string, error) {
+func (g *Guard) Owner(ctx context.Context, pid actorDef.Pid) (string, error) {
 	ownerInstanceId, err := g.rc.Get(ctx, g.keyPrefix+pid.String()).Result()
 	if errors.Is(err, redis.Nil) {
 		return "", nil
@@ -99,19 +98,19 @@ type Lease struct {
 	renewCtx  context.Context
 	stopRenew context.CancelFunc
 	done      chan struct{}
-
-	errMu sync.RWMutex
-	err   error
 }
 
 func (l *Lease) Done() <-chan struct{} {
 	return l.done
 }
 
-func (l *Lease) Err() error {
-	l.errMu.RLock()
-	defer l.errMu.RUnlock()
-	return l.err
+func (l *Lease) Active() bool {
+	select {
+	case <-l.done:
+		return false
+	default:
+		return true
+	}
 }
 
 func (l *Lease) Release() error {
@@ -147,21 +146,11 @@ func (l *Lease) renew() {
 				l.guard.ttl.Milliseconds(),
 			).Int64()
 			if err != nil {
-				if l.renewCtx.Err() == nil {
-					l.setErr(err)
-				}
 				return
 			}
 			if renewed == 0 {
-				l.setErr(ErrGuardLost)
 				return
 			}
 		}
 	}
-}
-
-func (l *Lease) setErr(err error) {
-	l.errMu.Lock()
-	l.err = err
-	l.errMu.Unlock()
 }

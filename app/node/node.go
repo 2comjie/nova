@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -45,6 +44,7 @@ type Config struct {
 
 type Node struct {
 	pbNode.UnimplementedNodeServer
+	*app.App
 
 	instance    endpoint.ServiceInstance
 	router      *Router
@@ -55,16 +55,12 @@ type Node struct {
 	discovery   registry.Discover
 	rpcServer   *grpc.Server
 	rpcListener net.Listener
-	components  []app.Component
-	componentMu sync.Mutex
-
-	ctx               context.Context
-	cancel            context.CancelFunc
-	started           atomic.Bool
-	closed            atomic.Bool
-	startedComponents atomic.Int64
-	serverWait        sync.WaitGroup
-	wait              sync.WaitGroup
+	ctx         context.Context
+	cancel      context.CancelFunc
+	started     atomic.Bool
+	closed      atomic.Bool
+	serverWait  sync.WaitGroup
+	wait        sync.WaitGroup
 }
 
 func New(config Config) *Node {
@@ -97,6 +93,7 @@ func New(config Config) *Node {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	node := &Node{
+		App:         app.New(config.Components...),
 		instance:    config.Instance,
 		router:      config.Router,
 		nodeLocator: config.NodeLocator,
@@ -106,7 +103,6 @@ func New(config Config) *Node {
 		discovery:   config.Discovery,
 		rpcServer:   config.RPCServer,
 		rpcListener: config.RPCListener,
-		components:  append([]app.Component(nil), config.Components...),
 		ctx:         ctx,
 		cancel:      cancel,
 	}
@@ -115,15 +111,13 @@ func New(config Config) *Node {
 }
 
 func (n *Node) AddComponent(component app.Component) error {
-	n.componentMu.Lock()
-	defer n.componentMu.Unlock()
 	if n.closed.Load() {
 		return ErrClosed
 	}
 	if n.started.Load() {
 		return ErrStarted
 	}
-	n.components = append(n.components, component)
+	n.App.AddComponent(component)
 	return nil
 }
 
@@ -132,63 +126,27 @@ func (n *Node) Router() *Router {
 }
 
 func (n *Node) Start() error {
-	n.componentMu.Lock()
 	if n.closed.Load() {
-		n.componentMu.Unlock()
 		return ErrClosed
 	}
 	if !n.started.CompareAndSwap(false, true) {
-		n.componentMu.Unlock()
 		return ErrStarted
 	}
-	n.componentMu.Unlock()
 	if err := n.router.Freeze(); err != nil {
 		n.started.Store(false)
 		return err
 	}
-
-	for _, component := range n.components {
-		logx.Infof("node: 正在启动组件 name=%s", component.Name())
-		if err := component.Start(); err != nil {
-			var errs []error
-			errs = append(errs, fmt.Errorf("node: 启动组件失败 name=%s: %w", component.Name(), err))
-			n.cancel()
-			for index := int(n.startedComponents.Load()) - 1; index >= 0; index-- {
-				startedComponent := n.components[index]
-				logx.Infof("node: 正在回滚组件 name=%s", startedComponent.Name())
-				if shutdownErr := startedComponent.Shutdown(context.Background()); shutdownErr != nil {
-					errs = append(errs, fmt.Errorf(
-						"node: 回滚组件失败 name=%s: %w",
-						startedComponent.Name(),
-						shutdownErr,
-					))
-				}
-			}
-			n.Wait()
-			n.closed.Store(true)
-			return errors.Join(errs...)
-		}
-		n.startedComponents.Add(1)
-		logx.Infof("node: 组件启动完成 name=%s", component.Name())
+	if err := n.App.Start(); err != nil {
+		n.cancel()
+		n.closed.Store(true)
+		return err
 	}
 	if err := n.registry.Register(n.instance); err != nil {
-		var errs []error
-		errs = append(errs, err)
 		n.cancel()
-		for index := int(n.startedComponents.Load()) - 1; index >= 0; index-- {
-			component := n.components[index]
-			logx.Infof("node: 正在回滚组件 name=%s", component.Name())
-			if shutdownErr := component.Shutdown(context.Background()); shutdownErr != nil {
-				errs = append(errs, fmt.Errorf(
-					"node: 回滚组件失败 name=%s: %w",
-					component.Name(),
-					shutdownErr,
-				))
-			}
-		}
+		_ = n.App.Shutdown(context.Background())
 		n.Wait()
 		n.closed.Store(true)
-		return errors.Join(errs...)
+		return err
 	}
 
 	n.serverWait.Add(1)
@@ -206,11 +164,8 @@ func (n *Node) Shutdown(ctx context.Context) error {
 		return nil
 	}
 
-	var errs []error
 	if n.started.Load() {
-		if err := n.registry.Deregister(n.instance.ID); err != nil {
-			errs = append(errs, err)
-		}
+		_ = n.registry.Deregister(n.instance.ID)
 	}
 
 	rpcDone := make(chan struct{})
@@ -223,20 +178,11 @@ func (n *Node) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		n.rpcServer.Stop()
 		<-rpcDone
-		errs = append(errs, ctx.Err())
 	}
 	n.serverWait.Wait()
 	n.cancel()
 
-	for index := int(n.startedComponents.Load()) - 1; index >= 0; index-- {
-		component := n.components[index]
-		logx.Infof("node: 正在关闭组件 name=%s", component.Name())
-		if err := component.Shutdown(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("node: 关闭组件失败 name=%s: %w", component.Name(), err))
-			continue
-		}
-		logx.Infof("node: 组件关闭完成 name=%s", component.Name())
-	}
+	componentErr := n.App.Shutdown(ctx)
 
 	waitDone := make(chan struct{})
 	help.SafeGo(func() {
@@ -246,9 +192,11 @@ func (n *Node) Shutdown(ctx context.Context) error {
 	select {
 	case <-waitDone:
 	case <-ctx.Done():
-		errs = append(errs, ctx.Err())
 	}
-	return errors.Join(errs...)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return componentErr
 }
 
 func (n *Node) AddWait() {

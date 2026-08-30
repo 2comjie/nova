@@ -9,7 +9,7 @@ import (
 type SimpleActor struct {
 	MUpdate func(ctx actorDef.ActorUpdateCtx) time.Duration
 	MStart  func(ctx actorDef.ActorStartCtx) error
-	MStop   func(ctx actorDef.ActorStopCtx) error
+	MStop   func(ctx actorDef.ActorStopCtx)
 }
 
 func (s *SimpleActor) OnStart(ctx actorDef.ActorStartCtx) error {
@@ -26,9 +26,8 @@ func (s *SimpleActor) OnUpdate(ctx actorDef.ActorUpdateCtx) time.Duration {
 	return 0
 }
 
-func (s *SimpleActor) OnStop(ctx actorDef.ActorStopCtx) error {
+func (s *SimpleActor) OnStop(ctx actorDef.ActorStopCtx) {
 	if s.MStop != nil {
-		return s.MStop(ctx)
+		s.MStop(ctx)
 	}
-	return nil
 }

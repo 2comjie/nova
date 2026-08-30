@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"context"
-	"errors"
 	"maps"
 
 	nodeapp "github.com/2comjie/nova/app/node"
@@ -56,7 +55,12 @@ func (n *NodeApp) Run() error {
 }
 
 func (n *NodeApp) Shutdown(ctx context.Context) error {
-	return errors.Join(n.Node.Shutdown(ctx), n.resources.close())
+	err := n.Node.Shutdown(ctx)
+	closeErr := n.resources.close()
+	if err != nil {
+		return err
+	}
+	return closeErr
 }
 
 func (n *NodeApp) Config() config.Config {

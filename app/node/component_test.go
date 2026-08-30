@@ -8,13 +8,13 @@ import (
 )
 
 func TestAddComponentBeforeStart(t *testing.T) {
-	nodeApp := &Node{}
-	component := &app.CommonComponent{MName: "actor"}
+	nodeApp := &Node{App: app.New()}
+	component := &app.CommonComponent{}
 	if err := nodeApp.AddComponent(component); err != nil {
 		t.Fatal(err)
 	}
-	if len(nodeApp.components) != 1 || nodeApp.components[0] != component {
-		t.Fatalf("components=%v", nodeApp.components)
+	if got, ok := nodeApp.GetComponent[*app.CommonComponent](); !ok || got != component {
+		t.Fatalf("component=%v exists=%v", got, ok)
 	}
 
 	nodeApp.started.Store(true)

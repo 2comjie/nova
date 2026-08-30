@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"maps"
-	"strings"
 
 	gateapp "github.com/2comjie/nova/app/gate"
 	"github.com/2comjie/nova/config"
@@ -26,8 +25,7 @@ func Gate(opts ...Option) (*GateApp, error) {
 	for _, option := range opts {
 		option(&options)
 	}
-	serviceName := strings.TrimSpace(options.serviceName)
-	if serviceName != "" && serviceName != locator.GateName {
+	if options.serviceName != "" && options.serviceName != locator.GateName {
 		panic("deploy: Gate service必须为gate")
 	}
 	if options.gateRouter == nil {
@@ -39,7 +37,8 @@ func Gate(opts ...Option) (*GateApp, error) {
 		return nil, err
 	}
 	if err := loadGateRoutes(resources.config, options.gateRouter); err != nil {
-		return nil, errors.Join(err, resources.close())
+		_ = resources.close()
+		return nil, err
 	}
 
 	app := gateapp.New(gateapp.Config{
@@ -69,7 +68,12 @@ func (g *GateApp) Run() error {
 }
 
 func (g *GateApp) Shutdown(ctx context.Context) error {
-	return errors.Join(g.Gate.Shutdown(ctx), g.resources.close())
+	err := g.Gate.Shutdown(ctx)
+	closeErr := g.resources.close()
+	if err != nil {
+		return err
+	}
+	return closeErr
 }
 
 func (g *GateApp) Config() config.Config {

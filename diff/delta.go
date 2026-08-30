@@ -15,6 +15,10 @@ func (d Delta[Root]) Bytes() []byte {
 	return d
 }
 
+func (d Delta[Root]) Empty() bool {
+	return IsEmptyDelta(d)
+}
+
 func (d Delta[Root]) String() string {
 	var root Root
 	value, err := root.FormatDelta(d)
@@ -22,6 +26,10 @@ func (d Delta[Root]) String() string {
 		return "invalid delta: " + err.Error()
 	}
 	return value
+}
+
+func IsEmptyDelta(data []byte) bool {
+	return len(data) == 1 && data[0] == 0
 }
 
 type DebugPatch struct {

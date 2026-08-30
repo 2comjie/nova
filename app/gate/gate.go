@@ -3,7 +3,6 @@ package gate
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"strconv"
 	"sync"
@@ -53,29 +52,26 @@ type Config struct {
 
 type Gate struct {
 	pbGate.UnimplementedGateServer
+	*app.App
 
-	instance     endpoint.ServiceInstance
-	router       *Router
-	server       *network.Server
-	nodeClient   pbNode.NodeClient
-	gateClient   pbGate.GateClient
-	locator      *locator.GateLocator
-	registry     registry.Registry
-	errorHandler ErrorHandler
-	rpcServer    *grpc.Server
-	rpcListener  net.Listener
-	components   []app.Component
-	componentMu  sync.Mutex
-
-	ctx               context.Context
-	cancel            context.CancelFunc
-	locatorTimeout    time.Duration
-	sessions          sync.Map
-	started           atomic.Bool
-	closed            atomic.Bool
-	startedComponents atomic.Int64
-	serverWait        sync.WaitGroup
-	wait              sync.WaitGroup
+	instance       endpoint.ServiceInstance
+	router         *Router
+	server         *network.Server
+	nodeClient     pbNode.NodeClient
+	gateClient     pbGate.GateClient
+	locator        *locator.GateLocator
+	registry       registry.Registry
+	errorHandler   ErrorHandler
+	rpcServer      *grpc.Server
+	rpcListener    net.Listener
+	ctx            context.Context
+	cancel         context.CancelFunc
+	locatorTimeout time.Duration
+	sessions       sync.Map
+	started        atomic.Bool
+	closed         atomic.Bool
+	serverWait     sync.WaitGroup
+	wait           sync.WaitGroup
 }
 
 func New(config Config) *Gate {
@@ -109,6 +105,7 @@ func New(config Config) *Gate {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	g := &Gate{
+		App:            app.New(config.Components...),
 		instance:       config.Instance,
 		router:         config.Router,
 		nodeClient:     config.NodeClient,
@@ -118,7 +115,6 @@ func New(config Config) *Gate {
 		errorHandler:   config.ErrorHandler,
 		rpcServer:      config.RPCServer,
 		rpcListener:    config.RPCListener,
-		components:     append([]app.Component(nil), config.Components...),
 		ctx:            ctx,
 		cancel:         cancel,
 		locatorTimeout: config.LocatorTimeout,
@@ -171,51 +167,27 @@ func New(config Config) *Gate {
 }
 
 func (g *Gate) AddComponent(component app.Component) error {
-	g.componentMu.Lock()
-	defer g.componentMu.Unlock()
 	if g.closed.Load() {
 		return ErrClosed
 	}
 	if g.started.Load() {
 		return ErrStarted
 	}
-	g.components = append(g.components, component)
+	g.App.AddComponent(component)
 	return nil
 }
 
 func (g *Gate) Start() error {
-	g.componentMu.Lock()
 	if g.closed.Load() {
-		g.componentMu.Unlock()
 		return ErrClosed
 	}
 	if !g.started.CompareAndSwap(false, true) {
-		g.componentMu.Unlock()
 		return ErrStarted
 	}
-	g.componentMu.Unlock()
-
-	for _, component := range g.components {
-		logx.Infof("gate: 正在启动组件 name=%s", component.Name())
-		if err := component.Start(); err != nil {
-			var errs []error
-			errs = append(errs, fmt.Errorf("gate: 启动组件失败 name=%s: %w", component.Name(), err))
-			g.cancel()
-			_ = g.server.Shutdown(context.Background())
-			g.rpcServer.Stop()
-			for index := int(g.startedComponents.Load()) - 1; index >= 0; index-- {
-				startedComponent := g.components[index]
-				logx.Infof("gate: 正在回滚组件 name=%s", startedComponent.Name())
-				if shutdownErr := startedComponent.Shutdown(context.Background()); shutdownErr != nil {
-					errs = append(errs, fmt.Errorf("gate: 回滚组件失败 name=%s: %w", startedComponent.Name(), shutdownErr))
-				}
-			}
-			g.Wait()
-			g.closed.Store(true)
-			return errors.Join(errs...)
-		}
-		g.startedComponents.Add(1)
-		logx.Infof("gate: 组件启动完成 name=%s", component.Name())
+	if err := g.App.Start(); err != nil {
+		g.cancel()
+		g.closed.Store(true)
+		return err
 	}
 	g.serverWait.Add(1)
 	help.SafeGo(func() {
@@ -225,39 +197,25 @@ func (g *Gate) Start() error {
 		}
 	})
 	if err := g.registry.Register(g.instance); err != nil {
-		g.cancel()
-		_ = g.server.Shutdown(context.Background())
-		g.rpcServer.Stop()
-		g.serverWait.Wait()
-		for index := int(g.startedComponents.Load()) - 1; index >= 0; index-- {
-			component := g.components[index]
-			logx.Infof("gate: 正在回滚组件 name=%s", component.Name())
-			if shutdownErr := component.Shutdown(context.Background()); shutdownErr != nil {
-				err = errors.Join(err, fmt.Errorf("gate: 回滚组件失败 name=%s: %w", component.Name(), shutdownErr))
-			}
-		}
-		g.Wait()
-		g.closed.Store(true)
+		g.stopAfterStartFailure()
 		return err
 	}
 	if err := g.server.Start(); err != nil {
 		_ = g.registry.Deregister(g.instance.ID)
-		g.cancel()
-		_ = g.server.Shutdown(context.Background())
-		g.rpcServer.Stop()
-		g.serverWait.Wait()
-		for index := int(g.startedComponents.Load()) - 1; index >= 0; index-- {
-			component := g.components[index]
-			logx.Infof("gate: 正在回滚组件 name=%s", component.Name())
-			if shutdownErr := component.Shutdown(context.Background()); shutdownErr != nil {
-				err = errors.Join(err, fmt.Errorf("gate: 回滚组件失败 name=%s: %w", component.Name(), shutdownErr))
-			}
-		}
-		g.Wait()
-		g.closed.Store(true)
+		g.stopAfterStartFailure()
 		return err
 	}
 	return nil
+}
+
+func (g *Gate) stopAfterStartFailure() {
+	g.cancel()
+	_ = g.server.Shutdown(context.Background())
+	g.rpcServer.Stop()
+	g.serverWait.Wait()
+	_ = g.App.Shutdown(context.Background())
+	g.Wait()
+	g.closed.Store(true)
 }
 
 func (g *Gate) Shutdown(ctx context.Context) error {
@@ -265,15 +223,10 @@ func (g *Gate) Shutdown(ctx context.Context) error {
 		return nil
 	}
 
-	var errs []error
 	if g.started.Load() {
-		if err := g.registry.Deregister(g.instance.ID); err != nil {
-			errs = append(errs, err)
-		}
+		_ = g.registry.Deregister(g.instance.ID)
 	}
-	if err := g.server.Shutdown(ctx); err != nil {
-		errs = append(errs, err)
-	}
+	serverErr := g.server.Shutdown(ctx)
 
 	rpcDone := make(chan struct{})
 	help.SafeGo(func() {
@@ -285,20 +238,11 @@ func (g *Gate) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		g.rpcServer.Stop()
 		<-rpcDone
-		errs = append(errs, ctx.Err())
 	}
 	g.serverWait.Wait()
 	g.cancel()
 
-	for index := int(g.startedComponents.Load()) - 1; index >= 0; index-- {
-		component := g.components[index]
-		logx.Infof("gate: 正在关闭组件 name=%s", component.Name())
-		if err := component.Shutdown(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("gate: 关闭组件失败 name=%s: %w", component.Name(), err))
-			continue
-		}
-		logx.Infof("gate: 组件关闭完成 name=%s", component.Name())
-	}
+	componentErr := g.App.Shutdown(ctx)
 
 	waitDone := make(chan struct{})
 	help.SafeGo(func() {
@@ -308,9 +252,14 @@ func (g *Gate) Shutdown(ctx context.Context) error {
 	select {
 	case <-waitDone:
 	case <-ctx.Done():
-		errs = append(errs, ctx.Err())
 	}
-	return errors.Join(errs...)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if serverErr != nil {
+		return serverErr
+	}
+	return componentErr
 }
 
 func (g *Gate) AddWait() {
@@ -394,9 +343,6 @@ func (g *Gate) dispatch(ctx *Context) error {
 }
 
 func (g *Gate) forward(ctx *Context) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 	target := ctx.Target
 	if err := validateTarget(&target); err != nil {
 		return err
@@ -493,7 +439,7 @@ func (g *Gate) onSessionBind(session *network.Session) error {
 	cancel()
 	if restoreErr != nil {
 		logx.Errorf("gate: 恢复UID旧定位失败 uid=%d current=%s previous=%s err=%v", uid, current.InstanceID, previous.InstanceID, restoreErr)
-		return errors.Join(kickErr, restoreErr)
+		return kickErr
 	}
 	if !restored {
 		logx.Warnf("gate: UID定位已被更新，忽略旧定位恢复 uid=%d current=%s previous=%s", uid, current.InstanceID, previous.InstanceID)

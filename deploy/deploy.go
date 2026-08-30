@@ -5,8 +5,6 @@ import (
 	"errors"
 	"maps"
 	"net"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/2comjie/nova/config"
@@ -41,26 +39,21 @@ type resources struct {
 	rpcClient       *rpcclient.Client
 	rpcListener     net.Listener
 	shutdownTimeout time.Duration
-
-	closeOnce sync.Once
-	closeErr  error
 }
 
 func (r *resources) close() error {
-	r.closeOnce.Do(func() {
-		r.rpcClient.Close()
-		r.discover.Close()
-		r.locator.Close()
-		r.registry.Close()
-		_ = r.rpcListener.Close()
-		r.closeErr = r.config.Close()
-	})
-	return r.closeErr
+	r.rpcClient.Close()
+	r.discover.Close()
+	r.locator.Close()
+	r.registry.Close()
+	_ = r.rpcListener.Close()
+	return r.config.Close()
 }
 
 func (r *resources) run(start func() error, shutdown func(context.Context) error) error {
 	if err := start(); err != nil {
-		return errors.Join(err, r.close())
+		_ = r.close()
+		return err
 	}
 
 	util.WaitUntilSignaled()
@@ -71,10 +64,10 @@ func (r *resources) run(start func() error, shutdown func(context.Context) error
 }
 
 func buildResources(options options) (*resources, endpoint.ServiceInstance, *grpc.Server, error) {
-	if strings.TrimSpace(options.serviceName) == "" {
+	if options.serviceName == "" {
 		return nil, endpoint.ServiceInstance{}, nil, ErrServiceNameRequired
 	}
-	if strings.TrimSpace(options.instanceID) == "" {
+	if options.instanceID == "" {
 		return nil, endpoint.ServiceInstance{}, nil, ErrInstanceIDRequired
 	}
 	if options.config == nil {
@@ -133,8 +126,8 @@ func buildResources(options options) (*resources, endpoint.ServiceInstance, *grp
 		shutdownTimeout: options.shutdownTimeout,
 	}
 	instance := endpoint.ServiceInstance{
-		ID:          strings.TrimSpace(options.instanceID),
-		ServiceName: strings.TrimSpace(options.serviceName),
+		ID:          options.instanceID,
+		ServiceName: options.serviceName,
 		MetaData:    maps.Clone(options.metaData),
 		Weight:      options.weight,
 		RpcHost:     rpcHost,

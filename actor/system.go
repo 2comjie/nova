@@ -2,7 +2,6 @@ package actor
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/2comjie/nova/actor/actorDef"
@@ -14,6 +13,15 @@ import (
 
 type rpcProcessor func(ctx context.Context, key actorDef.Key, policy ActivationPolicy, message Message, needReply bool) ([]byte, bool, error)
 
+type managerController interface {
+	requestStopAll()
+}
+
+type managerRegistration struct {
+	manager managerController
+	routes  map[uint32]rpcProcessor
+}
+
 type System struct {
 	pbActor.UnimplementedActorServer
 
@@ -21,34 +29,25 @@ type System struct {
 	stop   context.CancelFunc
 	done   chan struct{}
 
-	mu         sync.RWMutex
-	routes     map[actorDef.Type]map[uint32]rpcProcessor
-	actorTypes map[actorDef.Type]struct{}
+	mu            sync.RWMutex
+	registrations map[actorDef.Type]managerRegistration
 
 	lifecycleMu sync.Mutex
 	stopping    bool
 	tasks       sync.WaitGroup
 	stopOnce    sync.Once
-
-	errMu sync.Mutex
-	err   error
 }
 
 func NewSystem(registrar grpc.ServiceRegistrar) *System {
 	runCtx, stop := context.WithCancel(context.Background())
 	system := &System{
-		runCtx:     runCtx,
-		stop:       stop,
-		done:       make(chan struct{}),
-		routes:     make(map[actorDef.Type]map[uint32]rpcProcessor),
-		actorTypes: make(map[actorDef.Type]struct{}),
+		runCtx:        runCtx,
+		stop:          stop,
+		done:          make(chan struct{}),
+		registrations: make(map[actorDef.Type]managerRegistration),
 	}
 	pbActor.RegisterActorServer(registrar, system)
 	return system
-}
-
-func (s *System) Name() string {
-	return "actor"
 }
 
 func (s *System) Start() error {
@@ -59,8 +58,18 @@ func (s *System) Shutdown(ctx context.Context) error {
 	s.stopOnce.Do(func() {
 		s.lifecycleMu.Lock()
 		s.stopping = true
-		s.stop()
 		s.lifecycleMu.Unlock()
+
+		s.mu.RLock()
+		managers := make([]managerController, 0, len(s.registrations))
+		for _, registration := range s.registrations {
+			managers = append(managers, registration.manager)
+		}
+		s.mu.RUnlock()
+		for _, manager := range managers {
+			manager.requestStopAll()
+		}
+		s.stop()
 
 		go func() {
 			s.tasks.Wait()
@@ -70,9 +79,9 @@ func (s *System) Shutdown(ctx context.Context) error {
 
 	select {
 	case <-s.done:
-		return s.Err()
+		return nil
 	case <-ctx.Done():
-		return errors.Join(ctx.Err(), s.Err())
+		return ctx.Err()
 	}
 }
 
@@ -90,9 +99,10 @@ func (s *System) process(ctx context.Context, request *pbActor.Request, needRepl
 	}
 
 	s.mu.RLock()
-	processor := s.routes[actorDef.Type(request.ActorType)][request.Route]
+	registration, exists := s.registrations[actorDef.Type(request.ActorType)]
+	processor := registration.routes[request.Route]
 	s.mu.RUnlock()
-	if processor == nil {
+	if !exists || processor == nil {
 		return nil, rpcerr.NewGRPC(codes.NotFound, "actor: RPC route不存在")
 	}
 
@@ -103,27 +113,26 @@ func (s *System) process(ctx context.Context, request *pbActor.Request, needRepl
 	return &pbActor.Response{Handled: handled, Body: body}, nil
 }
 
-func (s *System) registerActorType(actorType actorDef.Type) {
+func (s *System) registerManager(actorType actorDef.Type, manager managerController) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.actorTypes[actorType]; exists {
+	if _, exists := s.registrations[actorType]; exists {
 		panic("actor: ActorType已经注册")
 	}
-	s.actorTypes[actorType] = struct{}{}
+	s.registrations[actorType] = managerRegistration{manager: manager, routes: make(map[uint32]rpcProcessor)}
 }
 
 func (s *System) registerRoute(actorType actorDef.Type, route uint32, processor rpcProcessor) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	routes := s.routes[actorType]
-	if routes == nil {
-		routes = make(map[uint32]rpcProcessor)
-		s.routes[actorType] = routes
+	registration, exists := s.registrations[actorType]
+	if !exists {
+		panic("actor: Manager尚未注册")
 	}
-	if routes[route] != nil {
+	if registration.routes[route] != nil {
 		panic("actor: RPC route已经注册")
 	}
-	routes[route] = processor
+	registration.routes[route] = processor
 }
 
 func (s *System) beginTask() bool {
@@ -138,25 +147,4 @@ func (s *System) beginTask() bool {
 
 func (s *System) endTask() {
 	s.tasks.Done()
-}
-
-func (s *System) isStopping() bool {
-	s.lifecycleMu.Lock()
-	defer s.lifecycleMu.Unlock()
-	return s.stopping
-}
-
-func (s *System) addErr(err error) {
-	if err == nil {
-		return
-	}
-	s.errMu.Lock()
-	s.err = errors.Join(s.err, err)
-	s.errMu.Unlock()
-}
-
-func (s *System) Err() error {
-	s.errMu.Lock()
-	defer s.errMu.Unlock()
-	return s.err
 }

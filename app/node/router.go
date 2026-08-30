@@ -2,7 +2,6 @@ package node
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 )
@@ -81,7 +80,7 @@ func (r *Router) Freeze() (err error) {
 
 		handler, err = buildHandler(handler, middlewares)
 		if err != nil {
-			return fmt.Errorf("node: 编译route %d失败: %w", route, err)
+			return err
 		}
 		table[route] = handler
 	}
@@ -98,7 +97,7 @@ func (r *Router) Dispatch(ctx *Context) error {
 	}
 	handler, ok := (*table)[ctx.Request.Route]
 	if !ok {
-		return fmt.Errorf("%w: %d", ErrRouteNotFound, ctx.Request.Route)
+		return ErrRouteNotFound
 	}
 	return handler(ctx)
 }
@@ -117,7 +116,7 @@ func (r *Router) add(route uint32, handler Handler, group *RouteGroup) error {
 		return ErrRouterFrozen
 	}
 	if _, exists := r.routes[route]; exists {
-		return fmt.Errorf("%w: %d", ErrRouteRegistered, route)
+		return ErrRouteRegistered
 	}
 	var middlewares []Middleware
 	if group != nil {

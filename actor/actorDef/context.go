@@ -7,19 +7,19 @@ import (
 
 type ActorStartCtx struct {
 	context.Context
-	Self   PID
+	Self   Pid
 	Unload func()
 }
 
 type ActorStopCtx struct {
 	context.Context
-	Self   PID
+	Self   Pid
 	Reason StopReason
 }
 
 type ActorUpdateCtx struct {
 	context.Context
-	Self   PID
+	Self   Pid
 	Delta  time.Duration
 	Idle   time.Duration
 	Unload func()
@@ -30,5 +30,4 @@ const (
 	StopReasonShutdown  StopReason = 1
 	StopReasonUnload    StopReason = 2
 	StopReasonLeaseLost StopReason = 3
-	StopReasonPanic     StopReason = 4
 )

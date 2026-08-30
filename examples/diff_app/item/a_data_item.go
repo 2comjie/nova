@@ -2,7 +2,7 @@
 
 package item
 
-type Item[Count ~int32 | ~int64] struct {
+type Item struct {
 	ItemId uint64 `diff:"1"`
-	Count  Count  `diff:"2"`
+	Count  int32  `diff:"2"`
 }

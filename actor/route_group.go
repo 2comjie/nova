@@ -3,10 +3,9 @@ package actor
 import (
 	"github.com/2comjie/nova/actor/actorDef"
 	"github.com/2comjie/nova/app/node"
-	"github.com/2comjie/nova/core/help"
 )
 
-type Handler[T actorDef.Actor] func(actorValue T, pid actorDef.PID, ctx *node.Context) error
+type Handler[T actorDef.Actor] func(actorValue T, pid actorDef.Pid, ctx *node.Context) error
 
 type Middleware[T actorDef.Actor] func(next Handler[T]) Handler[T]
 
@@ -50,9 +49,7 @@ func (g *RouteGroup[T]) Handle(route uint32, handler Handler[T]) {
 
 		var handleErr error = ErrMessageHandlerPanic
 		err = runner.WaitResultOnMainLoop(ctx, func(actorValue T) {
-			help.SafeRun(func() {
-				handleErr = handler(actorValue, runner.self, ctx)
-			})
+			handleErr = handler(actorValue, runner.self, ctx)
 		})
 		if err != nil {
 			return err

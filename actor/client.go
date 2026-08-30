@@ -17,7 +17,7 @@ type Client struct {
 type Ref struct {
 	client  *Client
 	service string
-	pid     actorDef.PID
+	pid     actorDef.Pid
 	policy  ActivationPolicy
 }
 
@@ -25,7 +25,7 @@ func NewClient(client *rpcClient.Client) *Client {
 	return &Client{rpc: pbActor.NewActorClient(client)}
 }
 
-func (c *Client) Ref(service string, pid actorDef.PID, policy ActivationPolicy) Ref {
+func (c *Client) Ref(service string, pid actorDef.Pid, policy ActivationPolicy) Ref {
 	return Ref{client: c, service: service, pid: pid, policy: policy}
 }
 

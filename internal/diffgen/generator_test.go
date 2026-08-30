@@ -20,9 +20,9 @@ import (
 	bag "github.com/acme/game/bag"
 )
 
-type Player[T ~int32] struct {
+type Player struct {
 	diff.Object
-	Level diff.Primitive[T] ` + "`diff:\"1\"`" + `
+	Level diff.Primitive[int32] ` + "`diff:\"1\"`" + `
 	Bag diff.Pointer[*bag.Bag] ` + "`diff:\"2\"`" + `
 	Scores diff.PrimitiveMap[int32, int64] ` + "`diff:\"3\"`" + `
 	Items diff.PointerMap[uint64, *bag.Item] ` + "`diff:\"4\"`" + `
@@ -48,14 +48,14 @@ type Player[T ~int32] struct {
 	}
 	content := string(data)
 	for _, expected := range []string{
-		"func (value *Player[T]) InitLink(writer *diff.Writer)",
-		"func (value *Player[T]) EnsureDiffLink()",
-		"func (value *Player[T]) InitDiffLink(writer *diff.Writer, visited map[*diff.Object]struct{})",
+		"func (value *Player) InitLink(writer *diff.Writer)",
+		"func (value *Player) EnsureDiffLink()",
+		"func (value *Player) InitDiffLink(writer *diff.Writer, visited map[*diff.Object]struct{})",
 		"child.InitDiffLink(nil, visited)",
 		"value.Level.Init(&value.Object, 1)",
 		"value.Items.Range(func(_ uint64, child *bag.Item) bool",
 		"value.Slots.Range(func(_ int, child *bag.Item) bool",
-		"func (value *Player[T]) AppendDiffValue(data []byte) []byte",
+		"func (value *Player) AppendDiffValue(data []byte) []byte",
 		"data = value.Slots.AppendValue(data, 6)",
 	} {
 		if !strings.Contains(content, expected) {
@@ -75,10 +75,10 @@ package model
 
 import "github.com/2comjie/nova/logx/logdef"
 
-type Player[T ~int32] struct {
+type Player struct {
 	logdef.ILogger
 	RuntimeName string ` + "`diff:\"-\"`" + `
-	Level T ` + "`diff:\"1\"`" + `
+	Level int32 ` + "`diff:\"1\"`" + `
 	Bag *Bag ` + "`diff:\"2\"`" + `
 	Scores map[int32]int64 ` + "`diff:\"3\"`" + `
 	Items map[uint64]*Item ` + "`diff:\"4\"`" + `
@@ -102,6 +102,9 @@ type Item struct {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(files) != 3 {
+		t.Fatalf("files = %v", files)
+	}
 	data, err := os.ReadFile(files[0])
 	if err != nil {
 		t.Fatal(err)
@@ -109,35 +112,83 @@ type Item struct {
 	content := string(data)
 	for _, expected := range []string{
 		"//go:build !diff_fast",
-		"type Player[T ~int32] struct",
+		"type Player struct",
 		"logdef.ILogger",
 		"RuntimeName",
-		"diff.Primitive[T]",
+		"diff.Primitive[int32]",
 		"diff.Pointer[*Bag]",
 		"diff.PrimitiveMap[int32, int64]",
 		"diff.PointerMap[uint64, *Item]",
 		"diff.PrimitiveSlice[uint64]",
 		"diff.PointerSlice[*Item]",
-		"func (value *Player[T]) GetLevel() T",
-		"func (value *Player[T]) SetLevel(fieldValue T) bool",
-		"func (value *Player[T]) GetBag() *Bag",
-		"func (value *Player[T]) SetBag(fieldValue *Bag) bool",
-		"func (value *Player[T]) ClearBag() bool",
-		"func (value *Player[T]) Items() *diff.PointerMap[uint64, *Item]",
-		"func (value *Player[T]) Commit() diff.Delta[*Player[T]]",
-		"func (value *Player[T]) FormatDelta(data []byte) (string, error)",
-		"func (value *Player[T]) Snapshot() []byte",
-		"func (value *Player[T]) LoadSnapshot(data []byte) error",
-		"func (value *Player[T]) Merge(data []byte) error",
-		"func (value *Player[T]) MergeDiffPatch(path []diff.EncodedPathNode, operation diff.Operation, data []byte) error",
-		"type PlayerDiffPath[DiffRoot any, T ~int32] struct",
-		"func PlayerDiff[T ~int32]() PlayerDiffPath[*Player[T], T]",
-		"func (path PlayerDiffPath[DiffRoot, T]) Level() diff.ValuePath[DiffRoot, T]",
-		"func (path PlayerDiffPath[DiffRoot, T]) Items() PlayerItemsDiffPath[DiffRoot, T]",
-		"func (path PlayerItemsDiffPath[DiffRoot, T]) Any() ItemDiffPath[DiffRoot]",
+		"func (value *Player) GetLevel() int32",
+		"func (value *Player) SetLevel(fieldValue int32) bool",
+		"func (value *Player) GetBag() *Bag",
+		"func (value *Player) SetBag(fieldValue *Bag) bool",
+		"func (value *Player) ClearBag() bool",
+		"func (value *Player) Items() *diff.PointerMap[uint64, *Item]",
+		"func (value *Player) Commit() diff.Delta[*Player]",
+		"func (value *Player) FormatDelta(data []byte) (string, error)",
+		"func (value *Player) Snapshot() []byte",
+		"func (value *Player) LoadSnapshot(data []byte) error",
+		"func (value *Player) Merge(data []byte) error",
+		"func (value *Player) MergeDiffPatch(path []diff.EncodedPathNode, operation diff.Operation, data []byte) error",
+		"type PlayerDiffPath[DiffRoot any] struct",
+		"var PlayerDiff = NewPlayerDiffPath[*Player]",
+		"func (path PlayerDiffPath[DiffRoot]) Level() diff.ValuePath[DiffRoot, int32]",
+		"func (path PlayerDiffPath[DiffRoot]) Items() PlayerItemsDiffPath[DiffRoot]",
+		"func (path PlayerItemsDiffPath[DiffRoot]) Any() ItemDiffPath[DiffRoot]",
 	} {
 		if !strings.Contains(content, expected) {
 			t.Fatalf("generated schema does not contain %q\n%s", expected, content)
+		}
+	}
+
+	protoData, err := os.ReadFile(files[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	protoContent := string(protoData)
+	for _, expected := range []string{
+		"message Player {",
+		"int32 level = 1;",
+		"Bag bag = 2;",
+		"map<int32, int64> scores = 3;",
+		"map<uint64, Item> items = 4;",
+		"repeated uint64 order = 5;",
+		"repeated Item slots = 6;",
+	} {
+		if !strings.Contains(protoContent, expected) {
+			t.Fatalf("generated data proto does not contain %q\n%s", expected, protoContent)
+		}
+	}
+
+	diffData, err := os.ReadFile(files[2])
+	if err != nil {
+		t.Fatal(err)
+	}
+	diffContent := string(diffData)
+	for _, expected := range []string{
+		"message PathNode {",
+		"oneof map_key {",
+		"message Patch {",
+		"oneof value {",
+		"int32 int32_value",
+		"ItemList item_list_value",
+		"message PlayerSyncPush {",
+		"oneof payload {",
+		".model.Player full = 10;",
+		"Delta delta = 11;",
+	} {
+		if !strings.Contains(diffContent, expected) {
+			t.Fatalf("generated diff proto does not contain %q\n%s", expected, diffContent)
+		}
+	}
+
+	if protoc, err := exec.LookPath("protoc"); err == nil {
+		command := exec.Command(protoc, "--proto_path", dir, "--descriptor_set_out", filepath.Join(dir, "schema.pb"), files[1], files[2])
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("protoc: %v\n%s", err, output)
 		}
 	}
 }
@@ -200,7 +251,7 @@ func TestGeneratedCodeCompilesAndRestoresLinks(t *testing.T) {
 	dir := t.TempDir()
 	_, currentFile, _, _ := runtime.Caller(0)
 	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "../.."))
-	goMod := "module example.com/diffgentest\n\ngo 1.24.3\n\nrequire github.com/2comjie/nova v0.0.0\n\nreplace github.com/2comjie/nova => " + moduleRoot + "\n"
+	goMod := "module example.com/diffgentest\n\ngo 1.27.0\n\nrequire github.com/2comjie/nova v0.0.0\n\nreplace github.com/2comjie/nova => " + moduleRoot + "\n"
 	model := `//go:build diff_fast
 
 package model
@@ -387,11 +438,8 @@ func TestLinks(t *testing.T) {
 	}
 }
 
-func TestGeneratedGenericListenerPathCompiles(t *testing.T) {
+func TestGenerateRejectsGenericSchema(t *testing.T) {
 	dir := t.TempDir()
-	_, currentFile, _, _ := runtime.Caller(0)
-	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "../.."))
-	goMod := "module example.com/diffgengeneric\n\ngo 1.24.3\n\nrequire github.com/2comjie/nova v0.0.0\n\nreplace github.com/2comjie/nova => " + moduleRoot + "\n"
 	model := `//go:build diff_fast
 
 package model
@@ -405,50 +453,11 @@ type Node[T ~int32] struct {
 	Value T ` + "`diff:\"1\"`" + `
 }
 `
-	modelTest := `package model
-
-import (
-	"testing"
-	"github.com/2comjie/nova/diff"
-)
-
-func init() {
-	diff.ListenBefore(BoxDiff[int32]().Child().Value(), func(change *diff.Change[int32]) {
-		if change.NewValue > 10 {
-			change.Replace(10)
-		}
-	})
-}
-
-func TestGenericPath(t *testing.T) {
-	child := &Node[int32]{}
-	box := &Box[int32]{}
-	box.InitLink(diff.NewWriter())
-	box.SetChild(child)
-	child.SetValue(20)
-	if child.GetValue() != 10 {
-		t.Fatalf("value = %d", child.GetValue())
-	}
-}
-`
-	for name, content := range map[string]string{
-		"go.mod":        goMod,
-		"model.go":      model,
-		"model_test.go": modelTest,
-	} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := Generate(dir); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "model.go"), []byte(model), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	command := exec.Command("go", "test", ".")
-	command.Dir = dir
-	command.Env = append(os.Environ(), "GOWORK=off")
-	output, err := command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go test: %v\n%s", err, output)
+	_, err := Generate(dir)
+	if err == nil || !strings.Contains(err.Error(), "diff数据类型不支持泛型") {
+		t.Fatalf("err = %v", err)
 	}
 }

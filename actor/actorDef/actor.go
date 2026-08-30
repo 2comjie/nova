@@ -5,5 +5,5 @@ import "time"
 type Actor interface {
 	OnStart(ctx ActorStartCtx) error
 	OnUpdate(ctx ActorUpdateCtx) time.Duration
-	OnStop(ctx ActorStopCtx) error
+	OnStop(ctx ActorStopCtx)
 }

@@ -2,9 +2,7 @@ package gate
 
 import (
 	"errors"
-	"fmt"
 	"maps"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -97,14 +95,13 @@ func (r *Router) RegisterActorKeyResolver(name string, resolver ActorKeyResolver
 		return ErrRouterFrozen
 	}
 	if r.actorKeyResolvers[name] != nil {
-		return fmt.Errorf("%w: %s", ErrActorKeyResolverRegistered, name)
+		return ErrActorKeyResolverRegistered
 	}
 	r.actorKeyResolvers[name] = resolver
 	return nil
 }
 
 func (r *Router) RegisterFilter(name string, factory FilterFactory) error {
-	name = strings.TrimSpace(name)
 	if name == "" {
 		return ErrInvalidFilterName
 	}
@@ -118,7 +115,7 @@ func (r *Router) RegisterFilter(name string, factory FilterFactory) error {
 		return ErrRouterFrozen
 	}
 	if _, exists := r.factories[name]; exists {
-		return fmt.Errorf("%w: %s", ErrFilterRegistered, name)
+		return ErrFilterRegistered
 	}
 	r.factories[name] = factory
 	return nil
@@ -157,36 +154,36 @@ func (r *Router) Freeze() error {
 
 	globalFilters, err := r.compileFilters(r.filters)
 	if err != nil {
-		return fmt.Errorf("gate: 编译全局Filter失败: %w", err)
+		return err
 	}
 
 	table := make(routeTable)
 	routeIDs := make(map[string]struct{}, len(r.routes))
 	for _, route := range r.routes {
-		if strings.TrimSpace(route.ID) == "" {
+		if route.ID == "" {
 			return ErrInvalidRouteID
 		}
 		if _, exists := routeIDs[route.ID]; exists {
-			return fmt.Errorf("%w: %s", ErrRouteIDRegistered, route.ID)
+			return ErrRouteIDRegistered
 		}
 		routeIDs[route.ID] = struct{}{}
 		if len(route.Routes) == 0 {
-			return fmt.Errorf("%w: %s", ErrRouteWithoutMatchers, route.ID)
+			return ErrRouteWithoutMatchers
 		}
 		if err := validateTarget(&route.Target); err != nil {
-			return fmt.Errorf("gate: Route %s: %w", route.ID, err)
+			return err
 		}
 		var actorKeyResolver ActorKeyResolver
 		if route.Target.Mode == RouteModeActor {
 			actorKeyResolver = r.actorKeyResolvers[route.Target.ActorKeyResolver]
 			if actorKeyResolver == nil {
-				return fmt.Errorf("gate: Route %s: %w: %s", route.ID, ErrActorKeyResolverNotFound, route.Target.ActorKeyResolver)
+				return ErrActorKeyResolverNotFound
 			}
 		}
 
 		routeFilters, err := r.compileFilters(route.Filters)
 		if err != nil {
-			return fmt.Errorf("gate: 编译Route %s Filter失败: %w", route.ID, err)
+			return err
 		}
 		filters := make([]Filter, 0, len(globalFilters)+len(routeFilters))
 		filters = append(filters, globalFilters...)
@@ -211,10 +208,10 @@ func (r *Router) Freeze() error {
 		}
 		for _, routeNumber := range route.Routes {
 			if routeNumber == 0 {
-				return fmt.Errorf("%w: Route %s", ErrInvalidRoute, route.ID)
+				return ErrInvalidRoute
 			}
 			if _, exists := table[routeNumber]; exists {
-				return fmt.Errorf("%w: %d", ErrRouteRegistered, routeNumber)
+				return ErrRouteRegistered
 			}
 			table[routeNumber] = entry
 		}
@@ -237,7 +234,7 @@ func (r *Router) Dispatch(ctx *Context) error {
 	routeNumber := ctx.Route
 	route, exists := (*table)[routeNumber]
 	if !exists {
-		return fmt.Errorf("%w: %d", ErrRouteNotFound, routeNumber)
+		return ErrRouteNotFound
 	}
 
 	ctx.RouteID = route.id
@@ -249,20 +246,20 @@ func (r *Router) Dispatch(ctx *Context) error {
 func (r *Router) compileFilters(configs []FilterConfig) ([]Filter, error) {
 	filters := make([]Filter, 0, len(configs))
 	for _, config := range configs {
-		name := strings.TrimSpace(config.Name)
+		name := config.Name
 		if name == "" {
 			return nil, ErrInvalidFilterName
 		}
 		factory := r.factories[name]
 		if factory == nil {
-			return nil, fmt.Errorf("%w: %s", ErrFilterNotFound, name)
+			return nil, ErrFilterNotFound
 		}
 		filter, err := factory(cloneStringMap(config.Args))
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", name, err)
+			return nil, err
 		}
 		if filter == nil {
-			return nil, fmt.Errorf("%w: %s", ErrNilFilter, name)
+			return nil, ErrNilFilter
 		}
 		filters = append(filters, filter)
 	}
