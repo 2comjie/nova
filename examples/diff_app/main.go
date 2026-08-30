@@ -67,6 +67,7 @@ func main() {
 	playerValue.Scores().Store(1, 120)
 	playerValue.RecentLevels().Append(200)
 	delta := playerValue.Commit()
+	fmt.Println(delta.String())
 
 	replica := &player.Player{}
 	if err := replica.LoadSnapshot(full); err != nil {
@@ -87,6 +88,8 @@ func main() {
 	genericItem.InitLink(genericWriter)
 	genericItem.SetItemId(2001)
 	genericItem.SetCount(1200)
+	genericDelta := genericItem.Commit()
+	fmt.Println(genericDelta.String())
 	fmt.Printf("范型Item: id=%d count=%d deltaBytes=%d\n",
-		genericItem.GetItemId(), genericItem.GetCount(), len(genericItem.Commit()))
+		genericItem.GetItemId(), genericItem.GetCount(), len(genericDelta))
 }

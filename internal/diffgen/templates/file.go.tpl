@@ -13,3 +13,4 @@ import (
 {{template "path" .}}
 {{template "link" .}}
 {{template "snapshot" .}}
+{{template "debug" .}}

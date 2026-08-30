@@ -1,6 +1,6 @@
 {{define "snapshot"}}{{range .Types}}{{$type := .}}
-func (value *{{.Receiver}}) Commit() []byte {
-	return value.Object.Commit()
+func (value *{{.Receiver}}) Commit() {{.DiffAlias}}.Delta[*{{.Receiver}}] {
+	return {{.DiffAlias}}.Delta[*{{.Receiver}}](value.Object.Commit())
 }
 
 func (value *{{.Receiver}}) Snapshot() []byte {

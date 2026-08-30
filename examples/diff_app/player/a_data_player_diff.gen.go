@@ -169,8 +169,8 @@ func (value *Player) AppendDiffValue(data []byte) []byte {
 	return data
 }
 
-func (value *Player) Commit() []byte {
-	return value.Object.Commit()
+func (value *Player) Commit() diff.Delta[*Player] {
+	return diff.Delta[*Player](value.Object.Commit())
 }
 
 func (value *Player) Snapshot() []byte {
@@ -416,4 +416,138 @@ func (value *Player) MergeDiffPatch(path []diff.EncodedPathNode, operation diff.
 		}
 	}
 	return nil
+}
+
+func (value *Player) FormatDelta(data []byte) (string, error) {
+	patches, err := diff.DecodePatches(data)
+	if err != nil {
+		return "", err
+	}
+	debugPatches := make([]diff.DebugPatch, 0, len(patches))
+	for _, patch := range patches {
+		path, patchValue, err := value.FormatDiffPatch(patch.Path, patch.Operation, patch.Value)
+		if err != nil {
+			return "", err
+		}
+		debugPatches = append(debugPatches, diff.DebugPatch{
+			Path:      path,
+			Operation: patch.Operation,
+			Value:     patchValue,
+		})
+	}
+	return diff.FormatDebugPatches("Player", debugPatches), nil
+}
+
+func (value *Player) FormatDiffPatch(path []diff.EncodedPathNode, operation diff.Operation, data []byte) (string, any, error) {
+	if len(path) == 0 {
+		return "", nil, diff.ErrInvalidData
+	}
+	node := path[0]
+	switch node.FieldIndex {
+	case 1:
+		{
+			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
+				return "", nil, diff.ErrInvalidData
+			}
+			fieldValue, err := diff.DecodePrimitive[uint64](data)
+			if err != nil {
+				return "", nil, err
+			}
+			return "Uid", fieldValue, nil
+		}
+	case 2:
+		{
+			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
+				return "", nil, diff.ErrInvalidData
+			}
+			fieldValue, err := diff.DecodePrimitive[int32](data)
+			if err != nil {
+				return "", nil, err
+			}
+			return "Level", fieldValue, nil
+		}
+	case 3:
+		{
+			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
+				return "", nil, diff.ErrInvalidData
+			}
+			fieldValue, err := diff.DecodePrimitive[string](data)
+			if err != nil {
+				return "", nil, err
+			}
+			return "Name", fieldValue, nil
+		}
+	case 4:
+		{
+			if node.KeyType != diff.PathField {
+				return "", nil, diff.ErrInvalidData
+			}
+			if len(path) == 1 {
+				switch operation {
+				case diff.PointerSet:
+					return "Bag", diff.DebugSnapshot{Type: "*bag.Bag", Size: len(data)}, nil
+				case diff.PointerClear:
+					return "Bag", nil, nil
+				default:
+					return "", nil, diff.ErrInvalidData
+				}
+			}
+			childPath, fieldValue, err := new(bag.Bag).FormatDiffPatch(path[1:], operation, data)
+			if err != nil {
+				return "", nil, err
+			}
+			return diff.DebugFieldPath("Bag", childPath), fieldValue, nil
+		}
+	case 5:
+		{
+			if node.KeyType == diff.PathField {
+				if len(path) != 1 || operation != diff.MapClear {
+					return "", nil, diff.ErrInvalidData
+				}
+				return "Scores", nil, nil
+			}
+			if node.KeyType != diff.PathMap {
+				return "", nil, diff.ErrInvalidData
+			}
+			mapKey, err := diff.DecodePrimitive[uint64](node.MapKey)
+			if err != nil {
+				return "", nil, err
+			}
+			if len(path) != 1 {
+				return "", nil, diff.ErrInvalidData
+			}
+			switch operation {
+			case diff.MapSet:
+				mapValue, err := diff.DecodePrimitive[int32](data)
+				if err != nil {
+					return "", nil, err
+				}
+				return diff.DebugMapPath("Scores", mapKey, ""), mapValue, nil
+			case diff.MapDelete:
+				return diff.DebugMapPath("Scores", mapKey, ""), nil, nil
+			default:
+				return "", nil, diff.ErrInvalidData
+			}
+		}
+	case 6:
+		{
+			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.SliceReplace {
+				return "", nil, diff.ErrInvalidData
+			}
+			elements, err := diff.DecodeValues(data)
+			if err != nil {
+				return "", nil, err
+			}
+			values := make([]int32, 0, len(elements))
+			for _, element := range elements {
+				fieldValue, err := diff.DecodePrimitive[int32](element)
+				if err != nil {
+					return "", nil, err
+				}
+				values = append(values, fieldValue)
+			}
+			return "RecentLevels", values, nil
+		}
+	}
+	return "", nil, diff.ErrInvalidData
 }

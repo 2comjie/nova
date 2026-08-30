@@ -124,7 +124,8 @@ type Item struct {
 		"func (value *Player[T]) SetBag(fieldValue *Bag) bool",
 		"func (value *Player[T]) ClearBag() bool",
 		"func (value *Player[T]) Items() *diff.PointerMap[uint64, *Item]",
-		"func (value *Player[T]) Commit() []byte",
+		"func (value *Player[T]) Commit() diff.Delta[*Player[T]]",
+		"func (value *Player[T]) FormatDelta(data []byte) (string, error)",
 		"func (value *Player[T]) Snapshot() []byte",
 		"func (value *Player[T]) LoadSnapshot(data []byte) error",
 		"func (value *Player[T]) Merge(data []byte) error",
@@ -223,6 +224,7 @@ type Item struct {
 	modelTest := `package model
 
 import (
+	"strings"
 	"testing"
 	"github.com/2comjie/nova/diff"
 )
@@ -333,6 +335,10 @@ func TestLinks(t *testing.T) {
 	player.Scores().Store(1, 201)
 	player.Numbers().Append(11)
 	delta := player.Commit()
+	debugText := delta.String()
+	if !strings.Contains(debugText, "Player.Level Set = 100") || !strings.Contains(debugText, "Player.Scores[1] MapSet = 200") {
+		t.Fatalf("delta debug = %s", debugText)
+	}
 	if writer.Len() != 0 {
 		t.Fatalf("writer was not reset")
 	}

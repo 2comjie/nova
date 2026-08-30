@@ -91,8 +91,8 @@ func (value *Item[Count]) AppendDiffValue(data []byte) []byte {
 	return data
 }
 
-func (value *Item[Count]) Commit() []byte {
-	return value.Object.Commit()
+func (value *Item[Count]) Commit() diff.Delta[*Item[Count]] {
+	return diff.Delta[*Item[Count]](value.Object.Commit())
 }
 
 func (value *Item[Count]) Snapshot() []byte {
@@ -187,4 +187,56 @@ func (value *Item[Count]) MergeDiffPatch(path []diff.EncodedPathNode, operation 
 		}
 	}
 	return nil
+}
+
+func (value *Item[Count]) FormatDelta(data []byte) (string, error) {
+	patches, err := diff.DecodePatches(data)
+	if err != nil {
+		return "", err
+	}
+	debugPatches := make([]diff.DebugPatch, 0, len(patches))
+	for _, patch := range patches {
+		path, patchValue, err := value.FormatDiffPatch(patch.Path, patch.Operation, patch.Value)
+		if err != nil {
+			return "", err
+		}
+		debugPatches = append(debugPatches, diff.DebugPatch{
+			Path:      path,
+			Operation: patch.Operation,
+			Value:     patchValue,
+		})
+	}
+	return diff.FormatDebugPatches("Item", debugPatches), nil
+}
+
+func (value *Item[Count]) FormatDiffPatch(path []diff.EncodedPathNode, operation diff.Operation, data []byte) (string, any, error) {
+	if len(path) == 0 {
+		return "", nil, diff.ErrInvalidData
+	}
+	node := path[0]
+	switch node.FieldIndex {
+	case 1:
+		{
+			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
+				return "", nil, diff.ErrInvalidData
+			}
+			fieldValue, err := diff.DecodePrimitive[uint64](data)
+			if err != nil {
+				return "", nil, err
+			}
+			return "ItemId", fieldValue, nil
+		}
+	case 2:
+		{
+			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
+				return "", nil, diff.ErrInvalidData
+			}
+			fieldValue, err := diff.DecodePrimitive[Count](data)
+			if err != nil {
+				return "", nil, err
+			}
+			return "Count", fieldValue, nil
+		}
+	}
+	return "", nil, diff.ErrInvalidData
 }

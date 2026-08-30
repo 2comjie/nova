@@ -130,8 +130,8 @@ func (value *Bag) AppendDiffValue(data []byte) []byte {
 	return data
 }
 
-func (value *Bag) Commit() []byte {
-	return value.Object.Commit()
+func (value *Bag) Commit() diff.Delta[*Bag] {
+	return diff.Delta[*Bag](value.Object.Commit())
 }
 
 func (value *Bag) Snapshot() []byte {
@@ -292,4 +292,88 @@ func (value *Bag) MergeDiffPatch(path []diff.EncodedPathNode, operation diff.Ope
 		}
 	}
 	return nil
+}
+
+func (value *Bag) FormatDelta(data []byte) (string, error) {
+	patches, err := diff.DecodePatches(data)
+	if err != nil {
+		return "", err
+	}
+	debugPatches := make([]diff.DebugPatch, 0, len(patches))
+	for _, patch := range patches {
+		path, patchValue, err := value.FormatDiffPatch(patch.Path, patch.Operation, patch.Value)
+		if err != nil {
+			return "", err
+		}
+		debugPatches = append(debugPatches, diff.DebugPatch{
+			Path:      path,
+			Operation: patch.Operation,
+			Value:     patchValue,
+		})
+	}
+	return diff.FormatDebugPatches("Bag", debugPatches), nil
+}
+
+func (value *Bag) FormatDiffPatch(path []diff.EncodedPathNode, operation diff.Operation, data []byte) (string, any, error) {
+	if len(path) == 0 {
+		return "", nil, diff.ErrInvalidData
+	}
+	node := path[0]
+	switch node.FieldIndex {
+	case 1:
+		{
+			if node.KeyType == diff.PathField {
+				if len(path) != 1 || operation != diff.MapClear {
+					return "", nil, diff.ErrInvalidData
+				}
+				return "Items", nil, nil
+			}
+			if node.KeyType != diff.PathMap {
+				return "", nil, diff.ErrInvalidData
+			}
+			mapKey, err := diff.DecodePrimitive[uint64](node.MapKey)
+			if err != nil {
+				return "", nil, err
+			}
+			if len(path) == 1 {
+				switch operation {
+				case diff.MapSet:
+					return diff.DebugMapPath("Items", mapKey, ""), diff.DebugSnapshot{Type: "*item.Item[int32]", Size: len(data)}, nil
+				case diff.MapDelete:
+					return diff.DebugMapPath("Items", mapKey, ""), nil, nil
+				default:
+					return "", nil, diff.ErrInvalidData
+				}
+			}
+			childPath, mapValue, err := new(item.Item[int32]).FormatDiffPatch(path[1:], operation, data)
+			if err != nil {
+				return "", nil, err
+			}
+			return diff.DebugMapPath("Items", mapKey, childPath), mapValue, nil
+		}
+	case 2:
+		{
+			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.SliceReplace {
+				return "", nil, diff.ErrInvalidData
+			}
+			elements, err := diff.DecodeValues(data)
+			if err != nil {
+				return "", nil, err
+			}
+			values := make([]any, 0, len(elements))
+			for _, element := range elements {
+				elementData, exists, err := diff.DecodePointerElement(element)
+				if err != nil {
+					return "", nil, err
+				}
+				if !exists {
+					values = append(values, nil)
+					continue
+				}
+				values = append(values, diff.DebugSnapshot{Type: "*item.Item[int32]", Size: len(elementData)})
+			}
+			return "Order", values, nil
+		}
+	}
+	return "", nil, diff.ErrInvalidData
 }
