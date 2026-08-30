@@ -1,85 +1,74 @@
-//go:build !diff_fast
-
 package main
 
 import (
 	"fmt"
 
 	"github.com/2comjie/nova/diff"
+	"github.com/2comjie/nova/examples/diff_app/bag"
+	"github.com/2comjie/nova/examples/diff_app/item"
+	"github.com/2comjie/nova/examples/diff_app/player"
 )
 
 func init() {
-	diff.ListenBefore(PlayerDiff.Level(), func(c *diff.Change[int32]) {
-		if c.NewValue < 1 {
-			c.Cancel("等级不能小于1")
+	diff.ListenBefore(player.PlayerDiff.Level(), func(change *diff.Change[int32]) {
+		if change.NewValue < 1 {
+			change.Cancel("等级不能小于1")
 		}
-		if c.NewValue > 100 {
-			c.Replace(100)
-		}
-	})
-
-	diff.ListenBefore(PlayerDiff.Bag().Items().Any().Count(), func(c *diff.Change[int32]) {
-		if c.NewValue < 0 {
-			c.Cancel("道具数量不能小于0")
-		}
-	})
-
-	diff.ListenMapBefore(PlayerDiff.Bag().Items().Changes(), func(m *diff.MapChange[uint64, *Item]) {
-		if m.Operation == diff.ChangeMapStore && m.Key != m.NewValue.GetItemId() {
-			m.Cancel("ItemId必须和Map key 一致")
-		}
-	})
-
-	diff.ListenSliceBefore(PlayerDiff.Bag().Order().Changes(), func(change *diff.SliceChange[*Item]) {
-		if change.HasNew && change.NewValue == nil {
-			change.Cancel("Order不能添加nil Item")
-		}
-	})
-
-	diff.ListenSliceBefore(PlayerDiff.RecentLevels(), func(change *diff.SliceChange[int32]) {
-		if change.HasNew && change.NewValue > 100 {
+		if change.NewValue > 100 {
 			change.Replace(100)
 		}
 	})
 
-	diff.ListenAfter(PlayerDiff.Level(), func(change diff.Change[int32]) {
-		fmt.Printf("等级变化: %d -> %d\n", change.OldValue, change.NewValue)
+	diff.ListenBefore(player.PlayerDiff.Bag().Items().Any().Count(), func(change *diff.Change[int32]) {
+		if change.NewValue < 0 {
+			change.Cancel("道具数量不能小于0")
+		}
+	})
+
+	diff.ListenMapBefore(player.PlayerDiff.Bag().Items().Changes(), func(change *diff.MapChange[uint64, *item.Item[int32]]) {
+		if change.Operation == diff.ChangeMapStore && change.Key != change.NewValue.GetItemId() {
+			change.Cancel("ItemId必须和Map key一致")
+		}
+	})
+
+	diff.ListenBefore(item.ItemDiff[int64]().Count(), func(change *diff.Change[int64]) {
+		if change.NewValue > 999 {
+			change.Replace(999)
+		}
 	})
 }
 
 func main() {
 	writer := diff.NewWriter()
-	player := &Player{}
-	player.InitLink(writer)
+	playerValue := &player.Player{}
+	playerValue.InitLink(writer)
 
-	bag := &Bag{}
-	player.SetBag(bag)
+	bagValue := &bag.Bag{}
+	playerValue.SetBag(bagValue)
 
-	item := &Item{}
-	item.SetItemId(1001)
-	item.SetCount(5)
+	itemValue := &item.Item[int32]{}
+	itemValue.SetItemId(1001)
+	itemValue.SetCount(5)
 
-	player.SetUid(10001)
-	player.SetName("taoxi")
-	player.SetLevel(20)
-	player.GetBag().Items().Store(1001, item)
-	player.GetBag().Order().Append(item)
-	player.Scores().Store(1, 100)
-	player.RecentLevels().Append(20)
+	playerValue.SetUid(10001)
+	playerValue.SetName("taoxi")
+	playerValue.SetLevel(20)
+	playerValue.GetBag().Items().Store(1001, itemValue)
+	playerValue.GetBag().Order().Append(itemValue)
+	playerValue.Scores().Store(1, 100)
+	playerValue.RecentLevels().Append(20)
 
-	full := player.Snapshot()
-	player.Commit()
+	full := playerValue.Snapshot()
+	playerValue.Commit()
 
-	player.SetLevel(200)
-	item.SetCount(-1)
-	item.SetCount(12)
-	player.GetBag().Items().Store(2002, item)
-	player.GetBag().Order().Append(nil)
-	player.Scores().Store(1, 120)
-	player.RecentLevels().Append(200)
+	playerValue.SetLevel(200)
+	itemValue.SetCount(-1)
+	itemValue.SetCount(12)
+	playerValue.Scores().Store(1, 120)
+	playerValue.RecentLevels().Append(200)
+	delta := playerValue.Commit()
 
-	delta := player.Commit()
-	replica := &Player{}
+	replica := &player.Player{}
 	if err := replica.LoadSnapshot(full); err != nil {
 		panic(err)
 	}
@@ -90,6 +79,14 @@ func main() {
 	replicaItem, _ := replica.GetBag().Items().Load(1001)
 	score, _ := replica.Scores().Load(1)
 	latestLevel := replica.RecentLevels().GetValue(replica.RecentLevels().Len() - 1)
-	fmt.Printf("合并结果: uid=%d level=%d itemCount=%d score=%d recentLevel=%d deltaBytes=%d\n",
+	fmt.Printf("跨包合并: uid=%d level=%d itemCount=%d score=%d recentLevel=%d deltaBytes=%d\n",
 		replica.GetUid(), replica.GetLevel(), replicaItem.GetCount(), score, latestLevel, len(delta))
+
+	genericWriter := diff.NewWriter()
+	genericItem := &item.Item[int64]{}
+	genericItem.InitLink(genericWriter)
+	genericItem.SetItemId(2001)
+	genericItem.SetCount(1200)
+	fmt.Printf("范型Item: id=%d count=%d deltaBytes=%d\n",
+		genericItem.GetItemId(), genericItem.GetCount(), len(genericItem.Commit()))
 }

@@ -1,6 +1,7 @@
 {{define "runtime"}}{{if .Schema}}{{range .Types}}{{$type := .}}
 type {{.Name}}{{.TypeParams}} struct {
-	{{.DiffAlias}}.Object
+{{range .RuntimeFields}}	{{.}}
+{{end}}	{{.DiffAlias}}.Object
 {{range .Fields}}	{{.RuntimeName}} {{.RuntimeType}}
 {{end}}}
 {{range .Fields}}{{if .Primitive}}

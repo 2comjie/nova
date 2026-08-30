@@ -73,7 +73,11 @@ func TestGenerateSchema(t *testing.T) {
 
 package model
 
+import "github.com/2comjie/nova/logx/logdef"
+
 type Player[T ~int32] struct {
+	logdef.ILogger
+	RuntimeName string ` + "`diff:\"-\"`" + `
 	Level T ` + "`diff:\"1\"`" + `
 	Bag *Bag ` + "`diff:\"2\"`" + `
 	Scores map[int32]int64 ` + "`diff:\"3\"`" + `
@@ -106,6 +110,8 @@ type Item struct {
 	for _, expected := range []string{
 		"//go:build !diff_fast",
 		"type Player[T ~int32] struct",
+		"logdef.ILogger",
+		"RuntimeName",
 		"diff.Primitive[T]",
 		"diff.Pointer[*Bag]",
 		"diff.PrimitiveMap[int32, int64]",

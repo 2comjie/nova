@@ -38,6 +38,7 @@ type templateType struct {
 	PathRootTypeArgs string
 	Generic          bool
 	InitField        string
+	RuntimeFields    []string
 	Fields           []templateField
 }
 
@@ -109,6 +110,9 @@ func buildTemplateFile(source sourceFile) templateFile {
 		}
 		if data.typeParamsNode != nil {
 			typeModel.TypeParams = typeParamsDeclaration(source.path, data.typeParamsNode)
+		}
+		for _, field := range data.runtimeFields {
+			typeModel.RuntimeFields = append(typeModel.RuntimeFields, fieldString(source.path, field))
 		}
 		for _, field := range data.fields {
 			fieldModel := templateField{

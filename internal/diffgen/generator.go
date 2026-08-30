@@ -41,6 +41,7 @@ type dataType struct {
 	name           string
 	typeParams     []string
 	typeParamsNode *ast.FieldList
+	runtimeFields  []*ast.Field
 	fields         []dataField
 }
 
@@ -224,19 +225,19 @@ func parseDataType(source sourceFile, typeSpec *ast.TypeSpec, structure *ast.Str
 func parseSchemaType(source sourceFile, data dataType, structure *ast.StructType) (dataType, bool, error) {
 	indexes := make(map[uint32]string)
 	for _, field := range structure.Fields.List {
-		if len(field.Names) == 0 {
-			return dataType{}, false, fmt.Errorf("diffgen: %s: 不支持匿名嵌入，请使用组合字段", data.name)
-		}
-		if len(field.Names) != 1 {
-			return dataType{}, false, fmt.Errorf("diffgen: %s: 一个diff字段只能声明一个名字", data.name)
-		}
-
 		tag, tagged := diffTag(field)
+		if tag == "-" || !tagged && len(field.Names) == 0 {
+			data.runtimeFields = append(data.runtimeFields, field)
+			continue
+		}
 		if !tagged {
 			return dataType{}, false, fmt.Errorf("diffgen: %s.%s: 缺少diff标签", data.name, field.Names[0].Name)
 		}
-		if tag == "-" {
-			return dataType{}, false, fmt.Errorf("diffgen: %s.%s: 运行时字段请放到单独的Runtime对象中", data.name, field.Names[0].Name)
+		if len(field.Names) == 0 {
+			return dataType{}, false, fmt.Errorf("diffgen: %s: 匿名字段不能参与diff", data.name)
+		}
+		if len(field.Names) != 1 {
+			return dataType{}, false, fmt.Errorf("diffgen: %s: 一个diff字段只能声明一个名字", data.name)
 		}
 		index, err := strconv.ParseUint(tag, 10, 32)
 		if err != nil || index == 0 {
@@ -457,6 +458,9 @@ func requiredImports(source sourceFile) map[string]string {
 			collectExpressionImports(field.keyType, source.imports, imports)
 			collectExpressionImports(field.valueType, source.imports, imports)
 		}
+		for _, field := range data.runtimeFields {
+			collectExpressionImports(field.Type, source.imports, imports)
+		}
 	}
 	return imports
 }
@@ -500,6 +504,21 @@ func expressionString(path string, expression ast.Node) string {
 		panic(fmt.Sprintf("diffgen: %s: %v", path, err))
 	}
 	return data.String()
+}
+
+func fieldString(path string, field *ast.Field) string {
+	declaration := expressionString(path, field.Type)
+	if len(field.Names) != 0 {
+		names := make([]string, len(field.Names))
+		for index, name := range field.Names {
+			names[index] = name.Name
+		}
+		declaration = strings.Join(names, ", ") + " " + declaration
+	}
+	if field.Tag != nil {
+		declaration += " " + field.Tag.Value
+	}
+	return declaration
 }
 
 func typeParamsDeclaration(path string, fields *ast.FieldList) string {
