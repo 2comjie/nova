@@ -43,6 +43,23 @@ func (m *PointerMap[K, V]) Store(key K, value V) bool {
 		return false
 	}
 
+	value, event, accepted := beforeMapChange(m.parent, m.diffIndex, ChangeMapStore, key, true, oldValue, exists, value, true)
+	if !accepted || exists && oldValue == value {
+		return false
+	}
+	if event != nil && !event.newExists || value == zero {
+		if !exists {
+			return false
+		}
+		oldValue.RemoveParent(m, key)
+		delete(m.values, key)
+		event.operation = ChangeMapDelete
+		event.newExists = false
+		m.writePatch(key, nil, MapDelete, nil)
+		afterMapChange(m.parent, m.diffIndex, event)
+		return true
+	}
+
 	if exists {
 		oldValue.RemoveParent(m, key)
 	}
@@ -54,6 +71,7 @@ func (m *PointerMap[K, V]) Store(key K, value V) bool {
 	value.AddParent(m, key)
 
 	m.writePatch(key, nil, MapSet, value)
+	afterMapChange(m.parent, m.diffIndex, event)
 	return true
 }
 
@@ -63,9 +81,28 @@ func (m *PointerMap[K, V]) Delete(key K) bool {
 		return false
 	}
 
+	var zero V
+	newValue, event, accepted := beforeMapChange(m.parent, m.diffIndex, ChangeMapDelete, key, true, value, true, zero, false)
+	if !accepted {
+		return false
+	}
+	if event != nil && event.newExists && newValue != zero {
+		if value == newValue {
+			return false
+		}
+		value.RemoveParent(m, key)
+		m.values[key] = newValue
+		newValue.AddParent(m, key)
+		event.operation = ChangeMapStore
+		m.writePatch(key, nil, MapSet, newValue)
+		afterMapChange(m.parent, m.diffIndex, event)
+		return true
+	}
+
 	value.RemoveParent(m, key)
 	delete(m.values, key)
 	m.writePatch(key, nil, MapDelete, nil)
+	afterMapChange(m.parent, m.diffIndex, event)
 	return true
 }
 
@@ -74,11 +111,19 @@ func (m *PointerMap[K, V]) Clear() bool {
 		return false
 	}
 
+	var key K
+	var value V
+	_, event, accepted := beforeMapChange(m.parent, m.diffIndex, ChangeMapClear, key, false, value, false, value, false)
+	if !accepted {
+		return false
+	}
+
 	for key, value := range m.values {
 		value.RemoveParent(m, key)
 	}
 	m.values = nil
 	m.parent.writeChildPatch(m.diffIndex, nil, MapClear, nil)
+	afterMapChange(m.parent, m.diffIndex, event)
 	return true
 }
 
@@ -109,16 +154,21 @@ func (m *PointerMap[K, V]) AppendValue(data []byte, diffIndex uint32) []byte {
 	return endValue(data, fieldLengthIndex)
 }
 
-func (m *PointerMap[K, V]) writeChildPatch(key any, child *pathNode, operation Operation, value any) {
-	m.writePatch(key.(K), child, operation, value)
+func (m *PointerMap[K, V]) writeChildPatch(key any, childPath Path, operation Operation, value any) {
+	m.writePatch(key.(K), childPath, operation, value)
 }
 
-func (m *PointerMap[K, V]) writePatch(key K, child *pathNode, operation Operation, value any) {
-	node := pathNode{
-		next:       child,
+func (m *PointerMap[K, V]) dispatchChildChange(key any, childPath listenerPath, phase listenerPhase, event *changeEvent) {
+	m.parent.dispatchChange(prependListenerPath(listenerPathNode{
+		selector:   listenerMapKey,
 		fieldIndex: m.diffIndex,
-		keyType:    PathMap,
 		key:        key,
-	}
-	m.parent.writePatch(&node, operation, value)
+	}, childPath), phase, event)
+}
+
+func (m *PointerMap[K, V]) writePatch(key K, childPath Path, operation Operation, value any) {
+	path := make(Path, len(childPath)+1)
+	path[0] = PathNode{KeyType: PathMap, FieldIndex: m.diffIndex, MapKey: key}
+	copy(path[1:], childPath)
+	m.parent.writePatch(path, operation, value)
 }

@@ -27,38 +27,64 @@ func (s *PrimitiveSlice[T]) GetValue(index int) T {
 }
 
 func (s *PrimitiveSlice[T]) SetValue(index int, value T) bool {
-	if s.values[index] == value {
+	oldValue := s.values[index]
+	if oldValue == value {
+		return false
+	}
+
+	value, event, accepted := beforeSliceChange(s.parent, s.diffIndex, ChangeSliceSet, index, index, oldValue, true, value, true)
+	if !accepted || oldValue == value {
 		return false
 	}
 
 	s.values[index] = value
 	s.writePatch()
+	afterSliceChange(s.parent, s.diffIndex, event)
 	return true
 }
 
 func (s *PrimitiveSlice[T]) Append(value T) {
+	var zero T
+	value, event, accepted := beforeSliceChange(s.parent, s.diffIndex, ChangeSliceAppend, len(s.values), len(s.values), zero, false, value, true)
+	if !accepted {
+		return
+	}
+
 	s.values = append(s.values, value)
 	s.writePatch()
+	afterSliceChange(s.parent, s.diffIndex, event)
 }
 
 func (s *PrimitiveSlice[T]) Insert(index int, value T) {
 	var zero T
+	value, event, accepted := beforeSliceChange(s.parent, s.diffIndex, ChangeSliceInsert, index, index, zero, false, value, true)
+	if !accepted {
+		return
+	}
+
 	s.values = append(s.values, zero)
 	copy(s.values[index+1:], s.values[index:])
 	s.values[index] = value
 	s.writePatch()
+	afterSliceChange(s.parent, s.diffIndex, event)
 }
 
 func (s *PrimitiveSlice[T]) Delete(index int) T {
 	value := s.values[index]
+	var zero T
+	_, event, accepted := beforeSliceChange(s.parent, s.diffIndex, ChangeSliceDelete, index, index, value, true, zero, false)
+	if !accepted {
+		return zero
+	}
+
 	lastIndex := len(s.values) - 1
 	copy(s.values[index:], s.values[index+1:])
 
-	var zero T
 	s.values[lastIndex] = zero
 	s.values = s.values[:lastIndex]
 
 	s.writePatch()
+	afterSliceChange(s.parent, s.diffIndex, event)
 	return value
 }
 
@@ -68,6 +94,11 @@ func (s *PrimitiveSlice[T]) Move(index int, toIndex int) bool {
 	}
 
 	value := s.values[index]
+	value, event, accepted := beforeSliceChange(s.parent, s.diffIndex, ChangeSliceMove, index, toIndex, value, true, value, true)
+	if !accepted {
+		return false
+	}
+
 	if index < toIndex {
 		copy(s.values[index:toIndex], s.values[index+1:toIndex+1])
 	} else {
@@ -76,6 +107,7 @@ func (s *PrimitiveSlice[T]) Move(index int, toIndex int) bool {
 	s.values[toIndex] = value
 
 	s.writePatch()
+	afterSliceChange(s.parent, s.diffIndex, event)
 	return true
 }
 
@@ -84,8 +116,15 @@ func (s *PrimitiveSlice[T]) Clear() bool {
 		return false
 	}
 
+	var zero T
+	_, event, accepted := beforeSliceChange(s.parent, s.diffIndex, ChangeSliceClear, 0, 0, zero, false, zero, false)
+	if !accepted {
+		return false
+	}
+
 	s.values = nil
 	s.writePatch()
+	afterSliceChange(s.parent, s.diffIndex, event)
 	return true
 }
 

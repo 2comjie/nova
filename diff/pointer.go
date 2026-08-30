@@ -35,6 +35,21 @@ func (p *Pointer[T]) SetValue(value T) bool {
 
 	oldValue := p.value
 	var zero T
+	operation := ChangeSet
+	if value == zero {
+		operation = ChangeClear
+	}
+	value, event, accepted := beforeValueChange(p.parent, p.diffIndex, operation, oldValue, value)
+	if !accepted || oldValue == value {
+		return false
+	}
+	if event != nil {
+		if value == zero {
+			event.operation = ChangeClear
+		} else {
+			event.operation = ChangeSet
+		}
+	}
 
 	if oldValue != zero {
 		oldValue.RemoveParent(p.parent, p.diffIndex)
@@ -48,6 +63,7 @@ func (p *Pointer[T]) SetValue(value T) bool {
 	} else {
 		p.parent.writeChildPatch(p.diffIndex, nil, PointerClear, nil)
 	}
+	afterValueChange(p.parent, p.diffIndex, event)
 	return true
 }
 

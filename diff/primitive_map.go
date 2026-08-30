@@ -31,22 +31,59 @@ func (m *PrimitiveMap[K, V]) Store(key K, value V) bool {
 		return false
 	}
 
+	value, event, accepted := beforeMapChange(m.parent, m.diffIndex, ChangeMapStore, key, true, oldValue, exists, value, true)
+	if !accepted {
+		return false
+	}
+	if event != nil && !event.newExists {
+		if !exists {
+			return false
+		}
+		delete(m.values, key)
+		event.operation = ChangeMapDelete
+		m.writePatch(key, MapDelete, nil)
+		afterMapChange(m.parent, m.diffIndex, event)
+		return true
+	}
+	if exists && oldValue == value {
+		return false
+	}
+
 	if m.values == nil {
 		m.values = make(map[K]V)
 	}
 	m.values[key] = value
 
 	m.writePatch(key, MapSet, value)
+	afterMapChange(m.parent, m.diffIndex, event)
 	return true
 }
 
 func (m *PrimitiveMap[K, V]) Delete(key K) bool {
-	if _, exists := m.values[key]; !exists {
+	value, exists := m.values[key]
+	if !exists {
 		return false
+	}
+
+	var zero V
+	newValue, event, accepted := beforeMapChange(m.parent, m.diffIndex, ChangeMapDelete, key, true, value, true, zero, false)
+	if !accepted {
+		return false
+	}
+	if event != nil && event.newExists {
+		if value == newValue {
+			return false
+		}
+		m.values[key] = newValue
+		event.operation = ChangeMapStore
+		m.writePatch(key, MapSet, newValue)
+		afterMapChange(m.parent, m.diffIndex, event)
+		return true
 	}
 
 	delete(m.values, key)
 	m.writePatch(key, MapDelete, nil)
+	afterMapChange(m.parent, m.diffIndex, event)
 	return true
 }
 
@@ -55,8 +92,16 @@ func (m *PrimitiveMap[K, V]) Clear() bool {
 		return false
 	}
 
+	var key K
+	var value V
+	_, event, accepted := beforeMapChange(m.parent, m.diffIndex, ChangeMapClear, key, false, value, false, value, false)
+	if !accepted {
+		return false
+	}
+
 	m.values = nil
 	m.parent.writeChildPatch(m.diffIndex, nil, MapClear, nil)
+	afterMapChange(m.parent, m.diffIndex, event)
 	return true
 }
 
@@ -88,10 +133,5 @@ func (m *PrimitiveMap[K, V]) AppendValue(data []byte, diffIndex uint32) []byte {
 }
 
 func (m *PrimitiveMap[K, V]) writePatch(key K, operation Operation, value any) {
-	node := pathNode{
-		fieldIndex: m.diffIndex,
-		keyType:    PathMap,
-		key:        key,
-	}
-	m.parent.writePatch(&node, operation, value)
+	m.parent.writePatch(Path{{KeyType: PathMap, FieldIndex: m.diffIndex, MapKey: key}}, operation, value)
 }

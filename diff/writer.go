@@ -42,11 +42,20 @@ type Patch struct {
 }
 
 type Writer struct {
-	patches []Patch
+	patches  []Patch
+	rootType reflect.Type
 }
 
 func NewWriter() *Writer {
 	return &Writer{}
+}
+
+func BindWriter[Root any](writer *Writer) {
+	writer.rootType = reflect.TypeFor[Root]()
+}
+
+func (w *Writer) dispatchChange(phase listenerPhase, path listenerPath, event *changeEvent) {
+	dispatchListeners(w.rootType, phase, path, event)
 }
 
 func (w *Writer) WritePatch(patch Patch) {

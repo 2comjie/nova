@@ -24,8 +24,14 @@ func (p *Primitive[T]) SetValue(value T) bool {
 		return false
 	}
 
+	value, event, accepted := beforeValueChange(p.parent, p.diffIndex, ChangeSet, p.value, value)
+	if !accepted || p.value == value {
+		return false
+	}
+
 	p.value = value
 	p.parent.writeChildPatch(p.diffIndex, nil, PrimitiveSet, value)
+	afterValueChange(p.parent, p.diffIndex, event)
 	return true
 }
 

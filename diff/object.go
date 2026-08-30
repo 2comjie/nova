@@ -9,7 +9,8 @@ type Object struct {
 }
 
 type Parent interface {
-	writeChildPatch(key any, child *pathNode, operation Operation, value any)
+	writeChildPatch(key any, childPath Path, operation Operation, value any)
+	dispatchChildChange(key any, childPath listenerPath, phase listenerPhase, event *changeEvent)
 }
 
 type ParentLink struct {
@@ -23,11 +24,10 @@ func (o *Object) Init(writer *Writer) {
 	o.overflow = nil
 }
 
-type pathNode struct {
-	next       *pathNode
-	fieldIndex uint32
-	keyType    PathKeyType
-	key        any
+func (o *Object) Commit() []byte {
+	data := o.writer.Commit()
+	o.writer.Reset()
+	return data
 }
 
 func (o *Object) AddParent(parent Parent, key any) {
@@ -100,36 +100,55 @@ func (o *Object) RemoveParent(parent Parent, key any) {
 	}
 }
 
-func (o *Object) writeChildPatch(key any, child *pathNode, operation Operation, value any) {
-	node := pathNode{
-		next:       child,
-		fieldIndex: key.(uint32),
-		keyType:    PathField,
-	}
-	o.writePatch(&node, operation, value)
+func (o *Object) writeChildPatch(key any, childPath Path, operation Operation, value any) {
+	path := make(Path, len(childPath)+1)
+	path[0] = PathNode{KeyType: PathField, FieldIndex: key.(uint32)}
+	copy(path[1:], childPath)
+	o.writePatch(path, operation, value)
 }
 
-func (o *Object) writePatch(path *pathNode, operation Operation, value any) {
-	if o.writer != nil {
-		var pathBuffer [8]PathNode
-		runtimePath := pathBuffer[:0]
-		for node := path; node != nil; node = node.next {
-			runtimePath = append(runtimePath, PathNode{
-				KeyType:    node.keyType,
-				FieldIndex: node.fieldIndex,
-				MapKey:     node.key,
-			})
-		}
+func (o *Object) dispatchChildChange(key any, childPath listenerPath, phase listenerPhase, event *changeEvent) {
+	o.dispatchChange(prependListenerPath(listenerPathNode{
+		selector:   listenerField,
+		fieldIndex: key.(uint32),
+	}, childPath), phase, event)
+}
 
-		o.writer.WritePatch(Patch{
-			Path:      runtimePath,
-			Operation: operation,
-			Value:     value,
-		})
+func (o *Object) dispatchChange(path listenerPath, phase listenerPhase, event *changeEvent) {
+	if o.writer != nil {
+		o.writer.dispatchChange(phase, path, event)
 		return
 	}
 
 	if o.parent.parent != nil {
+		o.parent.parent.dispatchChildChange(o.parent.key, path, phase, event)
+	}
+	if event.canceled || o.overflow == nil {
+		return
+	}
+
+	for _, link := range *o.overflow {
+		link.parent.dispatchChildChange(link.key, path, phase, event)
+		if event.canceled {
+			return
+		}
+	}
+}
+
+func (o *Object) writePatch(path Path, operation Operation, value any) {
+	if o.writer != nil {
+		o.writer.WritePatch(Patch{
+			Path:      path,
+			Operation: operation,
+			Value:     value,
+		})
+
+		// root 节点才会有writer
+		return
+	}
+
+	if o.parent.parent != nil {
+		// 向上冒泡 path node 会填充完整
 		o.parent.parent.writeChildPatch(o.parent.key, path, operation, value)
 	}
 
