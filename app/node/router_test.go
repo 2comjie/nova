@@ -9,14 +9,9 @@ import (
 func TestRouterReturnsHandlerError(t *testing.T) {
 	handlerErr := errors.New("handler failed")
 	router := NewRouter()
-	if err := router.Handle(1, func(*Context) error {
+	router.Handle(1, func(*Context) error {
 		return handlerErr
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := router.Freeze(); err != nil {
-		t.Fatal(err)
-	}
+	})
 
 	err := router.Dispatch(&Context{Request: &Request{Route: 1}})
 	if !errors.Is(err, handlerErr) {
@@ -43,18 +38,11 @@ func TestRouterMiddlewareOrder(t *testing.T) {
 			return err
 		}
 	}
-	if err := router.Use(first, second); err != nil {
-		t.Fatal(err)
-	}
-	if err := router.Handle(1, func(*Context) error {
+	router.Use(first, second)
+	router.Handle(1, func(*Context) error {
 		calls = append(calls, "handler")
 		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := router.Freeze(); err != nil {
-		t.Fatal(err)
-	}
+	})
 	if err := router.Dispatch(&Context{Request: &Request{Route: 1}}); err != nil {
 		t.Fatal(err)
 	}

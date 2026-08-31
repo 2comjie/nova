@@ -103,12 +103,10 @@ func (m *sessionManager) Add(conn transport.Conn) *Session {
 func (m *sessionManager) Bind(session *Session, token []byte) error {
 	var uid uint64
 	var authErr error
-	completed := false
-	help.SafeRun(func() {
+	panicked := help.SafeRun(func() {
 		uid, authErr = m.auther.Auth(token)
-		completed = true
 	})
-	if !completed || authErr != nil || uid == 0 {
+	if panicked || authErr != nil || uid == 0 {
 		return ErrUnauthorized
 	}
 

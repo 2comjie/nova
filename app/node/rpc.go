@@ -53,12 +53,9 @@ func (n *Node) handle(ctx context.Context, request *pbNode.Request, needReply bo
 	}
 
 	var dispatchErr error
-	completed := false
-	help.SafeRun(func() {
+	if help.SafeRun(func() {
 		dispatchErr = n.router.Dispatch(nodeContext)
-		completed = true
-	})
-	if !completed {
+	}) {
 		return nil, status.Error(codes.Internal, "node: Handler执行失败")
 	}
 	if dispatchErr != nil {

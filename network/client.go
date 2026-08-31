@@ -132,36 +132,21 @@ func (c *Client) Bind(ctx context.Context, token []byte) error {
 		return err
 	}
 
-	var result bindResult
+	defer c.clearBindWait(wait)
 	select {
-	case result = <-wait:
+	case result := <-wait:
+		if result.err != nil {
+			return result.err
+		}
+		if result.response.Code != protocol.BindCode_BIND_OK {
+			return ErrUnauthorized
+		}
+		return nil
 	case <-ctx.Done():
-		select {
-		case result = <-wait:
-		default:
-			c.clearBindWait(wait)
-			return ctx.Err()
-		}
+		return ctx.Err()
 	case <-c.done:
-		select {
-		case result = <-wait:
-		default:
-			c.clearBindWait(wait)
-			return ErrClosed
-		}
-	}
-	c.clearBindWait(wait)
-	if result.err != nil {
-		return result.err
-	}
-	if result.response == nil || result.response.Code != protocol.BindCode_BIND_OK {
-		return ErrUnauthorized
-	}
-
-	if c.closed.Load() || !c.bound.Load() {
 		return ErrClosed
 	}
-	return nil
 }
 
 func (c *Client) clearBindWait(wait chan bindResult) {
@@ -177,9 +162,6 @@ func (c *Client) Call(ctx context.Context, route uint32, body []byte) ([]byte, e
 		return nil, ErrNotBound
 	}
 	seq := c.seq.Add(1)
-	if seq == 0 {
-		return nil, errors.New("network: Seq已耗尽")
-	}
 
 	body, err := encodeBody(c.options, packet.Req, route, seq, body)
 	if err != nil {
@@ -220,20 +202,12 @@ func (c *Client) Call(ctx context.Context, route uint32, body []byte) ([]byte, e
 		c.removePending(seq, call)
 		return nil, ctx.Err()
 	case <-c.done:
-		select {
-		case result := <-call.result:
-			return result.body, result.err
-		default:
-			c.removePending(seq, call)
-			return nil, ErrClosed
-		}
+		c.removePending(seq, call)
+		return nil, ErrClosed
 	}
 }
 
-func (c *Client) Tell(ctx context.Context, route uint32, body []byte) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
+func (c *Client) Tell(_ context.Context, route uint32, body []byte) error {
 	if !c.bound.Load() {
 		return ErrNotBound
 	}
@@ -293,23 +267,23 @@ func (c *Client) HandleMessage(conn transport.Conn, message *packet.Message) {
 		}
 		c.mutex.Lock()
 		wait := c.bindWait
-		c.mutex.Unlock()
 		if wait == nil {
+			c.mutex.Unlock()
 			_ = conn.Close()
 			return
 		}
 		if response.Code == protocol.BindCode_BIND_OK {
 			if c.closed.Load() {
+				c.mutex.Unlock()
 				return
 			}
 			if response.HeartbeatIntervalMilli > 0 {
 				c.heartbeat = time.Duration(response.HeartbeatIntervalMilli) * time.Millisecond
 			}
 			c.bound.Store(true)
-			if c.closed.Load() {
-				c.bound.Store(false)
-				return
-			}
+		}
+		c.mutex.Unlock()
+		if response.Code == protocol.BindCode_BIND_OK {
 			c.heartbeatRun.Do(func() {
 				help.SafeGo(c.heartbeatLoop)
 			})

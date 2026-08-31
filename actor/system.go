@@ -29,13 +29,11 @@ type System struct {
 	stop   context.CancelFunc
 	done   chan struct{}
 
-	mu            sync.RWMutex
 	registrations map[actorDef.Type]managerRegistration
 
 	lifecycleMu sync.Mutex
 	stopping    bool
 	tasks       sync.WaitGroup
-	stopOnce    sync.Once
 }
 
 func NewSystem(registrar grpc.ServiceRegistrar) *System {
@@ -55,27 +53,19 @@ func (s *System) Start() error {
 }
 
 func (s *System) Shutdown(ctx context.Context) error {
-	s.stopOnce.Do(func() {
-		s.lifecycleMu.Lock()
-		s.stopping = true
-		s.lifecycleMu.Unlock()
+	s.lifecycleMu.Lock()
+	s.stopping = true
+	s.lifecycleMu.Unlock()
 
-		s.mu.RLock()
-		managers := make([]managerController, 0, len(s.registrations))
-		for _, registration := range s.registrations {
-			managers = append(managers, registration.manager)
-		}
-		s.mu.RUnlock()
-		for _, manager := range managers {
-			manager.requestStopAll()
-		}
-		s.stop()
+	for _, registration := range s.registrations {
+		registration.manager.requestStopAll()
+	}
+	s.stop()
 
-		go func() {
-			s.tasks.Wait()
-			close(s.done)
-		}()
-	})
+	go func() {
+		s.tasks.Wait()
+		close(s.done)
+	}()
 
 	select {
 	case <-s.done:
@@ -98,10 +88,8 @@ func (s *System) process(ctx context.Context, request *pbActor.Request, needRepl
 		return nil, rpcerr.NewGRPC(codes.InvalidArgument, "actor: RPC请求无效")
 	}
 
-	s.mu.RLock()
 	registration, exists := s.registrations[actorDef.Type(request.ActorType)]
 	processor := registration.routes[request.Route]
-	s.mu.RUnlock()
 	if !exists || processor == nil {
 		return nil, rpcerr.NewGRPC(codes.NotFound, "actor: RPC route不存在")
 	}
@@ -114,24 +102,11 @@ func (s *System) process(ctx context.Context, request *pbActor.Request, needRepl
 }
 
 func (s *System) registerManager(actorType actorDef.Type, manager managerController) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, exists := s.registrations[actorType]; exists {
-		panic("actor: ActorType已经注册")
-	}
 	s.registrations[actorType] = managerRegistration{manager: manager, routes: make(map[uint32]rpcProcessor)}
 }
 
 func (s *System) registerRoute(actorType actorDef.Type, route uint32, processor rpcProcessor) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	registration, exists := s.registrations[actorType]
-	if !exists {
-		panic("actor: Manager尚未注册")
-	}
-	if registration.routes[route] != nil {
-		panic("actor: RPC route已经注册")
-	}
+	registration := s.registrations[actorType]
 	registration.routes[route] = processor
 }
 

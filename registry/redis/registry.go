@@ -54,27 +54,14 @@ func (r *Registry) Register(serviceInstance endpoint.ServiceInstance) error {
 	hashKey := r.hashKey()
 	ttlSeconds := int(r.option.ttl.Seconds())
 
-	var finalErr error
-	success := help.Retry(r.ctx, 3, time.Second, func() bool {
-		data, err := json.Marshal(serviceInstance)
-		if err != nil {
-			logCtx.Errorf("marshal service err %+v", err)
-			finalErr = err
-			return false
-		}
-		err = r.rc.Eval(r.ctx, registerScript, []string{hashKey}, data, serviceInstance.ID, ttlSeconds).Err()
-		if err != nil {
-			logCtx.Errorf("eval register script err %+v", err)
-			finalErr = err
-			return false
-		}
-		finalErr = nil
-		return true
-	})
-
-	if !success {
-		logCtx.Errorf("register failed")
-		return finalErr
+	data, err := json.Marshal(serviceInstance)
+	if err != nil {
+		return err
+	}
+	if err := help.Retry(r.ctx, 3, time.Second, func() error {
+		return r.rc.Eval(r.ctx, registerScript, []string{hashKey}, data, serviceInstance.ID, ttlSeconds).Err()
+	}); err != nil {
+		return err
 	}
 
 	r.publishEvent(UpdateEvent{Type: EventRegister, Instance: serviceInstance})
@@ -96,21 +83,10 @@ func (r *Registry) Deregister(instanceID string) error {
 	logCtx := logx.WithField("service", instanceID)
 	hashKey := r.hashKey()
 
-	var finalErr error
-	success := help.Retry(r.ctx, 3, time.Second, func() bool {
-		err := r.rc.Eval(r.ctx, deregisterScript, []string{hashKey}, instanceID).Err()
-		if err != nil {
-			logCtx.Errorf("eval deregister script err %+v", err)
-			finalErr = err
-			return false
-		}
-		finalErr = nil
-		return true
-	})
-
-	if !success {
-		logCtx.Errorf("deregister failed")
-		return finalErr
+	if err := help.Retry(r.ctx, 3, time.Second, func() error {
+		return r.rc.Eval(r.ctx, deregisterScript, []string{hashKey}, instanceID).Err()
+	}); err != nil {
+		return err
 	}
 
 	r.publishEvent(UpdateEvent{Type: EventDeregister, Instance: endpoint.ServiceInstance{ID: instanceID}})
@@ -132,20 +108,15 @@ func (r *Registry) UpdateMetaData(instanceId string, meta map[string]string) err
 	ttlSeconds := int(r.option.ttl.Seconds())
 
 	var updatedInst endpoint.ServiceInstance
-	var finalErr error
-	success := help.Retry(r.ctx, 3, time.Second, func() bool {
+	err := help.Retry(r.ctx, 3, time.Second, func() error {
 		data, err := r.rc.HGet(r.ctx, hashKey, instanceId).Result()
 		if err != nil {
-			logCtx.Errorf("hget err %+v", err)
-			finalErr = err
-			return false
+			return err
 		}
 
 		var inst endpoint.ServiceInstance
 		if err := json.Unmarshal([]byte(data), &inst); err != nil {
-			logCtx.Errorf("unmarshal err %+v", err)
-			finalErr = err
-			return false
+			return err
 		}
 
 		if inst.MetaData == nil {
@@ -157,29 +128,20 @@ func (r *Registry) UpdateMetaData(instanceId string, meta map[string]string) err
 
 		newData, err := json.Marshal(inst)
 		if err != nil {
-			logCtx.Errorf("marshal err %+v", err)
-			finalErr = err
-			return false
+			return err
 		}
 
 		if err := r.rc.HSet(r.ctx, hashKey, instanceId, newData).Err(); err != nil {
-			logCtx.Errorf("hset err %+v", err)
-			finalErr = err
-			return false
+			return err
 		}
 		if err := r.rc.Do(r.ctx, "HEXPIRE", hashKey, ttlSeconds, "FIELDS", 1, instanceId).Err(); err != nil {
-			logCtx.Errorf("hexpire err %+v", err)
-			finalErr = err
-			return false
+			return err
 		}
 		updatedInst = inst
-		finalErr = nil
-		return true
+		return nil
 	})
-
-	if !success {
-		logCtx.Errorf("update meta data failed")
-		return finalErr
+	if err != nil {
+		return err
 	}
 
 	r.publishEvent(UpdateEvent{Type: EventUpdateMeta, Instance: updatedInst})
@@ -196,20 +158,15 @@ func (r *Registry) DeleteMetaData(instanceId string, keys []string) error {
 	ttlSeconds := int(r.option.ttl.Seconds())
 
 	var updatedInst endpoint.ServiceInstance
-	var finalErr error
-	success := help.Retry(r.ctx, 3, time.Second, func() bool {
+	err := help.Retry(r.ctx, 3, time.Second, func() error {
 		data, err := r.rc.HGet(r.ctx, hashKey, instanceId).Result()
 		if err != nil {
-			logCtx.Errorf("hget err %+v", err)
-			finalErr = err
-			return false
+			return err
 		}
 
 		var inst endpoint.ServiceInstance
 		if err := json.Unmarshal([]byte(data), &inst); err != nil {
-			logCtx.Errorf("unmarshal err %+v", err)
-			finalErr = err
-			return false
+			return err
 		}
 
 		for _, key := range keys {
@@ -218,29 +175,20 @@ func (r *Registry) DeleteMetaData(instanceId string, keys []string) error {
 
 		newData, err := json.Marshal(inst)
 		if err != nil {
-			logCtx.Errorf("marshal err %+v", err)
-			finalErr = err
-			return false
+			return err
 		}
 
 		if err := r.rc.HSet(r.ctx, hashKey, instanceId, newData).Err(); err != nil {
-			logCtx.Errorf("hset err %+v", err)
-			finalErr = err
-			return false
+			return err
 		}
 		if err := r.rc.Do(r.ctx, "HEXPIRE", hashKey, ttlSeconds, "FIELDS", 1, instanceId).Err(); err != nil {
-			logCtx.Errorf("hexpire err %+v", err)
-			finalErr = err
-			return false
+			return err
 		}
 		updatedInst = inst
-		finalErr = nil
-		return true
+		return nil
 	})
-
-	if !success {
-		logCtx.Errorf("delete meta data failed")
-		return finalErr
+	if err != nil {
+		return err
 	}
 
 	r.publishEvent(UpdateEvent{Type: EventDeleteMeta, Instance: updatedInst})
@@ -269,16 +217,10 @@ func (r *Registry) keepAlive(stopCh chan struct{}, instanceID string) {
 		case <-r.ctx.Done():
 			return
 		case <-tk.C:
-			success := help.Retry(r.ctx, 3, time.Second, func() bool {
-				err := r.rc.Do(r.ctx, "HEXPIRE", r.hashKey(), int(r.option.ttl.Seconds()), "FIELDS", 1, instanceID).Err()
-				if err != nil {
-					logCtx.Errorf("hexpire instance field err %+v", err)
-					return false
-				}
-				return true
-			})
-			if !success {
-				logCtx.Errorf("keep alive failed")
+			if err := help.Retry(r.ctx, 3, time.Second, func() error {
+				return r.rc.Do(r.ctx, "HEXPIRE", r.hashKey(), int(r.option.ttl.Seconds()), "FIELDS", 1, instanceID).Err()
+			}); err != nil {
+				logCtx.Errorf("keep alive failed: %v", err)
 			}
 		}
 	}

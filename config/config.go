@@ -94,7 +94,7 @@ func (c *config) Load() error {
 			for _, created := range watchers {
 				created.Stop()
 			}
-			return fmt.Errorf("config: watch source %d: %w", index, err)
+			return err
 		}
 		if watcher == nil {
 			for _, created := range watchers {

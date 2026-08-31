@@ -132,10 +132,6 @@ func (n *Node) Start() error {
 	if !n.started.CompareAndSwap(false, true) {
 		return ErrStarted
 	}
-	if err := n.router.Freeze(); err != nil {
-		n.started.Store(false)
-		return err
-	}
 	if err := n.App.Start(); err != nil {
 		n.cancel()
 		n.closed.Store(true)

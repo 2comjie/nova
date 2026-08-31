@@ -6,7 +6,6 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"errors"
-	"sync"
 	"time"
 
 	"github.com/2comjie/nova/core/help"
@@ -41,9 +40,7 @@ type Lease struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	done     chan struct{}
-	errMu    sync.RWMutex
-	renewErr error
+	done chan struct{}
 }
 
 func TryLockDefault(rc redis.UniversalClient, ctx context.Context, lockKey string) (*Lease, bool, error) {
@@ -204,10 +201,13 @@ func (l *Lease) Done() <-chan struct{} {
 	return l.done
 }
 
-func (l *Lease) Err() error {
-	l.errMu.RLock()
-	defer l.errMu.RUnlock()
-	return l.renewErr
+func (l *Lease) Active() bool {
+	select {
+	case <-l.done:
+		return false
+	default:
+		return true
+	}
 }
 
 func (l *Lease) renew() {
@@ -222,12 +222,6 @@ func (l *Lease) renew() {
 			return
 		case <-ticker.C:
 			if err := l.Renew(l.ctx); err != nil {
-				if l.ctx.Err() != nil {
-					return
-				}
-				l.errMu.Lock()
-				l.renewErr = err
-				l.errMu.Unlock()
 				return
 			}
 		}

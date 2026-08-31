@@ -1,9 +1,6 @@
 package zipper
 
-import (
-	"errors"
-	"fmt"
-)
+import "errors"
 
 const DefaultMaxSize = 8 << 20
 
@@ -20,5 +17,5 @@ func checkSize(size int, limit int) error {
 	if size <= limit {
 		return nil
 	}
-	return fmt.Errorf("%w: size=%d limit=%d", ErrBodyTooLarge, size, limit)
+	return ErrBodyTooLarge
 }

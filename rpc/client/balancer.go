@@ -22,10 +22,7 @@ func newRoundRobinBalancer() *roundRobinBalancer {
 	return &roundRobinBalancer{next: make(map[string]uint64)}
 }
 
-func (b *roundRobinBalancer) Pick(ctx context.Context, serviceName string, instances []endpoint.ServiceInstance) (endpoint.ServiceInstance, error) {
-	if err := ctx.Err(); err != nil {
-		return endpoint.ServiceInstance{}, err
-	}
+func (b *roundRobinBalancer) Pick(_ context.Context, serviceName string, instances []endpoint.ServiceInstance) (endpoint.ServiceInstance, error) {
 	if len(instances) == 0 {
 		return endpoint.ServiceInstance{}, ErrNoAnyService
 	}
@@ -48,10 +45,7 @@ func newWeightedRoundRobinBalancer() *weightedRoundRobinBalancer {
 	}
 }
 
-func (b *weightedRoundRobinBalancer) Pick(ctx context.Context, serviceName string, instances []endpoint.ServiceInstance) (endpoint.ServiceInstance, error) {
-	if err := ctx.Err(); err != nil {
-		return endpoint.ServiceInstance{}, err
-	}
+func (b *weightedRoundRobinBalancer) Pick(_ context.Context, serviceName string, instances []endpoint.ServiceInstance) (endpoint.ServiceInstance, error) {
 	if len(instances) == 0 {
 		return endpoint.ServiceInstance{}, ErrNoAnyService
 	}

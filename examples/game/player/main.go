@@ -30,12 +30,8 @@ func main() {
 		profiles: make(map[uint64]shared.PlayerProfile),
 	}
 	router := node.NewRouter()
-	if err := router.Handle(shared.RoutePlayerGet, store.onGet); err != nil {
-		panic(err)
-	}
-	if err := router.Handle(shared.RoutePlayerAddExp, store.onAddExp); err != nil {
-		panic(err)
-	}
+	router.Handle(shared.RoutePlayerGet, store.onGet)
+	router.Handle(shared.RoutePlayerAddExp, store.onAddExp)
 
 	options := infrastructure.DeployOptions()
 	options = append(options,

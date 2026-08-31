@@ -2,7 +2,6 @@ package node
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/2comjie/nova/core/endpoint"
@@ -27,17 +26,12 @@ func (e redirectError) ErrorDetail() []byte {
 
 func TestRPCReturnsActorRedirect(t *testing.T) {
 	router := NewRouter()
-	if err := router.Handle(1001, func(ctx *Context) error {
+	router.Handle(1001, func(ctx *Context) error {
 		if ctx.Request.ActorKey != "player:uid-1001" {
 			t.Fatalf("actor key=%q", ctx.Request.ActorKey)
 		}
 		return redirectError("player-2")
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := router.Freeze(); err != nil {
-		t.Fatal(err)
-	}
+	})
 
 	nodeApp := &Node{
 		instance: endpoint.ServiceInstance{ID: "player-1", ServiceName: "player"},
@@ -52,13 +46,12 @@ func TestRPCReturnsActorRedirect(t *testing.T) {
 	}
 
 	_, err := nodeApp.Call(context.Background(), request)
-	var redirect redirectError
-	if !errors.As(err, &redirect) || redirect.ErrorCode() != rpc.ErrorCodeRedirect || string(redirect.ErrorDetail()) != "player-2" {
+	if err == nil || err.Code() != rpc.ErrorCodeRedirect || string(err.Detail()) != "player-2" {
 		t.Fatalf("call error=%v", err)
 	}
 
 	_, err = nodeApp.Tell(context.Background(), request)
-	if !errors.As(err, &redirect) || redirect.ErrorCode() != rpc.ErrorCodeRedirect || string(redirect.ErrorDetail()) != "player-2" {
+	if err == nil || err.Code() != rpc.ErrorCodeRedirect || string(err.Detail()) != "player-2" {
 		t.Fatalf("tell error=%v", err)
 	}
 }

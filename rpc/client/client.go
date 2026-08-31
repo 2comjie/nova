@@ -58,9 +58,6 @@ func NewClient(discover registry.Discover, locator locator.Locator, opts ...Opti
 }
 
 func (c *Client) Service(ctx context.Context, serviceName string) (*grpc.ClientConn, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 	if serviceName == "" {
 		return nil, ErrInvalidTarget
 	}
@@ -87,10 +84,7 @@ func (c *Client) Node(ctx context.Context, serviceName, instanceID string) (*grp
 	return c.pool.Get(instance.RpcTarget())
 }
 
-func (c *Client) Direct(ctx context.Context, addr string) (*grpc.ClientConn, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
+func (c *Client) Direct(_ context.Context, addr string) (*grpc.ClientConn, error) {
 	if _, _, err := net.SplitHostPort(addr); err != nil {
 		return nil, ErrInvalidTarget
 	}
@@ -116,16 +110,16 @@ func (c *Client) Route(
 	return c.Node(ctx, serviceName, instanceID)
 }
 
-func (c *Client) Actor(ctx context.Context, serviceName string, actorKey string) (*grpc.ClientConn, error) {
-	instance, err := c.pickActor(ctx, serviceName, actorKey)
+func (c *Client) Actor(_ context.Context, serviceName string, actorKey string) (*grpc.ClientConn, error) {
+	instance, err := c.pickActor(serviceName, actorKey)
 	if err != nil {
 		return nil, err
 	}
 	return c.pool.Get(instance.RpcTarget())
 }
 
-func (c *Client) ActorInstanceId(ctx context.Context, serviceName string, actorKey string) (string, error) {
-	instance, err := c.pickActor(ctx, serviceName, actorKey)
+func (c *Client) ActorInstanceId(_ context.Context, serviceName string, actorKey string) (string, error) {
+	instance, err := c.pickActor(serviceName, actorKey)
 	if err != nil {
 		return "", err
 	}
@@ -133,9 +127,6 @@ func (c *Client) ActorInstanceId(ctx context.Context, serviceName string, actorK
 }
 
 func (c *Client) Conn(ctx context.Context) (*grpc.ClientConn, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 	s := lx.GetStrategy(ctx)
 	switch s.Mode {
 	case lx.ModeDirect:
@@ -160,10 +151,7 @@ func (c *Client) Conn(ctx context.Context) (*grpc.ClientConn, error) {
 	}
 }
 
-func (c *Client) pickActor(ctx context.Context, serviceName string, actorKey string) (endpoint.ServiceInstance, error) {
-	if err := ctx.Err(); err != nil {
-		return endpoint.ServiceInstance{}, err
-	}
+func (c *Client) pickActor(serviceName string, actorKey string) (endpoint.ServiceInstance, error) {
 	if serviceName == "" || actorKey == "" {
 		return endpoint.ServiceInstance{}, ErrInvalidTarget
 	}

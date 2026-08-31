@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -29,16 +28,10 @@ func (eb *EventBus) Publish(ctx context.Context, stream string, data []byte) err
 func (eb *EventBus) Subscribe(ctx context.Context, stream, group, consumer string, handler func([]byte)) error {
 	err := eb.rc.XGroupCreateMkStream(ctx, stream, group, "$").Err()
 	if err != nil && !isBusyGroup(err) {
-		return fmt.Errorf("create consumer group: %w", err)
+		return err
 	}
 
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
 		msgs, err := eb.rc.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    group,
 			Consumer: consumer,

@@ -215,16 +215,11 @@ func (p *Provider) keepAlive(name string, key string, stopCh chan struct{}) {
 		case <-p.ctx.Done():
 			return
 		case <-tk.C:
-			success := help.Retry(p.ctx, 3, time.Second, func() bool {
+			if err := help.Retry(p.ctx, 3, time.Second, func() error {
 				_, err := p.rc.HExpire(p.ctx, p.hashKey(name), p.option.ttl, key).Result()
-				if err != nil {
-					logCtx.Errorf("hexpire bind field err %+v", err)
-					return false
-				}
-				return true
-			})
-			if !success {
-				logCtx.Errorf("keep alive failed")
+				return err
+			}); err != nil {
+				logCtx.Errorf("keep alive failed: %v", err)
 			}
 		}
 	}

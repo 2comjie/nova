@@ -3,7 +3,6 @@ package packet
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/2comjie/nova/core/buffer"
@@ -156,7 +155,7 @@ func (c *Codec) Validate(message *Message) error {
 			return ErrBody
 		}
 	default:
-		return fmt.Errorf("%w: %d", ErrType, message.Type)
+		return ErrType
 	}
 	return nil
 }

@@ -159,9 +159,6 @@ func New(config Config) *Gate {
 	}
 	g.server = server
 
-	if err := g.router.Freeze(); err != nil {
-		panic(err)
-	}
 	pbGate.RegisterGateServer(config.RPCServer, g)
 	return g
 }
@@ -331,12 +328,9 @@ func (g *Gate) onReq(request *network.ReqContext) {
 
 func (g *Gate) dispatch(ctx *Context) error {
 	var err error
-	completed := false
-	help.SafeRun(func() {
+	if help.SafeRun(func() {
 		err = g.router.Dispatch(ctx)
-		completed = true
-	})
-	if !completed {
+	}) {
 		return ErrHandlerPanic
 	}
 	return err

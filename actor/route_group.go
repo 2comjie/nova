@@ -41,7 +41,7 @@ func (g *RouteGroup[T]) Handle(route uint32, handler Handler[T]) {
 		}
 	}
 
-	if err := g.router.Handle(route, func(ctx *node.Context) error {
+	g.router.Handle(route, func(ctx *node.Context) error {
 		runner, handled, err := g.actors.ResolveActor(ctx, actorDef.Key(ctx.Request.ActorKey), g.policy)
 		if err != nil || !handled {
 			return err
@@ -55,7 +55,5 @@ func (g *RouteGroup[T]) Handle(route uint32, handler Handler[T]) {
 			return err
 		}
 		return handleErr
-	}); err != nil {
-		panic(err)
-	}
+	})
 }

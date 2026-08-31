@@ -129,7 +129,7 @@ func encodeGateBinding(binding GateBinding) (string, error) {
 	}
 	value, err := json.Marshal(binding)
 	if err != nil {
-		return "", fmt.Errorf("locator: 编码GateBinding失败: %w", err)
+		return "", err
 	}
 	return string(value), nil
 }
@@ -137,7 +137,7 @@ func encodeGateBinding(binding GateBinding) (string, error) {
 func decodeGateBinding(value string) (GateBinding, error) {
 	var binding GateBinding
 	if err := json.Unmarshal([]byte(value), &binding); err != nil {
-		return GateBinding{}, fmt.Errorf("locator: 解析GateBinding失败: %w", err)
+		return GateBinding{}, err
 	}
 	if binding.InstanceID == "" || binding.SessionID == 0 {
 		return GateBinding{}, fmt.Errorf("locator: GateBinding无效 instance=%q session=%d", binding.InstanceID, binding.SessionID)

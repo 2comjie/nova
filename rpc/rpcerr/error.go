@@ -15,6 +15,14 @@ type Err interface {
 	GRPCCode() codes.Code
 }
 
+type codedError interface {
+	ErrorCode() uint32
+}
+
+type detailError interface {
+	ErrorDetail() []byte
+}
+
 type rpcError struct {
 	code     uint32
 	message  string
@@ -29,7 +37,6 @@ type businessError struct {
 type transportError struct {
 	*rpcError
 	grpcStatus *status.Status
-	cause      error
 }
 
 func New(code uint32, message string) Err {
@@ -52,6 +59,15 @@ func Wrap(err error) Err {
 	if errors.As(err, &rpcErr) {
 		return rpcErr
 	}
+	var coded codedError
+	if errors.As(err, &coded) {
+		var detail []byte
+		var detailed detailError
+		if errors.As(err, &detailed) {
+			detail = detailed.ErrorDetail()
+		}
+		return NewWithDetail(coded.ErrorCode(), err.Error(), detail)
+	}
 	grpcStatus, ok := status.FromError(err)
 	if !ok {
 		grpcStatus = status.FromContextError(err)
@@ -59,7 +75,6 @@ func Wrap(err error) Err {
 	return &transportError{
 		rpcError:   &rpcError{message: grpcStatus.Message(), grpcCode: grpcStatus.Code()},
 		grpcStatus: grpcStatus,
-		cause:      err,
 	}
 }
 
@@ -89,10 +104,6 @@ func (e *businessError) ErrorCode() uint32 {
 
 func (e *businessError) ErrorDetail() []byte {
 	return e.detail
-}
-
-func (e *transportError) Unwrap() error {
-	return e.cause
 }
 
 func (e *transportError) GRPCStatus() *status.Status {

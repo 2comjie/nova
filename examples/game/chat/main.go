@@ -17,9 +17,7 @@ func main() {
 	defer infrastructure.Redis.Close()
 
 	router := node.NewRouter()
-	if err := router.Handle(shared.RouteChatSend, onChatSend); err != nil {
-		panic(err)
-	}
+	router.Handle(shared.RouteChatSend, onChatSend)
 
 	options := infrastructure.DeployOptions()
 	options = append(options,

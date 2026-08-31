@@ -18,7 +18,7 @@ func buildTree(sources []Source) (map[string]any, error) {
 		}
 		documents, err := source.Load()
 		if err != nil {
-			return nil, fmt.Errorf("config: load source %d: %w", sourceIndex, err)
+			return nil, err
 		}
 		sort.Slice(documents, func(i, j int) bool {
 			return documents[i].Path < documents[j].Path
@@ -47,7 +47,7 @@ func buildTree(sources []Source) (map[string]any, error) {
 				return nil, err
 			}
 			if err := mergeDocument(root, segments, value); err != nil {
-				return nil, fmt.Errorf("config: merge %q: %w", document.Path, err)
+				return nil, err
 			}
 		}
 	}
@@ -55,7 +55,7 @@ func buildTree(sources []Source) (map[string]any, error) {
 }
 
 func documentInfo(document Document) ([]string, string, error) {
-	format := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(document.Format), "."))
+	format := strings.ToLower(strings.TrimPrefix(document.Format, "."))
 	rawPath := strings.ReplaceAll(document.Path, "\\", "/")
 	if rawPath == "" {
 		if format == "" {
@@ -99,7 +99,7 @@ func decodeDocument(document Document, format string, segments []string) (any, e
 
 	var decoded any
 	if err := codec.Unmarshal(document.Data, &decoded); err != nil {
-		return nil, fmt.Errorf("config: 解析文档 %q: %w", document.Path, err)
+		return nil, err
 	}
 	decoded = normalize(decoded)
 

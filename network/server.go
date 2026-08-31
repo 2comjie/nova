@@ -127,12 +127,10 @@ func (s *Server) handleBind(session *Session, message *packet.Message) {
 	}
 	if s.options.hooks.OnSessionBind != nil {
 		var bindErr error
-		completed := false
-		help.SafeRun(func() {
+		panicked := help.SafeRun(func() {
 			bindErr = s.options.hooks.OnSessionBind(session)
-			completed = true
 		})
-		if !completed || bindErr != nil {
+		if panicked || bindErr != nil {
 			s.writeBindResponse(session, protocol.BindCode_BIND_UNAUTHORIZED)
 			_ = session.Conn.Close()
 			return
@@ -189,10 +187,7 @@ func (s *Server) handleReq(session *Session, message *packet.Message) {
 	}
 }
 
-func (s *Server) PushUID(ctx context.Context, uid uint64, route uint32, body []byte) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
+func (s *Server) PushUID(_ context.Context, uid uint64, route uint32, body []byte) error {
 	session := s.manager.ByUID(uid)
 	if session == nil {
 		return ErrNotBound
@@ -254,9 +249,6 @@ func (s *Server) MultiPush(ctx context.Context, uidList []uint64, route uint32, 
 }
 
 func (s *Server) pushSessions(ctx context.Context, sessions []*Session, route uint32, body []byte) (uint32, error) {
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
 	if len(sessions) == 0 {
 		return 0, nil
 	}

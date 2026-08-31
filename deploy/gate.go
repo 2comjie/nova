@@ -89,16 +89,15 @@ func (g *GateApp) Instance() endpoint.ServiceInstance {
 func loadGateRoutes(configCenter config.Config, router *gateapp.Router) error {
 	filters, err := config.Get[[]gateapp.FilterConfig](configCenter, "gate.filters")
 	if err == nil {
-		if err := router.Use(filters...); err != nil {
-			return err
-		}
+		router.Use(filters...)
 	} else if !errors.Is(err, config.ErrNotFound) {
 		return err
 	}
 
 	routes, err := config.Get[[]gateapp.Route](configCenter, "gate.routes")
 	if err == nil {
-		return router.Add(routes...)
+		router.Add(routes...)
+		return nil
 	}
 	if errors.Is(err, config.ErrNotFound) {
 		return nil

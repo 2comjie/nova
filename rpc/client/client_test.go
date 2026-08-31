@@ -135,7 +135,7 @@ func TestUnknownBalancer(t *testing.T) {
 
 func TestPickActorStableAcrossInstanceOrder(t *testing.T) {
 	c := newTestClient(t)
-	first, err := c.pickActor(context.Background(), "game", "1:uid-1001")
+	first, err := c.pickActor("game", "1:uid-1001")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestPickActorStableAcrossInstanceOrder(t *testing.T) {
 	c.serviceMap["game"] = []endpoint.ServiceInstance{instances[1], instances[0]}
 	c.mu.Unlock()
 
-	second, err := c.pickActor(context.Background(), "game", "1:uid-1001")
+	second, err := c.pickActor("game", "1:uid-1001")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestPickActorMovesSubsetWhenNodeAdded(t *testing.T) {
 	before := make(map[string]string, 1000)
 	for index := range 1000 {
 		key := fmt.Sprintf("1:uid-%d", index)
-		instance, err := c.pickActor(context.Background(), "game", key)
+		instance, err := c.pickActor("game", key)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -174,7 +174,7 @@ func TestPickActorMovesSubsetWhenNodeAdded(t *testing.T) {
 
 	moved := 0
 	for key, previous := range before {
-		instance, err := c.pickActor(context.Background(), "game", key)
+		instance, err := c.pickActor("game", key)
 		if err != nil {
 			t.Fatal(err)
 		}
