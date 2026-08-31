@@ -1,6 +1,8 @@
 package actor
 
 import (
+	"slices"
+
 	"github.com/2comjie/nova/actor/actorDef"
 	"github.com/2comjie/nova/app/node"
 )
@@ -36,8 +38,8 @@ func (g *RouteGroup[T]) Handle(route uint32, handler Handler[T]) {
 	}
 	for groupIndex := 0; groupIndex < len(groups); groupIndex++ {
 		middlewares := groups[groupIndex].middleware
-		for middlewareIndex := len(middlewares) - 1; middlewareIndex >= 0; middlewareIndex-- {
-			handler = middlewares[middlewareIndex](handler)
+		for _, middleware := range slices.Backward(middlewares) {
+			handler = middleware(handler)
 		}
 	}
 

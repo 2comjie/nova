@@ -2,6 +2,7 @@ package actor
 
 import (
 	"context"
+	"slices"
 
 	"github.com/2comjie/nova/actor/actorDef"
 )
@@ -31,8 +32,8 @@ func (g *RPCRouteGroup[T]) Handle(route uint32, handler RPCHandler[T]) {
 	}
 	for groupIndex := 0; groupIndex < len(groups); groupIndex++ {
 		middlewares := groups[groupIndex].middleware
-		for middlewareIndex := len(middlewares) - 1; middlewareIndex >= 0; middlewareIndex-- {
-			handler = middlewares[middlewareIndex](handler)
+		for _, middleware := range slices.Backward(middlewares) {
+			handler = middleware(handler)
 		}
 	}
 
