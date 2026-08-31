@@ -13,13 +13,9 @@ import (
 
 type rpcProcessor func(ctx context.Context, key actorDef.Key, policy ActivationPolicy, message Message, needReply bool) ([]byte, bool, error)
 
-type managerController interface {
-	requestStopAll()
-}
-
 type managerRegistration struct {
-	manager managerController
-	routes  map[uint32]rpcProcessor
+	stop   func()
+	routes map[uint32]rpcProcessor
 }
 
 type System struct {
@@ -58,7 +54,7 @@ func (s *System) Shutdown(ctx context.Context) error {
 	s.lifecycleMu.Unlock()
 
 	for _, registration := range s.registrations {
-		registration.manager.requestStopAll()
+		registration.stop()
 	}
 	s.stop()
 
@@ -99,15 +95,6 @@ func (s *System) process(ctx context.Context, request *pbActor.Request, needRepl
 		return nil, rpcerr.Wrap(err)
 	}
 	return &pbActor.Response{Handled: handled, Body: body}, nil
-}
-
-func (s *System) registerManager(actorType actorDef.Type, manager managerController) {
-	s.registrations[actorType] = managerRegistration{manager: manager, routes: make(map[uint32]rpcProcessor)}
-}
-
-func (s *System) registerRoute(actorType actorDef.Type, route uint32, processor rpcProcessor) {
-	registration := s.registrations[actorType]
-	registration.routes[route] = processor
 }
 
 func (s *System) beginTask() bool {

@@ -56,5 +56,5 @@ func (g *RPCRouteGroup[T]) Handle(route uint32, handler RPCHandler[T]) {
 		return body, true, handleErr
 	})
 
-	g.actors.system.registerRoute(g.actors.actorType, route, processor)
+	g.actors.system.registrations[g.actors.actorType].routes[route] = processor
 }

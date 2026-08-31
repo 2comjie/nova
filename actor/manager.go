@@ -33,8 +33,19 @@ type Manager[T actorDef.Actor] struct {
 }
 
 func (s *System) Register[T actorDef.Actor](actorType actorDef.Type, guard *actorGuard.Guard, loader Loader[T], runnerConfig RunnerConfig) *Manager[T] {
-	manager := &Manager[T]{system: s, actorType: actorType, loader: loader, guard: guard, runnerConfig: runnerConfig, actors: make(map[actorDef.Key]*activeActor[T])}
-	s.registerManager(actorType, manager)
+	manager := &Manager[T]{
+		system:       s,
+		actorType:    actorType,
+		guard:        guard,
+		loader:       loader,
+		runnerConfig: runnerConfig,
+		actors:       make(map[actorDef.Key]*activeActor[T]),
+	}
+
+	s.registrations[actorType] = managerRegistration{
+		stop:   manager.requestStopAll,
+		routes: make(map[uint32]rpcProcessor),
+	}
 	return manager
 }
 
