@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/2comjie/nova/actor/actorDef"
+	"github.com/2comjie/nova/logx"
 )
 
 type RPCHandler[T actorDef.Actor] func(actorValue T, pid actorDef.Pid, ctx context.Context, message Message) ([]byte, error)
@@ -43,18 +44,25 @@ func (g *RPCRouteGroup[T]) Handle(route uint32, handler RPCHandler[T]) {
 			return nil, handled, err
 		}
 
+		if !needReply {
+			err := runner.RunOnMainLoop(func(actorValue T) {
+				if _, err := handler(actorValue, runner.self, runner.runCtx, message); err != nil {
+					logx.Errorf("actor %s route %d failed: %v", runner.self, message.Route, err)
+				}
+			})
+			return nil, err == nil, err
+		}
+
 		var body []byte
-		var handleErr error = ErrMessageHandlerPanic
-		err = runner.WaitResultOnMainLoop(ctx, func(actorValue T) {
-			body, handleErr = handler(actorValue, runner.self, ctx, message)
+		err = runner.WaitResultOnMainLoop(ctx, func(execCtx context.Context, actorValue T) error {
+			var err error
+			body, err = handler(actorValue, runner.self, execCtx, message)
+			return err
 		})
 		if err != nil {
 			return nil, false, err
 		}
-		if !needReply {
-			body = nil
-		}
-		return body, true, handleErr
+		return body, true, nil
 	})
 
 	g.actors.system.registrations[g.actors.actorType].routes[route] = processor

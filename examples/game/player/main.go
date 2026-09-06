@@ -36,7 +36,7 @@ func main() {
 	options := infrastructure.DeployOptions()
 	options = append(options,
 		deploy.WithServiceName(flag.String("service", "player")),
-		deploy.WithInstanceID(flag.String("id", "player-1")),
+		deploy.WithInstanceId(flag.String("id", "player-1")),
 		deploy.WithNodeRouter(router),
 		deploy.WithComponents(store),
 	)
@@ -52,7 +52,7 @@ func main() {
 		store.persistLoop(player.Done())
 	})
 
-	logx.Infof("Player Node启动 id=%s rpc=%s", player.Instance().ID, player.Instance().RpcTarget())
+	logx.Infof("Player Node启动 id=%s rpc=%s", player.Instance().Id, player.Instance().RpcTarget())
 	if err := player.Run(); err != nil {
 		panic(err)
 	}
@@ -73,13 +73,15 @@ func (s *playerStore) Start() error {
 	return nil
 }
 
+func (s *playerStore) RequestStop() {}
+
 func (s *playerStore) Shutdown(context.Context) error {
 	logx.Infof("玩家数据组件关闭")
 	return nil
 }
 
 func (s *playerStore) onGet(ctx *node.Context) error {
-	profile, err := s.profile(ctx, ctx.Request.UID)
+	profile, err := s.profile(ctx, ctx.Request.Uid)
 	if err != nil {
 		return err
 	}
@@ -91,7 +93,7 @@ func (s *playerStore) onAddExp(ctx *node.Context) error {
 	if err := json.Unmarshal(ctx.Request.Body, &request); err != nil {
 		return err
 	}
-	profile, err := s.profile(ctx, ctx.Request.UID)
+	profile, err := s.profile(ctx, ctx.Request.Uid)
 	if err != nil {
 		return err
 	}
@@ -103,7 +105,7 @@ func (s *playerStore) onAddExp(ctx *node.Context) error {
 		profile.Level++
 		profile.Gold += 50
 	}
-	s.profiles[profile.UID] = profile
+	s.profiles[profile.Uid] = profile
 	s.mutex.Unlock()
 	return s.reply(ctx, profile)
 }
@@ -123,7 +125,7 @@ func (s *playerStore) profile(ctx context.Context, uid uint64) (shared.PlayerPro
 		}
 	} else if errors.Is(err, redis.Nil) {
 		profile = shared.PlayerProfile{
-			UID:   uid,
+			Uid:   uid,
 			Level: 1,
 			Gold:  100,
 		}
@@ -182,7 +184,7 @@ func (s *playerStore) flush(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		values[strconv.FormatUint(profile.UID, 10)] = data
+		values[strconv.FormatUint(profile.Uid, 10)] = data
 	}
 	if err := s.redis.HSet(ctx, playerDataKey, values).Err(); err != nil {
 		return err

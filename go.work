@@ -2,7 +2,6 @@ go 1.27.0
 
 use (
 	.
-	./cmd/protoc-gen-go-grpc-locator
 	./examples
 	./locator/redis
 	./registry/redis

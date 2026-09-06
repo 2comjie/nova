@@ -2,15 +2,17 @@ package redisRegistry
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
+	"maps"
 	"sync"
 	"time"
 
 	"github.com/2comjie/nova/core/endpoint"
 	"github.com/2comjie/nova/core/help"
 	"github.com/2comjie/nova/logx"
+	redisPubsub "github.com/2comjie/nova/pubsub/redis"
 	"github.com/redis/go-redis/v9"
+	"github.com/spf13/cast"
 )
 
 type Discover struct {
@@ -22,13 +24,15 @@ type Discover struct {
 	mu        sync.RWMutex
 	instances map[string]endpoint.ServiceInstance
 	notify    chan struct{}
+	refreshCh chan struct{}
+	wait      sync.WaitGroup
 }
 
-func (d *Discover) Get(ctx context.Context, instanceID string) (endpoint.ServiceInstance, bool, error) {
+func (d *Discover) Get(ctx context.Context, instanceId string) (endpoint.ServiceInstance, bool, error) {
 	d.mu.RLock()
 	if d.instances != nil {
 		defer d.mu.RUnlock()
-		ins, ok := d.instances[instanceID]
+		ins, ok := d.instances[instanceId]
 		return ins, ok, nil
 	}
 	d.mu.RUnlock()
@@ -36,7 +40,7 @@ func (d *Discover) Get(ctx context.Context, instanceID string) (endpoint.Service
 	if err != nil {
 		return endpoint.ServiceInstance{}, false, err
 	}
-	ins, ok := m[instanceID]
+	ins, ok := m[instanceId]
 	return ins, ok, nil
 }
 
@@ -47,12 +51,14 @@ func NewDiscover(rc redis.UniversalClient, opts ...Option) *Discover {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &Discover{
-		option: o,
-		rc:     rc,
-		ctx:    ctx,
-		cancel: cancel,
-		notify: make(chan struct{}, 1),
+		option:    o,
+		rc:        rc,
+		ctx:       ctx,
+		cancel:    cancel,
+		notify:    make(chan struct{}, 1),
+		refreshCh: make(chan struct{}, 1),
 	}
+	d.wait.Add(3)
 	help.SafeGo(d.watchNotify)
 	help.SafeGo(d.watchExpire)
 	help.SafeGo(d.pollFetch)
@@ -63,7 +69,7 @@ func (d *Discover) List(ctx context.Context) (map[string]endpoint.ServiceInstanc
 	d.mu.RLock()
 	if d.instances != nil {
 		defer d.mu.RUnlock()
-		return d.instances, nil
+		return maps.Clone(d.instances), nil
 	}
 	d.mu.RUnlock()
 	m, err := d.fetchAll(ctx)
@@ -82,106 +88,81 @@ func (d *Discover) Next(ctx context.Context) (map[string]endpoint.ServiceInstanc
 	case <-d.notify:
 		d.mu.RLock()
 		defer d.mu.RUnlock()
-		return d.instances, nil
+		return maps.Clone(d.instances), nil
 	}
 }
 
 func (d *Discover) Close() {
 	d.cancel()
+	d.wait.Wait()
 }
 
 func (d *Discover) watchNotify() {
-	pubsub := d.rc.Subscribe(d.ctx, d.notifyKey())
-	defer pubsub.Close()
-	ch := pubsub.Channel()
-	for {
+	defer d.wait.Done()
+	redisPubsub.Listen(d.ctx, d.rc.Subscribe(d.ctx, d.notifyKey()), func(_ redisPubsub.Event[struct{}]) {
 		select {
-		case <-d.ctx.Done():
-			return
-		case msg, ok := <-ch:
-			if !ok {
-				return
-			}
-			d.handleEvent([]byte(msg.Payload))
+		case d.refreshCh <- struct{}{}:
+		default:
 		}
-	}
+	})
 }
 
 func (d *Discover) watchExpire() {
-	channel := "__keyevent@0__:hexpired"
-	pubsub := d.rc.PSubscribe(d.ctx, channel)
-	defer pubsub.Close()
-	ch := pubsub.Channel()
+	defer d.wait.Done()
+	db := 0
+	if client, ok := d.rc.(*redis.Client); ok {
+		db = client.Options().DB
+	}
+	expireChannel := "__keyevent@" + cast.ToString(db) + "__:hexpired"
+	subscription := d.rc.Subscribe(d.ctx, expireChannel)
+	defer subscription.Close()
+	messages := subscription.Channel()
 	for {
 		select {
 		case <-d.ctx.Done():
 			return
-		case msg, ok := <-ch:
+		case message, ok := <-messages:
 			if !ok {
 				return
 			}
-			if msg.Payload == d.hashKey() {
-				d.refresh()
+			if message.Payload != d.hashKey() {
+				continue
+			}
+			select {
+			case d.refreshCh <- struct{}{}:
+			default:
 			}
 		}
 	}
 }
 
 func (d *Discover) pollFetch() {
-	ticker := time.NewTicker(time.Second * 30)
+	defer d.wait.Done()
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	d.refresh()
 	for {
 		select {
 		case <-d.ctx.Done():
 			return
+		case <-d.refreshCh:
 		case <-ticker.C:
-			d.refresh()
 		}
+		d.refresh()
 	}
 }
 
 func (d *Discover) refresh() {
 	instances, err := d.fetchAll(d.ctx)
 	if err != nil {
-		logx.Errorf("refresh instances err %+v", err)
+		if d.ctx.Err() == nil {
+			logx.Errorf("refresh instances err %+v", err)
+		}
 		return
 	}
 	d.mu.Lock()
 	d.instances = instances
 	d.mu.Unlock()
-	d.notifyChange()
-}
-
-func (d *Discover) handleEvent(payload []byte) {
-	var event UpdateEvent
-	if err := json.Unmarshal(payload, &event); err != nil {
-		logx.Errorf("unmarshal event err %+v, fallback to full refresh", err)
-		d.refresh()
-		return
-	}
-
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if d.instances == nil {
-		d.instances = make(map[string]endpoint.ServiceInstance)
-	}
-
-	switch event.Type {
-	case EventRegister, EventUpdateMeta, EventDeleteMeta:
-		d.instances[event.Instance.ID] = event.Instance
-	case EventDeregister:
-		delete(d.instances, event.Instance.ID)
-	default:
-		logx.Warnf("unknown event type: %s", event.Type)
-		return
-	}
-
-	d.notifyChange()
-}
-
-func (d *Discover) notifyChange() {
 	select {
 	case d.notify <- struct{}{}:
 	default:
@@ -189,8 +170,7 @@ func (d *Discover) notifyChange() {
 }
 
 func (d *Discover) fetchAll(ctx context.Context) (map[string]endpoint.ServiceInstance, error) {
-	_ = ctx
-	hash, err := d.rc.HGetAll(d.ctx, d.hashKey()).Result()
+	hash, err := d.rc.HGetAll(ctx, d.hashKey()).Result()
 	if err != nil {
 		return nil, err
 	}

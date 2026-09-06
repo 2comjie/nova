@@ -5,7 +5,8 @@
 package item
 
 import (
-	diff "github.com/2comjie/nova/diff"
+	"github.com/2comjie/nova/diff"
+	_pbData "github.com/2comjie/nova/examples/diff_app/item/pb"
 )
 
 type Item struct {
@@ -19,7 +20,7 @@ func (value *Item) GetItemId() uint64 {
 }
 
 func (value *Item) SetItemId(fieldValue uint64) bool {
-	value.EnsureDiffLink()
+	value.InitLink(nil)
 	return value.itemId.SetValue(fieldValue)
 }
 
@@ -28,213 +29,65 @@ func (value *Item) GetCount() int32 {
 }
 
 func (value *Item) SetCount(fieldValue int32) bool {
-	value.EnsureDiffLink()
+	value.InitLink(nil)
 	return value.count.SetValue(fieldValue)
 }
 
-type ItemDiffPath[DiffRoot any] struct {
-	path diff.PathBuilder[DiffRoot]
-}
-
-func NewItemDiffPath[DiffRoot any](path diff.PathBuilder[DiffRoot]) ItemDiffPath[DiffRoot] {
-	return ItemDiffPath[DiffRoot]{path: path}
-}
-
-var ItemDiff = NewItemDiffPath[*Item](diff.NewPathBuilder[*Item]())
-
-func (path ItemDiffPath[DiffRoot]) ItemId() diff.ValuePath[DiffRoot, uint64] {
-	return diff.NewValuePath[DiffRoot, uint64](path.path.Field(1))
-}
-
-func (path ItemDiffPath[DiffRoot]) Count() diff.ValuePath[DiffRoot, int32] {
-	return diff.NewValuePath[DiffRoot, int32](path.path.Field(2))
-}
-
 func (value *Item) InitLink(writer *diff.Writer) {
-	if writer != nil {
-		diff.BindWriter[*Item](writer)
-	}
-	value.InitDiffLink(writer, make(map[*diff.Object]struct{}))
-}
-
-func (value *Item) EnsureDiffLink() {
-	if value == nil {
+	if value.Object.Initialized() {
+		if writer != nil {
+			value.Object.Init(writer)
+		}
 		return
 	}
-	if value.itemId.Initialized() {
-		return
-	}
-	value.InitDiffLink(nil, make(map[*diff.Object]struct{}))
-}
-
-func (value *Item) InitDiffLink(writer *diff.Writer, visited map[*diff.Object]struct{}) {
-	if value == nil {
-		return
-	}
-	if visited == nil {
-		visited = make(map[*diff.Object]struct{})
-	}
-	if _, exists := visited[&value.Object]; exists {
-		return
-	}
-	visited[&value.Object] = struct{}{}
 	value.Object.Init(writer)
 	value.itemId.Init(&value.Object, 1)
 	value.count.Init(&value.Object, 2)
 }
 
-func (value *Item) AppendDiffValue(data []byte) []byte {
-	data = value.itemId.AppendValue(data, 1)
-	data = value.count.AppendValue(data, 2)
-	return data
+func (value *Item) Snapshot() *_pbData.Item {
+	snapshot := new(_pbData.Item)
+	snapshot.ItemId = value.itemId.GetValue()
+	snapshot.Count = value.count.GetValue()
+	return snapshot
 }
 
-func (value *Item) Commit() diff.Delta[*Item] {
-	return diff.Delta[*Item](value.Object.Commit())
-}
-
-func (value *Item) Snapshot() []byte {
-	return value.AppendDiffValue(nil)
-}
-
-func (value *Item) LoadSnapshot(data []byte) error {
+func (value *Item) LoadSnapshot(snapshot *_pbData.Item) {
 	value.InitLink(nil)
-	var zeroItemId uint64
-	value.itemId.SetValue(zeroItemId)
-	var zeroCount int32
-	value.count.SetValue(zeroCount)
-	fields, err := diff.DecodeFields(data)
-	if err != nil {
-		return err
-	}
-	for _, field := range fields {
-		if err := value.loadDiffField(field); err != nil {
-			return err
-		}
-	}
-	return nil
+	value.itemId.SetValue(snapshot.GetItemId())
+	value.count.SetValue(snapshot.GetCount())
 }
 
-func (value *Item) Merge(data []byte) error {
-	value.InitLink(nil)
-	patches, err := diff.DecodePatches(data)
-	if err != nil {
-		return err
-	}
-	for _, patch := range patches {
-		if err := value.MergeDiffPatch(patch.Path, patch.Operation, patch.Value); err != nil {
-			return err
-		}
-	}
-	return nil
+func (value *Item) NewUpdate() *_pbData.Item {
+	return new(_pbData.Item)
 }
 
-func (value *Item) loadDiffField(field diff.EncodedField) error {
-	switch field.FieldIndex {
-	case 1:
-		{
-			fieldValue, err := diff.DecodePrimitive[uint64](field.Value)
-			if err != nil {
-				return err
-			}
-			value.itemId.SetValue(fieldValue)
-			return nil
-		}
-	case 2:
-		{
-			fieldValue, err := diff.DecodePrimitive[int32](field.Value)
-			if err != nil {
-				return err
-			}
-			value.count.SetValue(fieldValue)
-			return nil
-		}
-	}
-	return nil
+func (value *Item) Commit() *_pbData.Item {
+	return value.Object.Commit(value.NewUpdate(), value.WriteUpdate)
 }
 
-func (value *Item) MergeDiffPatch(path []diff.EncodedPathNode, operation diff.Operation, data []byte) error {
-	if len(path) == 0 {
-		return diff.ErrInvalidData
-	}
+func (value *Item) WriteUpdate(update *_pbData.Item, path diff.Path, operation diff.Operation, data any) {
 	node := path[0]
 	switch node.FieldIndex {
 	case 1:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
-				return diff.ErrInvalidData
-			}
-			fieldValue, err := diff.DecodePrimitive[uint64](data)
-			if err != nil {
-				return err
-			}
-			value.itemId.SetValue(fieldValue)
-			return nil
-		}
+		fieldValue := data.(uint64)
+		update.ItemIdUpdate = &fieldValue
+		return
+
 	case 2:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
-				return diff.ErrInvalidData
-			}
-			fieldValue, err := diff.DecodePrimitive[int32](data)
-			if err != nil {
-				return err
-			}
-			value.count.SetValue(fieldValue)
-			return nil
-		}
+		fieldValue := data.(int32)
+		update.CountUpdate = &fieldValue
+		return
+
 	}
-	return nil
 }
 
-func (value *Item) FormatDelta(data []byte) (string, error) {
-	patches, err := diff.DecodePatches(data)
-	if err != nil {
-		return "", err
+func (value *Item) Merge(update *_pbData.Item) {
+	value.InitLink(nil)
+	if update.ItemIdUpdate != nil {
+		value.itemId.SetValue(update.GetItemIdUpdate())
 	}
-	debugPatches := make([]diff.DebugPatch, 0, len(patches))
-	for _, patch := range patches {
-		path, patchValue, err := value.FormatDiffPatch(patch.Path, patch.Operation, patch.Value)
-		if err != nil {
-			return "", err
-		}
-		debugPatches = append(debugPatches, diff.DebugPatch{
-			Path:      path,
-			Operation: patch.Operation,
-			Value:     patchValue,
-		})
+	if update.CountUpdate != nil {
+		value.count.SetValue(update.GetCountUpdate())
 	}
-	return diff.FormatDebugPatches("Item", debugPatches), nil
-}
-
-func (value *Item) FormatDiffPatch(path []diff.EncodedPathNode, operation diff.Operation, data []byte) (string, any, error) {
-	if len(path) == 0 {
-		return "", nil, diff.ErrInvalidData
-	}
-	node := path[0]
-	switch node.FieldIndex {
-	case 1:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
-				return "", nil, diff.ErrInvalidData
-			}
-			fieldValue, err := diff.DecodePrimitive[uint64](data)
-			if err != nil {
-				return "", nil, err
-			}
-			return "ItemId", fieldValue, nil
-		}
-	case 2:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
-				return "", nil, diff.ErrInvalidData
-			}
-			fieldValue, err := diff.DecodePrimitive[int32](data)
-			if err != nil {
-				return "", nil, err
-			}
-			return "Count", fieldValue, nil
-		}
-	}
-	return "", nil, diff.ErrInvalidData
 }

@@ -2,24 +2,18 @@ package redisLocator
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 )
 
 func testClient(t *testing.T) redis.UniversalClient {
 	t.Helper()
-	addr := os.Getenv("REDIS_ADDR")
-	if addr == "" {
-		addr = "127.0.0.1:6379"
-	}
-	rc := redis.NewClient(&redis.Options{Addr: addr})
-	if err := rc.Ping(context.Background()).Err(); err != nil {
-		t.Skipf("redis not available: %v", err)
-	}
+	server := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { _ = rc.Close() })
 	return rc
 }
 
@@ -96,52 +90,6 @@ func TestProvider_Unbind(t *testing.T) {
 	}
 	if id != "" {
 		t.Fatalf("instance=%q, want empty", id)
-	}
-}
-
-func TestProvider_BindAndRestore(t *testing.T) {
-	rc := testClient(t)
-	p := NewProvider(rc, WithPrefix(fmt.Sprintf("test:swap_restore:%d", time.Now().UnixNano())), WithTTL(10*time.Second), WithTick(3*time.Second))
-	defer p.Close()
-
-	previous, err := p.Bind(context.Background(), "gate", "user_1", "gate_a:1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if previous != "" {
-		t.Fatalf("previous=%q, want empty", previous)
-	}
-
-	previous, err = p.Bind(context.Background(), "gate", "user_1", "gate_b:2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if previous != "gate_a:1" {
-		t.Fatalf("previous=%q, want gate_a:1", previous)
-	}
-
-	restored, err := p.Restore(context.Background(), "gate", "user_1", "gate_b:2", "gate_a:1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !restored {
-		t.Fatal("restore should succeed")
-	}
-
-	id, err := p.Locate(context.Background(), "gate", "user_1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if id != "gate_a:1" {
-		t.Fatalf("instance=%q, want gate_a:1", id)
-	}
-
-	restored, err = p.Restore(context.Background(), "gate", "user_1", "gate_b:2", "gate_c:3")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if restored {
-		t.Fatal("stale restore should fail")
 	}
 }
 

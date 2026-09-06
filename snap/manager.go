@@ -1,96 +1,90 @@
 package snap
 
-import "github.com/2comjie/nova/diff"
+import "google.golang.org/protobuf/proto"
 
-type Result struct {
+type Result[Message proto.Message] struct {
 	BaseVersion uint64
 	Version     uint64
-	Full        bool
-	Snapshot    []byte
-	Deltas      [][]byte
+	Full        Message
+	Updates     []Message
 }
 
-type Manager struct {
+type Manager[Client comparable, Message proto.Message] struct {
 	version       uint64
 	oldestVersion uint64
-	deltas        [][]byte
-	clients       map[uint64]uint64
-	snapshot      func() []byte // 每次都会分配 []byte 出来？每次 Pull？
+	updates       []Message
+	clients       map[Client]uint64
+	snapshot      func() Message
 }
 
-func NewManager(version uint64, diffCount int, snapshot func() []byte) *Manager {
+func NewManager[Client comparable, Message proto.Message](version uint64, diffCount int, snapshot func() Message) *Manager[Client, Message] {
 	if diffCount <= 0 {
-		panic("snap: diffCount必须大于0")
+		panic("snap: diffCount 必须大于0")
 	}
 	if snapshot == nil {
-		panic("snap: snapshot不能为空")
+		panic("snap: snapshot 不能空")
 	}
-	return &Manager{
+	return &Manager[Client, Message]{
 		version:       version,
 		oldestVersion: version,
-		deltas:        make([][]byte, diffCount),
-		clients:       make(map[uint64]uint64),
+		updates:       make([]Message, diffCount),
+		clients:       make(map[Client]uint64),
 		snapshot:      snapshot,
 	}
 }
 
-func (m *Manager) Version() uint64 {
+func (m *Manager[Client, Message]) Version() uint64 {
 	return m.version
 }
 
-func (m *Manager) Append(delta []byte) uint64 {
-	if diff.IsEmptyDelta(delta) {
-		return m.version
-	}
+func (m *Manager[Client, Message]) Append(update Message) uint64 {
 	m.version++
-	m.deltas[m.version%uint64(len(m.deltas))] = delta
-
-	if m.version-m.oldestVersion > uint64(len(m.deltas)) {
-		m.oldestVersion = m.version - uint64(len(m.deltas))
+	m.updates[m.version%uint64(len(m.updates))] = update
+	if m.version-m.oldestVersion > uint64(len(m.updates)) {
+		m.oldestVersion = m.version - uint64(len(m.updates))
 	}
 	return m.version
 }
 
-func (m *Manager) Bind(uid uint64, version uint64) {
-	m.clients[uid] = version
+func (m *Manager[Client, Message]) Bind(id Client, version uint64) {
+	m.clients[id] = version
 }
 
-func (m *Manager) Unbind(uid uint64) {
-	delete(m.clients, uid)
+func (m *Manager[Client, Message]) Unbind(id Client) {
+	delete(m.clients, id)
 }
 
-func (m *Manager) ClientVersion(uid uint64) (uint64, bool) {
-	version, exists := m.clients[uid]
-	return version, exists
-}
-
-func (m *Manager) Pull(uid uint64) Result {
-	baseVersion := m.clients[uid]
+func (m *Manager[Client, Message]) Pull(id Client) Result[Message] {
+	baseVersion := m.clients[id]
 	if baseVersion > m.version || baseVersion < m.oldestVersion {
-		return Result{
-			Version:  m.version,
-			Full:     true,
-			Snapshot: m.snapshot(),
+		return Result[Message]{
+			Version: m.version,
+			Full:    m.snapshot(),
 		}
 	}
 
-	result := Result{
+	result := Result[Message]{
 		BaseVersion: baseVersion,
 		Version:     m.version,
-		Deltas:      make([][]byte, 0, m.version-baseVersion),
+		Updates:     make([]Message, 0, m.version-baseVersion),
 	}
 	for version := baseVersion + 1; version <= m.version; version++ {
-		result.Deltas = append(result.Deltas, m.deltas[version%uint64(len(m.deltas))])
+		result.Updates = append(result.Updates, m.updates[version%uint64(len(m.updates))])
 	}
 	return result
 }
 
-func (m *Manager) Ack(uid uint64, version uint64) bool {
+func (m *Manager[Client, Message]) ClientVersion(id Client) (uint64, bool) {
+	version, exists := m.clients[id]
+	return version, exists
+}
+
+func (m *Manager[Client, Message]) Ack(id Client, version uint64) bool {
 	if version > m.version {
 		return false
 	}
-	if version > m.clients[uid] {
-		m.clients[uid] = version
+	if version > m.clients[id] {
+		m.clients[id] = version
 	}
 	return true
 }

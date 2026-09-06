@@ -88,7 +88,7 @@ func (c *Codec) Read(r io.Reader) (*Message, error) {
 	return message, nil
 }
 
-// Encode 将 Message 编码到池化内存中，调用方必须 Release 返回值。
+// Encode 将 Message 编码到池化内存中，调用方必须 Release 返回值
 func (c *Codec) Encode(message *Message) (*buffer.Bytes, error) {
 	if err := c.Validate(message); err != nil {
 		return nil, err
@@ -109,7 +109,6 @@ func (c *Codec) Encode(message *Message) (*buffer.Bytes, error) {
 	return frame, nil
 }
 
-// Validate 校验包类型及字段组合。
 func (c *Codec) Validate(message *Message) error {
 	if message == nil {
 		return ErrType

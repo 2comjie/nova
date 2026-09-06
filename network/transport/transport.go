@@ -30,6 +30,8 @@ type Handler interface {
 type Conn interface {
 	Start(Handler) error
 	Write(*packet.Message) error
+	// WriteContext owns the outgoing data before returning. Canceling an active write closes the connection.
+	WriteContext(context.Context, *packet.Message) error
 	Close() error
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr

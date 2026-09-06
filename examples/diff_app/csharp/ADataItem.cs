@@ -24,14 +24,21 @@ namespace Nova.Generated.Item {
     static ADataItemReflection() {
       byte[] descriptorData = global::System.Convert.FromBase64String(
           string.Concat(
-            "Ch9kaWZmX2FwcC9pdGVtL2FfZGF0YV9pdGVtLnByb3RvEgRpdGVtIiYKBEl0",
-            "ZW0SDwoHaXRlbV9pZBgBIAEoBBINCgVjb3VudBgCIAEoBUJQWjhnaXRodWIu",
-            "Y29tLzJjb21qaWUvbm92YS9leGFtcGxlcy9kaWZmX2FwcC9pdGVtL3BiO3Bi",
-            "SXRlbaoCE05vdmEuR2VuZXJhdGVkLkl0ZW1iBnByb3RvMw=="));
+            "Ch9kaWZmX2FwcC9pdGVtL2FfZGF0YV9pdGVtLnByb3RvEgRpdGVtIoQBCgRJ",
+            "dGVtEg8KB2l0ZW1faWQYASABKAQSDQoFY291bnQYAiABKAUSHAoOaXRlbV9p",
+            "ZF91cGRhdGUY6QcgASgESACIAQESGgoMY291bnRfdXBkYXRlGOoHIAEoBUgB",
+            "iAEBQhEKD19pdGVtX2lkX3VwZGF0ZUIPCg1fY291bnRfdXBkYXRlIpIBCgxJ",
+            "dGVtU3luY1B1c2gSFgoOc2NoZW1hX3ZlcnNpb24YASABKA0SFAoMYmFzZV92",
+            "ZXJzaW9uGAIgASgEEg8KB3ZlcnNpb24YAyABKAQSGgoEZnVsbBgKIAEoCzIK",
+            "Lml0ZW0uSXRlbUgAEhwKBnVwZGF0ZRgLIAEoCzIKLml0ZW0uSXRlbUgAQgkK",
+            "B3BheWxvYWRCUFo4Z2l0aHViLmNvbS8yY29tamllL25vdmEvZXhhbXBsZXMv",
+            "ZGlmZl9hcHAvaXRlbS9wYjtwYkl0ZW2qAhNOb3ZhLkdlbmVyYXRlZC5JdGVt",
+            "YgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::Nova.Generated.Item.Item), global::Nova.Generated.Item.Item.Parser, new[]{ "ItemId", "Count" }, null, null, null, null)
+            new pbr::GeneratedClrTypeInfo(typeof(global::Nova.Generated.Item.Item), global::Nova.Generated.Item.Item.Parser, new[]{ "ItemId", "Count", "ItemIdUpdate", "CountUpdate" }, new[]{ "ItemIdUpdate", "CountUpdate" }, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Nova.Generated.Item.ItemSyncPush), global::Nova.Generated.Item.ItemSyncPush.Parser, new[]{ "SchemaVersion", "BaseVersion", "Version", "Full", "Update" }, new[]{ "Payload" }, null, null, null)
           }));
     }
     #endregion
@@ -46,6 +53,7 @@ namespace Nova.Generated.Item {
   {
     private static readonly pb::MessageParser<Item> _parser = new pb::MessageParser<Item>(() => new Item());
     private pb::UnknownFieldSet _unknownFields;
+    private int _hasBits0;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pb::MessageParser<Item> Parser { get { return _parser; } }
@@ -73,8 +81,11 @@ namespace Nova.Generated.Item {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public Item(Item other) : this() {
+      _hasBits0 = other._hasBits0;
       itemId_ = other.itemId_;
       count_ = other.count_;
+      itemIdUpdate_ = other.itemIdUpdate_;
+      countUpdate_ = other.countUpdate_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -108,6 +119,60 @@ namespace Nova.Generated.Item {
       }
     }
 
+    /// <summary>Field number for the "item_id_update" field.</summary>
+    public const int ItemIdUpdateFieldNumber = 1001;
+    private readonly static ulong ItemIdUpdateDefaultValue = 0UL;
+
+    private ulong itemIdUpdate_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ulong ItemIdUpdate {
+      get { if ((_hasBits0 & 1) != 0) { return itemIdUpdate_; } else { return ItemIdUpdateDefaultValue; } }
+      set {
+        _hasBits0 |= 1;
+        itemIdUpdate_ = value;
+      }
+    }
+    /// <summary>Gets whether the "item_id_update" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasItemIdUpdate {
+      get { return (_hasBits0 & 1) != 0; }
+    }
+    /// <summary>Clears the value of the "item_id_update" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearItemIdUpdate() {
+      _hasBits0 &= ~1;
+    }
+
+    /// <summary>Field number for the "count_update" field.</summary>
+    public const int CountUpdateFieldNumber = 1002;
+    private readonly static int CountUpdateDefaultValue = 0;
+
+    private int countUpdate_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int CountUpdate {
+      get { if ((_hasBits0 & 2) != 0) { return countUpdate_; } else { return CountUpdateDefaultValue; } }
+      set {
+        _hasBits0 |= 2;
+        countUpdate_ = value;
+      }
+    }
+    /// <summary>Gets whether the "count_update" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasCountUpdate {
+      get { return (_hasBits0 & 2) != 0; }
+    }
+    /// <summary>Clears the value of the "count_update" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearCountUpdate() {
+      _hasBits0 &= ~2;
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -125,6 +190,8 @@ namespace Nova.Generated.Item {
       }
       if (ItemId != other.ItemId) return false;
       if (Count != other.Count) return false;
+      if (ItemIdUpdate != other.ItemIdUpdate) return false;
+      if (CountUpdate != other.CountUpdate) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -134,6 +201,8 @@ namespace Nova.Generated.Item {
       int hash = 1;
       if (ItemId != 0UL) hash ^= ItemId.GetHashCode();
       if (Count != 0) hash ^= Count.GetHashCode();
+      if (HasItemIdUpdate) hash ^= ItemIdUpdate.GetHashCode();
+      if (HasCountUpdate) hash ^= CountUpdate.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -160,6 +229,14 @@ namespace Nova.Generated.Item {
         output.WriteRawTag(16);
         output.WriteInt32(Count);
       }
+      if (HasItemIdUpdate) {
+        output.WriteRawTag(200, 62);
+        output.WriteUInt64(ItemIdUpdate);
+      }
+      if (HasCountUpdate) {
+        output.WriteRawTag(208, 62);
+        output.WriteInt32(CountUpdate);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -178,6 +255,14 @@ namespace Nova.Generated.Item {
         output.WriteRawTag(16);
         output.WriteInt32(Count);
       }
+      if (HasItemIdUpdate) {
+        output.WriteRawTag(200, 62);
+        output.WriteUInt64(ItemIdUpdate);
+      }
+      if (HasCountUpdate) {
+        output.WriteRawTag(208, 62);
+        output.WriteInt32(CountUpdate);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -193,6 +278,12 @@ namespace Nova.Generated.Item {
       }
       if (Count != 0) {
         size += 1 + pb::CodedOutputStream.ComputeInt32Size(Count);
+      }
+      if (HasItemIdUpdate) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt64Size(ItemIdUpdate);
+      }
+      if (HasCountUpdate) {
+        size += 2 + pb::CodedOutputStream.ComputeInt32Size(CountUpdate);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -211,6 +302,12 @@ namespace Nova.Generated.Item {
       }
       if (other.Count != 0) {
         Count = other.Count;
+      }
+      if (other.HasItemIdUpdate) {
+        ItemIdUpdate = other.ItemIdUpdate;
+      }
+      if (other.HasCountUpdate) {
+        CountUpdate = other.CountUpdate;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -239,6 +336,14 @@ namespace Nova.Generated.Item {
             Count = input.ReadInt32();
             break;
           }
+          case 8008: {
+            ItemIdUpdate = input.ReadUInt64();
+            break;
+          }
+          case 8016: {
+            CountUpdate = input.ReadInt32();
+            break;
+          }
         }
       }
     #endif
@@ -264,6 +369,419 @@ namespace Nova.Generated.Item {
           }
           case 16: {
             Count = input.ReadInt32();
+            break;
+          }
+          case 8008: {
+            ItemIdUpdate = input.ReadUInt64();
+            break;
+          }
+          case 8016: {
+            CountUpdate = input.ReadInt32();
+            break;
+          }
+        }
+      }
+    }
+    #endif
+
+  }
+
+  [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
+  public sealed partial class ItemSyncPush : pb::IMessage<ItemSyncPush>
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      , pb::IBufferMessage
+  #endif
+  {
+    private static readonly pb::MessageParser<ItemSyncPush> _parser = new pb::MessageParser<ItemSyncPush>(() => new ItemSyncPush());
+    private pb::UnknownFieldSet _unknownFields;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pb::MessageParser<ItemSyncPush> Parser { get { return _parser; } }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pbr::MessageDescriptor Descriptor {
+      get { return global::Nova.Generated.Item.ADataItemReflection.Descriptor.MessageTypes[1]; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    pbr::MessageDescriptor pb::IMessage.Descriptor {
+      get { return Descriptor; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ItemSyncPush() {
+      OnConstruction();
+    }
+
+    partial void OnConstruction();
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ItemSyncPush(ItemSyncPush other) : this() {
+      schemaVersion_ = other.schemaVersion_;
+      baseVersion_ = other.baseVersion_;
+      version_ = other.version_;
+      switch (other.PayloadCase) {
+        case PayloadOneofCase.Full:
+          Full = other.Full.Clone();
+          break;
+        case PayloadOneofCase.Update:
+          Update = other.Update.Clone();
+          break;
+      }
+
+      _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ItemSyncPush Clone() {
+      return new ItemSyncPush(this);
+    }
+
+    /// <summary>Field number for the "schema_version" field.</summary>
+    public const int SchemaVersionFieldNumber = 1;
+    private uint schemaVersion_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint SchemaVersion {
+      get { return schemaVersion_; }
+      set {
+        schemaVersion_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "base_version" field.</summary>
+    public const int BaseVersionFieldNumber = 2;
+    private ulong baseVersion_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ulong BaseVersion {
+      get { return baseVersion_; }
+      set {
+        baseVersion_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "version" field.</summary>
+    public const int VersionFieldNumber = 3;
+    private ulong version_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ulong Version {
+      get { return version_; }
+      set {
+        version_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "full" field.</summary>
+    public const int FullFieldNumber = 10;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Nova.Generated.Item.Item Full {
+      get { return payloadCase_ == PayloadOneofCase.Full ? (global::Nova.Generated.Item.Item) payload_ : null; }
+      set {
+        payload_ = value;
+        payloadCase_ = value == null ? PayloadOneofCase.None : PayloadOneofCase.Full;
+      }
+    }
+
+    /// <summary>Field number for the "update" field.</summary>
+    public const int UpdateFieldNumber = 11;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Nova.Generated.Item.Item Update {
+      get { return payloadCase_ == PayloadOneofCase.Update ? (global::Nova.Generated.Item.Item) payload_ : null; }
+      set {
+        payload_ = value;
+        payloadCase_ = value == null ? PayloadOneofCase.None : PayloadOneofCase.Update;
+      }
+    }
+
+    private object payload_;
+    /// <summary>Enum of possible cases for the "payload" oneof.</summary>
+    public enum PayloadOneofCase {
+      None = 0,
+      Full = 10,
+      Update = 11,
+    }
+    private PayloadOneofCase payloadCase_ = PayloadOneofCase.None;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public PayloadOneofCase PayloadCase {
+      get { return payloadCase_; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearPayload() {
+      payloadCase_ = PayloadOneofCase.None;
+      payload_ = null;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override bool Equals(object other) {
+      return Equals(other as ItemSyncPush);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool Equals(ItemSyncPush other) {
+      if (ReferenceEquals(other, null)) {
+        return false;
+      }
+      if (ReferenceEquals(other, this)) {
+        return true;
+      }
+      if (SchemaVersion != other.SchemaVersion) return false;
+      if (BaseVersion != other.BaseVersion) return false;
+      if (Version != other.Version) return false;
+      if (!object.Equals(Full, other.Full)) return false;
+      if (!object.Equals(Update, other.Update)) return false;
+      if (PayloadCase != other.PayloadCase) return false;
+      return Equals(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override int GetHashCode() {
+      int hash = 1;
+      if (SchemaVersion != 0) hash ^= SchemaVersion.GetHashCode();
+      if (BaseVersion != 0UL) hash ^= BaseVersion.GetHashCode();
+      if (Version != 0UL) hash ^= Version.GetHashCode();
+      if (payloadCase_ == PayloadOneofCase.Full) hash ^= Full.GetHashCode();
+      if (payloadCase_ == PayloadOneofCase.Update) hash ^= Update.GetHashCode();
+      hash ^= (int) payloadCase_;
+      if (_unknownFields != null) {
+        hash ^= _unknownFields.GetHashCode();
+      }
+      return hash;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override string ToString() {
+      return pb::JsonFormatter.ToDiagnosticString(this);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void WriteTo(pb::CodedOutputStream output) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      output.WriteRawMessage(this);
+    #else
+      if (SchemaVersion != 0) {
+        output.WriteRawTag(8);
+        output.WriteUInt32(SchemaVersion);
+      }
+      if (BaseVersion != 0UL) {
+        output.WriteRawTag(16);
+        output.WriteUInt64(BaseVersion);
+      }
+      if (Version != 0UL) {
+        output.WriteRawTag(24);
+        output.WriteUInt64(Version);
+      }
+      if (payloadCase_ == PayloadOneofCase.Full) {
+        output.WriteRawTag(82);
+        output.WriteMessage(Full);
+      }
+      if (payloadCase_ == PayloadOneofCase.Update) {
+        output.WriteRawTag(90);
+        output.WriteMessage(Update);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(output);
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+      if (SchemaVersion != 0) {
+        output.WriteRawTag(8);
+        output.WriteUInt32(SchemaVersion);
+      }
+      if (BaseVersion != 0UL) {
+        output.WriteRawTag(16);
+        output.WriteUInt64(BaseVersion);
+      }
+      if (Version != 0UL) {
+        output.WriteRawTag(24);
+        output.WriteUInt64(Version);
+      }
+      if (payloadCase_ == PayloadOneofCase.Full) {
+        output.WriteRawTag(82);
+        output.WriteMessage(Full);
+      }
+      if (payloadCase_ == PayloadOneofCase.Update) {
+        output.WriteRawTag(90);
+        output.WriteMessage(Update);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(ref output);
+      }
+    }
+    #endif
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int CalculateSize() {
+      int size = 0;
+      if (SchemaVersion != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(SchemaVersion);
+      }
+      if (BaseVersion != 0UL) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt64Size(BaseVersion);
+      }
+      if (Version != 0UL) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt64Size(Version);
+      }
+      if (payloadCase_ == PayloadOneofCase.Full) {
+        size += 1 + pb::CodedOutputStream.ComputeMessageSize(Full);
+      }
+      if (payloadCase_ == PayloadOneofCase.Update) {
+        size += 1 + pb::CodedOutputStream.ComputeMessageSize(Update);
+      }
+      if (_unknownFields != null) {
+        size += _unknownFields.CalculateSize();
+      }
+      return size;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(ItemSyncPush other) {
+      if (other == null) {
+        return;
+      }
+      if (other.SchemaVersion != 0) {
+        SchemaVersion = other.SchemaVersion;
+      }
+      if (other.BaseVersion != 0UL) {
+        BaseVersion = other.BaseVersion;
+      }
+      if (other.Version != 0UL) {
+        Version = other.Version;
+      }
+      switch (other.PayloadCase) {
+        case PayloadOneofCase.Full:
+          if (Full == null) {
+            Full = new global::Nova.Generated.Item.Item();
+          }
+          Full.MergeFrom(other.Full);
+          break;
+        case PayloadOneofCase.Update:
+          if (Update == null) {
+            Update = new global::Nova.Generated.Item.Item();
+          }
+          Update.MergeFrom(other.Update);
+          break;
+      }
+
+      _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(pb::CodedInputStream input) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      input.ReadRawMessage(this);
+    #else
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+            break;
+          case 8: {
+            SchemaVersion = input.ReadUInt32();
+            break;
+          }
+          case 16: {
+            BaseVersion = input.ReadUInt64();
+            break;
+          }
+          case 24: {
+            Version = input.ReadUInt64();
+            break;
+          }
+          case 82: {
+            global::Nova.Generated.Item.Item subBuilder = new global::Nova.Generated.Item.Item();
+            if (payloadCase_ == PayloadOneofCase.Full) {
+              subBuilder.MergeFrom(Full);
+            }
+            input.ReadMessage(subBuilder);
+            Full = subBuilder;
+            break;
+          }
+          case 90: {
+            global::Nova.Generated.Item.Item subBuilder = new global::Nova.Generated.Item.Item();
+            if (payloadCase_ == PayloadOneofCase.Update) {
+              subBuilder.MergeFrom(Update);
+            }
+            input.ReadMessage(subBuilder);
+            Update = subBuilder;
+            break;
+          }
+        }
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+            break;
+          case 8: {
+            SchemaVersion = input.ReadUInt32();
+            break;
+          }
+          case 16: {
+            BaseVersion = input.ReadUInt64();
+            break;
+          }
+          case 24: {
+            Version = input.ReadUInt64();
+            break;
+          }
+          case 82: {
+            global::Nova.Generated.Item.Item subBuilder = new global::Nova.Generated.Item.Item();
+            if (payloadCase_ == PayloadOneofCase.Full) {
+              subBuilder.MergeFrom(Full);
+            }
+            input.ReadMessage(subBuilder);
+            Full = subBuilder;
+            break;
+          }
+          case 90: {
+            global::Nova.Generated.Item.Item subBuilder = new global::Nova.Generated.Item.Item();
+            if (payloadCase_ == PayloadOneofCase.Update) {
+              subBuilder.MergeFrom(Update);
+            }
+            input.ReadMessage(subBuilder);
+            Update = subBuilder;
             break;
           }
         }

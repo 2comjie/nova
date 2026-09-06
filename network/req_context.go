@@ -1,12 +1,14 @@
 package network
 
 import (
+	"context"
 	"sync/atomic"
 
 	"github.com/2comjie/nova/packet"
 )
 
 type ReqContext struct {
+	context.Context
 	Session   *Session
 	Request   *packet.Message
 	NeedReply bool
@@ -20,10 +22,6 @@ func (c *ReqContext) Write(body []byte) error {
 		// 不用写返回值
 		return nil
 	}
-	if !c.written.CompareAndSwap(false, true) {
-		return ErrResponseWritten
-	}
-
 	body, err := encodeBody(
 		c.options,
 		packet.Rsp,
@@ -34,7 +32,12 @@ func (c *ReqContext) Write(body []byte) error {
 	if err != nil {
 		return err
 	}
-	err = c.Session.Conn.Write(&packet.Message{
+	if !c.written.CompareAndSwap(false, true) {
+		return ErrResponseWritten
+	}
+	// Response delivery follows the connection lifetime, including custom
+	// error responses produced after the business deadline has expired.
+	err = c.Session.Conn.WriteContext(c.Session.ctx, &packet.Message{
 		Type:  packet.Rsp,
 		Route: c.Request.Route,
 		Seq:   c.Request.Seq,

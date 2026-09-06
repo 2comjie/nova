@@ -14,16 +14,16 @@ import (
 	novaflag "github.com/2comjie/nova/flag"
 	"github.com/2comjie/nova/locator"
 	"github.com/2comjie/nova/registry"
+	"github.com/2comjie/nova/rpc"
 	rpcclient "github.com/2comjie/nova/rpc/client"
 	"github.com/spf13/cast"
-	"google.golang.org/grpc"
 )
 
 const defaultShutdownTimeout = 30 * time.Second
 
 var (
 	ErrServiceNameRequired = errors.New("deploy: 启动参数service不能为空")
-	ErrInstanceIDRequired  = errors.New("deploy: 启动参数id不能为空")
+	ErrInstanceIdRequired  = errors.New("deploy: 启动参数id不能为空")
 	ErrConfigRequired      = errors.New("deploy: 必须提供Config")
 	ErrRegistryRequired    = errors.New("deploy: 必须提供Registry")
 	ErrDiscoverRequired    = errors.New("deploy: 必须提供Discover")
@@ -63,12 +63,12 @@ func (r *resources) run(start func() error, shutdown func(context.Context) error
 	return shutdown(ctx)
 }
 
-func buildResources(options options) (*resources, endpoint.ServiceInstance, *grpc.Server, error) {
+func buildResources(options options) (*resources, endpoint.ServiceInstance, *rpc.Server, error) {
 	if options.serviceName == "" {
 		return nil, endpoint.ServiceInstance{}, nil, ErrServiceNameRequired
 	}
-	if options.instanceID == "" {
-		return nil, endpoint.ServiceInstance{}, nil, ErrInstanceIDRequired
+	if options.instanceId == "" {
+		return nil, endpoint.ServiceInstance{}, nil, ErrInstanceIdRequired
 	}
 	if options.config == nil {
 		return nil, endpoint.ServiceInstance{}, nil, ErrConfigRequired
@@ -106,7 +106,7 @@ func buildResources(options options) (*resources, endpoint.ServiceInstance, *grp
 
 	rpcServer := options.rpcServer
 	if rpcServer == nil {
-		rpcServer = grpc.NewServer(options.rpcServerOptions...)
+		rpcServer = rpc.NewServer(options.rpcServerOptions...)
 	}
 	client := options.rpcClient
 	if client == nil {
@@ -126,7 +126,7 @@ func buildResources(options options) (*resources, endpoint.ServiceInstance, *grp
 		shutdownTimeout: options.shutdownTimeout,
 	}
 	instance := endpoint.ServiceInstance{
-		ID:          options.instanceID,
+		Id:          options.instanceId,
 		ServiceName: options.serviceName,
 		MetaData:    maps.Clone(options.metaData),
 		Weight:      options.weight,
@@ -164,7 +164,7 @@ func defaultOptions() options {
 	}
 	return options{
 		serviceName: novaflag.String("service"),
-		instanceID:  novaflag.String("id"),
+		instanceId:  novaflag.String("id"),
 		rpcListen:   novaflag.String("rpc-listen", "127.0.0.1:0"),
 		rpcHost:     novaflag.String("rpc-host"),
 		weight:      novaflag.Int("weight", 1),

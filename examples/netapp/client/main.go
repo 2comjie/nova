@@ -10,14 +10,11 @@ import (
 
 func main() {
 	dialer := netTcp.NewDialer("127.0.0.1:8080")
-	netClient, err := network.NewClient(network.WithDialer(dialer))
-	if err != nil {
-		panic(err)
-	}
+	netClient := network.NewClient(network.WithDialer(dialer))
 	defer func() {
 		_ = netClient.Close()
 	}()
-	err = netClient.Dial(context.Background())
+	err := netClient.Dial(context.Background())
 	if err != nil {
 		panic(err)
 	}

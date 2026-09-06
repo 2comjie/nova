@@ -11,13 +11,13 @@ import (
 	"github.com/2comjie/nova/locator"
 	"github.com/2comjie/nova/network"
 	"github.com/2comjie/nova/registry"
+	"github.com/2comjie/nova/rpc"
 	rpcclient "github.com/2comjie/nova/rpc/client"
-	"google.golang.org/grpc"
 )
 
 type options struct {
 	serviceName string
-	instanceID  string
+	instanceId  string
 	metaData    map[string]string
 	weight      int
 
@@ -29,9 +29,9 @@ type options struct {
 	rpcListen        string
 	rpcHost          string
 	rpcListener      net.Listener
-	rpcServer        *grpc.Server
+	rpcServer        *rpc.Server
 	rpcClient        *rpcclient.Client
-	rpcServerOptions []grpc.ServerOption
+	rpcServerOptions []rpc.ServerOption
 	rpcClientOptions []rpcclient.Option
 
 	gateRouter     *gate.Router
@@ -53,9 +53,9 @@ func WithServiceName(serviceName string) Option {
 	}
 }
 
-func WithInstanceID(instanceID string) Option {
+func WithInstanceId(instanceId string) Option {
 	return func(options *options) {
-		options.instanceID = instanceID
+		options.instanceId = instanceId
 	}
 }
 
@@ -113,7 +113,7 @@ func WithRPCListener(listener net.Listener) Option {
 	}
 }
 
-func WithRPCServer(server *grpc.Server) Option {
+func WithRPCServer(server *rpc.Server) Option {
 	return func(options *options) {
 		options.rpcServer = server
 	}
@@ -125,7 +125,7 @@ func WithRPCClient(client *rpcclient.Client) Option {
 	}
 }
 
-func WithRPCServerOptions(serverOptions ...grpc.ServerOption) Option {
+func WithRPCServerOptions(serverOptions ...rpc.ServerOption) Option {
 	return func(options *options) {
 		options.rpcServerOptions = append(options.rpcServerOptions, serverOptions...)
 	}

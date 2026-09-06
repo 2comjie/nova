@@ -4,265 +4,205 @@ import (
 	"context"
 	_ "embed"
 	"errors"
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/2comjie/nova/core/help"
 	"github.com/2comjie/nova/logx"
+	redisPubsub "github.com/2comjie/nova/pubsub/redis"
 	"github.com/dgraph-io/ristretto/v2"
 	"github.com/redis/go-redis/v9"
 )
 
-//go:embed unbind.lua
-var unbindScript string
-
 //go:embed bind.lua
 var bindScript string
 
-//go:embed restore.lua
-var restoreScript string
+//go:embed unbind.lua
+var unbindScript string
+
+//go:embed renew.lua
+var renewScript string
+
+type bindingChange struct {
+	Name string `json:"name"`
+	Key  string `json:"key"`
+}
 
 type Provider struct {
-	rc     redis.UniversalClient
-	option *option
+	rc        redis.UniversalClient
+	option    *option
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wait      sync.WaitGroup
+	closeOnce sync.Once
 
-	ctx    context.Context
-	cancel context.CancelFunc
-
-	stopChs map[string]chan struct{}
-	rw      sync.RWMutex
-
-	cache *ristretto.Cache[string, string]
+	rw            sync.Mutex
+	stopChs       map[[3]string]chan struct{} // name、key、value 对应的续期任务
+	onBindingLost func(name, key, value string)
+	cache         *ristretto.Cache[string, string]
 }
 
 func NewProvider(rc redis.UniversalClient, opts ...Option) *Provider {
 	o := defaultOption()
-	for _, fn := range opts {
-		fn(o)
+	for _, apply := range opts {
+		apply(o)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-
+	if o.tick <= 0 || o.ttl < time.Second || o.tick >= o.ttl {
+		panic("locator: require TTL >= 1s and 0 < tick < TTL")
+	}
 	cache, err := ristretto.NewCache(&ristretto.Config[string, string]{
-		NumCounters: o.cacheMaxCost * 10,
-		MaxCost:     o.cacheMaxCost,
-		BufferItems: 64,
+		NumCounters: o.cacheMaxCost * 10, MaxCost: o.cacheMaxCost, BufferItems: 64,
 	})
 	if err != nil {
-		logx.Fatalf("create ristretto cache err %+v", err)
+		panic(err)
 	}
-
+	ctx, cancel := context.WithCancel(context.Background())
 	p := &Provider{
-		rc:      rc,
-		option:  o,
-		ctx:     ctx,
-		cancel:  cancel,
-		stopChs: make(map[string]chan struct{}),
-		cache:   cache,
+		rc: rc, option: o, ctx: ctx, cancel: cancel,
+		stopChs: make(map[[3]string]chan struct{}), cache: cache,
 	}
-
+	p.wait.Add(1)
 	help.SafeGo(p.watchNotify)
 	return p
 }
 
-func (p *Provider) Bind(ctx context.Context, name string, key string, value string) (string, error) {
-	p.rw.Lock()
-	defer p.rw.Unlock()
+// SetOnBindingLost 在首次 Bind 前设置。
+func (p *Provider) SetOnBindingLost(callback func(name, key, value string)) {
+	p.onBindingLost = callback
+}
 
-	logCtx := logx.WithField("name", name).WithField("key", key)
-	previous, err := p.rc.Eval(
-		ctx,
-		bindScript,
+func (p *Provider) Bind(ctx context.Context, name, key, value string) (string, error) {
+	previous, err := p.rc.Eval(ctx, bindScript,
 		[]string{p.hashKey(name), p.nameSetKey()},
-		key,
-		value,
-		int(p.option.ttl.Seconds()),
-		name,
+		key, value, int64((p.option.ttl+time.Second-1)/time.Second), name,
 	).Text()
 	if err != nil {
-		logCtx.Errorf("eval swap script err %+v", err)
 		return "", err
 	}
 
+	binding := [3]string{name, key, value}
+	stopCh := make(chan struct{})
+	p.rw.Lock()
+	if err := p.ctx.Err(); err != nil {
+		p.rw.Unlock()
+		return "", err
+	}
+	if previousStop := p.stopChs[binding]; previousStop != nil {
+		close(previousStop)
+	}
+	p.stopChs[binding] = stopCh
+	p.wait.Add(1)
+	p.rw.Unlock()
+
 	p.cache.Del(name + ":" + key)
-	p.publishEvent("bind", name, key)
-	p.startKeepAliveLocked(name, key)
-	logCtx.Debugf("swap bind success")
+	event := redisPubsub.Event[bindingChange]{Type: "bind", Data: bindingChange{Name: name, Key: key}}
+	if err := redisPubsub.Publish(ctx, p.rc, p.notifyKey(), event); err != nil {
+		logx.Errorf("locator: publish bind failed: %v", err)
+	}
+	help.SafeGo(func() { p.keepAlive(name, key, value, stopCh) })
 	return previous, nil
 }
 
-func (p *Provider) Restore(
-	ctx context.Context,
-	name string,
-	key string,
-	current string,
-	previous string,
-) (bool, error) {
+func (p *Provider) Unbind(ctx context.Context, name, key, value string) error {
+	binding := [3]string{name, key, value}
 	p.rw.Lock()
-	defer p.rw.Unlock()
+	if stopCh := p.stopChs[binding]; stopCh != nil {
+		close(stopCh)
+		delete(p.stopChs, binding)
+	}
+	p.rw.Unlock()
 
-	logCtx := logx.WithField("name", name).WithField("key", key)
-	result, err := p.rc.Eval(
-		ctx,
-		restoreScript,
+	result, err := p.rc.Eval(ctx, unbindScript,
 		[]string{p.hashKey(name), p.nameSetKey()},
-		key,
-		current,
-		previous,
-		int(p.option.ttl.Seconds()),
-		name,
+		key, value, name,
 	).Int()
 	if err != nil {
-		logCtx.Errorf("eval restore script err %+v", err)
-		return false, err
-	}
-	if result == 0 {
-		return false, nil
-	}
-
-	p.cache.Del(name + ":" + key)
-	p.publishEvent("bind", name, key)
-	p.stopKeepAliveLocked(name, key)
-	logCtx.Debugf("restore bind success")
-	return true, nil
-}
-
-func (p *Provider) Unbind(ctx context.Context, name string, key string, instanceID string) error {
-	p.rw.Lock()
-	defer p.rw.Unlock()
-
-	logCtx := logx.WithField("name", name).WithField("key", key)
-	result, err := p.rc.Eval(
-		ctx,
-		unbindScript,
-		[]string{p.hashKey(name), p.nameSetKey()},
-		key,
-		instanceID,
-		name,
-	).Int()
-	if err != nil {
-		logCtx.Errorf("eval unbind script err %+v", err)
 		return err
 	}
-
-	p.stopKeepAliveLocked(name, key)
-	if result != 0 {
-		p.cache.Del(name + ":" + key)
-		p.publishEvent("unbind", name, key)
+	p.cache.Del(name + ":" + key)
+	if result == 0 {
+		return nil
 	}
-	logCtx.Debugf("unbind success")
+	event := redisPubsub.Event[bindingChange]{Type: "unbind", Data: bindingChange{Name: name, Key: key}}
+	if err := redisPubsub.Publish(ctx, p.rc, p.notifyKey(), event); err != nil {
+		logx.Errorf("locator: publish unbind failed: %v", err)
+	}
 	return nil
 }
 
-func (p *Provider) Locate(ctx context.Context, name string, key string) (string, error) {
-	localKey := name + ":" + key
-	if id, ok := p.cache.Get(localKey); ok {
-		return id, nil
+func (p *Provider) Locate(ctx context.Context, name, key string) (string, error) {
+	cacheKey := name + ":" + key
+	if value, ok := p.cache.Get(cacheKey); ok {
+		return value, nil
 	}
-
-	id, err := p.rc.HGet(ctx, p.hashKey(name), key).Result()
+	value, err := p.rc.HGet(ctx, p.hashKey(name), key).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", nil
+	}
 	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return "", nil
-		}
 		return "", err
 	}
-
-	p.cache.SetWithTTL(localKey, id, 1, p.cacheTTL())
-	return id, nil
+	p.cache.SetWithTTL(cacheKey, value, 1, p.option.ttl/2)
+	return value, nil
 }
 
 func (p *Provider) Close() {
-	p.rw.Lock()
-	defer p.rw.Unlock()
-	p.cancel()
-	for key, ch := range p.stopChs {
-		close(ch)
-		delete(p.stopChs, key)
-	}
-	p.cache.Close()
-}
-
-func (p *Provider) startKeepAliveLocked(name string, key string) {
-	stopKey := name + ":" + key
-	if p.stopChs[stopKey] != nil {
-		return
-	}
-	stopCh := make(chan struct{})
-	p.stopChs[stopKey] = stopCh
-	help.SafeGo(func() {
-		p.keepAlive(name, key, stopCh)
+	p.closeOnce.Do(func() {
+		p.rw.Lock()
+		p.cancel()
+		clear(p.stopChs)
+		p.rw.Unlock()
+		p.wait.Wait()
+		p.cache.Close()
 	})
 }
 
-func (p *Provider) stopKeepAliveLocked(name string, key string) {
-	stopKey := name + ":" + key
-	if ch, ok := p.stopChs[stopKey]; ok {
-		close(ch)
-		delete(p.stopChs, stopKey)
-	}
+func (p *Provider) watchNotify() {
+	defer p.wait.Done()
+	redisPubsub.Listen(p.ctx, p.rc.Subscribe(p.ctx, p.notifyKey()), func(event redisPubsub.Event[bindingChange]) {
+		p.cache.Del(event.Data.Name + ":" + event.Data.Key)
+	})
 }
 
-func (p *Provider) keepAlive(name string, key string, stopCh chan struct{}) {
-	tk := time.NewTicker(p.option.tick)
-	defer tk.Stop()
-	logCtx := logx.WithField("name", name).WithField("key", key)
+func (p *Provider) keepAlive(name, key, value string, stopCh chan struct{}) {
+	defer p.wait.Done()
+	ticker := time.NewTicker(p.option.tick)
+	defer ticker.Stop()
+	ttl := int64((p.option.ttl + time.Second - 1) / time.Second)
 	for {
 		select {
+		case <-p.ctx.Done():
+			return
 		case <-stopCh:
 			return
-		case <-p.ctx.Done():
-			return
-		case <-tk.C:
-			if err := help.Retry(p.ctx, 3, time.Second, func() error {
-				_, err := p.rc.HExpire(p.ctx, p.hashKey(name), p.option.ttl, key).Result()
-				return err
-			}); err != nil {
-				logCtx.Errorf("keep alive failed: %v", err)
-			}
+		case <-ticker.C:
 		}
-	}
-}
 
-func (p *Provider) cacheTTL() time.Duration {
-	if p.option.ttl <= 0 {
-		return 0
-	}
-	ttl := p.option.ttl / 2
-	if ttl <= 0 {
-		return p.option.ttl
-	}
-	return ttl
-}
-
-func (p *Provider) watchNotify() {
-	pubsub := p.rc.Subscribe(p.ctx, p.notifyKey())
-	defer pubsub.Close()
-	ch := pubsub.Channel()
-	for {
-		select {
-		case <-p.ctx.Done():
-			return
-		case msg, ok := <-ch:
-			if !ok {
-				return
-			}
-			parts := strings.SplitN(msg.Payload, ":", 3)
-			if len(parts) == 3 {
-				name, key := parts[1], parts[2]
-				p.cache.Del(name + ":" + key)
-			}
+		renewed, err := p.rc.Eval(p.ctx, renewScript, []string{p.hashKey(name)}, key, value, ttl).Int()
+		if err == nil && renewed == 1 {
+			continue
 		}
+		binding := [3]string{name, key, value}
+		p.rw.Lock()
+		if p.stopChs[binding] != stopCh {
+			p.rw.Unlock()
+			return
+		}
+		delete(p.stopChs, binding)
+		p.rw.Unlock()
+		p.cache.Del(name + ":" + key)
+		if err != nil {
+			logx.Errorf("locator: renewal failed name=%s key=%s: %v", name, key, err)
+		}
+		if p.onBindingLost != nil {
+			p.onBindingLost(name, key, value)
+		}
+		return
 	}
-}
-
-func (p *Provider) publishEvent(event string, name string, key string) {
-	p.rc.Publish(p.ctx, p.notifyKey(), event+":"+name+":"+key)
 }
 
 func (p *Provider) hashKey(name string) string {
-	return p.option.prefix + fmt.Sprintf(":hash:%s", name)
+	return p.option.prefix + ":hash:" + name
 }
 
 func (p *Provider) nameSetKey() string {

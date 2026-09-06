@@ -20,7 +20,6 @@ import (
 	"github.com/2comjie/nova/registry"
 	"github.com/2comjie/nova/rpc"
 	"github.com/2comjie/nova/rpc/lx"
-	"google.golang.org/grpc"
 )
 
 const defaultLocatorTimeout = 3 * time.Second
@@ -28,7 +27,6 @@ const defaultLocatorTimeout = 3 * time.Second
 var (
 	ErrStarted           = errors.New("gate: Gate已经启动")
 	ErrClosed            = errors.New("gate: Gate已经关闭")
-	ErrHandlerPanic      = errors.New("gate: Filter或Forward发生panic")
 	ErrInvalidNodeSource = errors.New("gate: Node来源信息无效")
 )
 
@@ -41,7 +39,7 @@ type Config struct {
 	GateClient     pbGate.GateClient
 	Locator        *locator.GateLocator
 	Registry       registry.Registry
-	RPCServer      *grpc.Server
+	RPCServer      *rpc.Server
 	RPCListener    net.Listener
 	NetworkOptions []network.Option
 	Hooks          network.Hooks
@@ -62,12 +60,11 @@ type Gate struct {
 	locator        *locator.GateLocator
 	registry       registry.Registry
 	errorHandler   ErrorHandler
-	rpcServer      *grpc.Server
+	rpcServer      *rpc.Server
 	rpcListener    net.Listener
 	ctx            context.Context
 	cancel         context.CancelFunc
 	locatorTimeout time.Duration
-	sessions       sync.Map
 	started        atomic.Bool
 	closed         atomic.Bool
 	serverWait     sync.WaitGroup
@@ -75,7 +72,7 @@ type Gate struct {
 }
 
 func New(config Config) *Gate {
-	if config.Instance.ID == "" || config.Instance.ServiceName != locator.GateName {
+	if config.Instance.Id == "" || config.Instance.ServiceName != locator.GateName {
 		panic("gate: 必须提供Gate ServiceInstance")
 	}
 	if config.Router == nil {
@@ -94,10 +91,10 @@ func New(config Config) *Gate {
 		panic("gate: 必须提供Registry")
 	}
 	if config.RPCServer == nil {
-		panic("gate: 必须提供gRPC Server")
+		panic("gate: 必须提供TCP RPC Server")
 	}
 	if config.RPCListener == nil {
-		panic("gate: 必须提供gRPC Listener")
+		panic("gate: 必须提供TCP RPC Listener")
 	}
 	if config.LocatorTimeout <= 0 {
 		config.LocatorTimeout = defaultLocatorTimeout
@@ -135,11 +132,11 @@ func New(config Config) *Gate {
 			}
 			return nil
 		},
-		OnSessionEnd: func(session *network.Session) {
-			g.onSessionEnd(session)
+		OnSessionEnd: func(ctx context.Context, session *network.Session) {
+			g.onSessionEnd(ctx, session)
 			if config.Hooks.OnSessionEnd != nil {
 				help.SafeRun(func() {
-					config.Hooks.OnSessionEnd(session)
+					config.Hooks.OnSessionEnd(ctx, session)
 				})
 			}
 		},
@@ -153,25 +150,13 @@ func New(config Config) *Gate {
 			}
 		},
 	}))
-	server, err := network.NewServer(options...)
-	if err != nil {
-		panic(err)
-	}
-	g.server = server
+	g.server = network.NewServer(options...)
+	g.locator.SetOnBindingLost(func(uid uint64, binding locator.GateBinding) {
+		g.server.KickUidSession(uid, binding.SessionId)
+	})
 
 	pbGate.RegisterGateServer(config.RPCServer, g)
 	return g
-}
-
-func (g *Gate) AddComponent(component app.Component) error {
-	if g.closed.Load() {
-		return ErrClosed
-	}
-	if g.started.Load() {
-		return ErrStarted
-	}
-	g.App.AddComponent(component)
-	return nil
 }
 
 func (g *Gate) Start() error {
@@ -190,7 +175,7 @@ func (g *Gate) Start() error {
 	help.SafeGo(func() {
 		defer g.serverWait.Done()
 		if err := g.rpcServer.Serve(g.rpcListener); err != nil && !g.closed.Load() {
-			logx.Errorf("gate: gRPC服务退出: %v", err)
+			logx.Errorf("gate: TCP RPC服务退出: %v", err)
 		}
 	})
 	if err := g.registry.Register(g.instance); err != nil {
@@ -198,7 +183,7 @@ func (g *Gate) Start() error {
 		return err
 	}
 	if err := g.server.Start(); err != nil {
-		_ = g.registry.Deregister(g.instance.ID)
+		_ = g.registry.Deregister(g.instance.Id)
 		g.stopAfterStartFailure()
 		return err
 	}
@@ -208,7 +193,7 @@ func (g *Gate) Start() error {
 func (g *Gate) stopAfterStartFailure() {
 	g.cancel()
 	_ = g.server.Shutdown(context.Background())
-	g.rpcServer.Stop()
+	_ = g.rpcServer.Shutdown(context.Background())
 	g.serverWait.Wait()
 	_ = g.App.Shutdown(context.Background())
 	g.Wait()
@@ -221,21 +206,12 @@ func (g *Gate) Shutdown(ctx context.Context) error {
 	}
 
 	if g.started.Load() {
-		_ = g.registry.Deregister(g.instance.ID)
+		_ = g.registry.Deregister(g.instance.Id)
 	}
+	g.App.RequestStop()
 	serverErr := g.server.Shutdown(ctx)
 
-	rpcDone := make(chan struct{})
-	help.SafeGo(func() {
-		defer close(rpcDone)
-		g.rpcServer.GracefulStop()
-	})
-	select {
-	case <-rpcDone:
-	case <-ctx.Done():
-		g.rpcServer.Stop()
-		<-rpcDone
-	}
+	_ = g.rpcServer.Shutdown(ctx)
 	g.serverWait.Wait()
 	g.cancel()
 
@@ -272,7 +248,7 @@ func (g *Gate) Wait() {
 }
 
 func (g *Gate) UpdateMetadata(metadata map[string]string) error {
-	err := g.registry.UpdateMetaData(g.instance.ID, metadata)
+	err := g.registry.UpdateMetaData(g.instance.Id, metadata)
 	if err != nil {
 		return err
 	}
@@ -286,7 +262,7 @@ func (g *Gate) UpdateMetadata(metadata map[string]string) error {
 }
 
 func (g *Gate) DeleteMetadata(keys ...string) error {
-	err := g.registry.DeleteMetaData(g.instance.ID, keys)
+	err := g.registry.DeleteMetaData(g.instance.Id, keys)
 	if err != nil {
 		return err
 	}
@@ -303,37 +279,29 @@ func (g *Gate) Done() <-chan struct{} {
 func (g *Gate) onReq(request *network.ReqContext) {
 	message := request.Request
 	ctx := &Context{
-		Context:    g.ctx,
+		Context:    request.Context,
 		App:        g,
 		Session:    request.Session,
-		Uid:        request.Session.UID(),
+		Uid:        request.Session.Uid(),
 		Route:      message.Route,
 		Seq:        message.Seq,
 		Body:       message.Body,
-		BindingKey: strconv.FormatUint(request.Session.UID(), 10),
+		BindingKey: strconv.FormatUint(request.Session.Uid(), 10),
 		needReply:  request.NeedReply,
 		forward:    g.forward,
 	}
 
-	err := g.dispatch(ctx)
-	if err == nil && request.NeedReply && ctx.replied {
-		err = request.Write(ctx.responseBody)
-	}
-	if err != nil {
+	if err := g.router.Dispatch(ctx); err != nil {
+		ctx.replied, ctx.responseBody = false, nil
 		help.SafeRun(func() {
 			g.errorHandler(ctx, err)
 		})
 	}
-}
-
-func (g *Gate) dispatch(ctx *Context) error {
-	var err error
-	if help.SafeRun(func() {
-		err = g.router.Dispatch(ctx)
-	}) {
-		return ErrHandlerPanic
+	if ctx.replied {
+		if err := request.Write(ctx.responseBody); err != nil {
+			logx.Errorf("gate: 写入响应失败: %v", err)
+		}
 	}
-	return err
 }
 
 func (g *Gate) forward(ctx *Context) error {
@@ -356,7 +324,7 @@ func (g *Gate) forward(ctx *Context) error {
 		}
 		rpcCtx = lx.WithActor(rpcCtx, target.Service, ctx.ActorKey)
 	case RouteModeNode:
-		rpcCtx = lx.WithNode(rpcCtx, target.NodeID)
+		rpcCtx = lx.WithNode(rpcCtx, target.NodeId)
 	}
 
 	request := &pbNode.Request{
@@ -364,20 +332,22 @@ func (g *Gate) forward(ctx *Context) error {
 		Route:           ctx.Route,
 		Body:            ctx.Body,
 		GateServiceName: g.instance.ServiceName,
-		GateInstanceId:  g.instance.ID,
+		GateInstanceId:  g.instance.Id,
 		ActorKey:        ctx.ActorKey,
 	}
 	if !ctx.NeedReply() {
 		_, err := g.nodeClient.Tell(rpcCtx, request)
-		if err != nil && err.Code() == rpc.ErrorCodeRedirect {
-			_, err = g.nodeClient.Tell(lx.WithNode(ctx.Context, string(err.Detail())), request)
+		var redirect *rpc.Error
+		if errors.As(err, &redirect) && redirect.Code == rpc.ErrorCodeRedirect {
+			_, err = g.nodeClient.Tell(lx.WithNode(ctx.Context, string(redirect.Detail)), request)
 		}
 		return err
 	}
 
 	response, err := g.nodeClient.Call(rpcCtx, request)
-	if err != nil && err.Code() == rpc.ErrorCodeRedirect {
-		response, err = g.nodeClient.Call(lx.WithNode(ctx.Context, string(err.Detail())), request)
+	var redirect *rpc.Error
+	if errors.As(err, &redirect) && redirect.Code == rpc.ErrorCodeRedirect {
+		response, err = g.nodeClient.Call(lx.WithNode(ctx.Context, string(redirect.Detail)), request)
 	}
 	if err != nil {
 		return err
@@ -386,7 +356,7 @@ func (g *Gate) forward(ctx *Context) error {
 		return ErrInvalidNodeSource
 	}
 	ctx.NodeServiceName = response.NodeServiceName
-	ctx.NodeInstanceID = response.NodeInstanceId
+	ctx.NodeInstanceId = response.NodeInstanceId
 	if response.Replied {
 		return ctx.Reply(response.Body)
 	}
@@ -394,78 +364,54 @@ func (g *Gate) forward(ctx *Context) error {
 }
 
 func (g *Gate) onSessionBind(session *network.Session) error {
-	uid := session.UID()
-	if uid == 0 {
-		return network.ErrUnauthorized
-	}
-	g.sessions.Store(uid, session.ID)
-
+	uid := session.Uid()
 	current := locator.GateBinding{
-		InstanceID: g.instance.ID,
-		SessionID:  session.ID,
+		InstanceId: g.instance.Id,
+		SessionId:  session.Id,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), g.locatorTimeout)
-	previous, err := g.locator.Bind(ctx, uid, current)
-	cancel()
+	ctx, cancel := context.WithTimeout(session.Context(), g.locatorTimeout)
+	defer cancel()
+	previous, err := g.locator.LocateBinding(ctx, uid)
 	if err != nil {
-		logx.Errorf("gate: 绑定UID定位失败 uid=%d instance=%s err=%v", uid, g.instance.ID, err)
 		return err
 	}
-	if previous.InstanceID == "" || previous.InstanceID == current.InstanceID {
-		return nil
+	// Do not overwrite an unreachable Gate's record and restart its TTL on
+	// every reconnect. Let its original lease expire before taking over.
+	if previous.InstanceId != "" && previous.InstanceId != current.InstanceId {
+		if _, err := g.gateClient.Kick(lx.WithNode(ctx, previous.InstanceId), &pbGate.KickRequest{
+			Uid: uid, NodeServiceName: g.instance.ServiceName, NodeInstanceId: g.instance.Id, SessionId: previous.SessionId,
+		}); err != nil {
+			return err
+		}
 	}
-
-	ctx, cancel = context.WithTimeout(context.Background(), g.locatorTimeout)
-	_, kickErr := g.gateClient.Kick(lx.WithNode(ctx, previous.InstanceID), &pbGate.KickRequest{
-		Uid:             uid,
-		NodeServiceName: g.instance.ServiceName,
-		NodeInstanceId:  g.instance.ID,
-		SessionId:       previous.SessionID,
-	})
-	cancel()
-	if kickErr == nil {
-		return nil
-	}
-	logx.Errorf("gate: 踢出旧Gate Session失败 uid=%d instance=%s session=%d err=%v", uid, previous.InstanceID, previous.SessionID, kickErr)
-
-	ctx, cancel = context.WithTimeout(context.Background(), g.locatorTimeout)
-	restored, restoreErr := g.locator.Restore(ctx, uid, current, previous)
-	cancel()
-	if restoreErr != nil {
-		logx.Errorf("gate: 恢复UID旧定位失败 uid=%d current=%s previous=%s err=%v", uid, current.InstanceID, previous.InstanceID, restoreErr)
-		return kickErr
-	}
-	if !restored {
-		logx.Warnf("gate: UID定位已被更新，忽略旧定位恢复 uid=%d current=%s previous=%s", uid, current.InstanceID, previous.InstanceID)
-	}
-	return kickErr
+	return g.locator.Bind(ctx, uid, current)
 }
 
-func (g *Gate) onSessionEnd(session *network.Session) {
-	uid := session.UID()
-	if uid == 0 || !g.sessions.CompareAndDelete(uid, session.ID) {
+func (g *Gate) onSessionEnd(parent context.Context, session *network.Session) {
+	uid := session.Uid()
+	if uid == 0 {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), g.locatorTimeout)
+	ctx, cancel := context.WithTimeout(parent, g.locatorTimeout)
 	err := g.locator.Unbind(ctx, uid, locator.GateBinding{
-		InstanceID: g.instance.ID,
-		SessionID:  session.ID,
+		InstanceId: g.instance.Id,
+		SessionId:  session.Id,
 	})
 	cancel()
 	if err != nil {
-		logx.Errorf("gate: 解绑UID定位失败 uid=%d instance=%s err=%v", uid, g.instance.ID, err)
+		logx.Errorf("gate: 解绑UID定位失败 uid=%d instance=%s err=%v", uid, g.instance.Id, err)
 	}
 }
 
 func defaultErrorHandler(ctx *Context, err error) {
 	logx.Errorf(
 		"gate: 请求处理失败 uid=%d route=%d routeID=%s targetService=%s targetNode=%s err=%v",
-		ctx.Session.UID(),
+		ctx.Uid,
 		ctx.Route,
-		ctx.RouteID,
+		ctx.RouteId,
 		ctx.Target.Service,
-		ctx.Target.NodeID,
+		ctx.Target.NodeId,
 		err,
 	)
 }

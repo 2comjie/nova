@@ -15,7 +15,7 @@ const (
 )
 
 type ServiceInstance struct {
-	ID          string `json:"id"`           // 服务的ID 必须唯一
+	Id          string `json:"id"`           // 服务的Id 必须唯一
 	ServiceName string `json:"service_name"` // 服务名
 
 	MetaData map[string]string `json:"meta_data"` // 服务的元数据

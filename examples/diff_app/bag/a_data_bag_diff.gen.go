@@ -5,7 +5,8 @@
 package bag
 
 import (
-	diff "github.com/2comjie/nova/diff"
+	"github.com/2comjie/nova/diff"
+	_pbData "github.com/2comjie/nova/examples/diff_app/bag/pb"
 	item "github.com/2comjie/nova/examples/diff_app/item"
 )
 
@@ -16,364 +17,124 @@ type Bag struct {
 }
 
 func (value *Bag) Items() *diff.PointerMap[uint64, *item.Item] {
-	value.EnsureDiffLink()
+	value.InitLink(nil)
 	return &value.items
 }
 
 func (value *Bag) Order() *diff.PointerSlice[*item.Item] {
-	value.EnsureDiffLink()
+	value.InitLink(nil)
 	return &value.order
 }
 
-type BagDiffPath[DiffRoot any] struct {
-	path diff.PathBuilder[DiffRoot]
-}
-
-func NewBagDiffPath[DiffRoot any](path diff.PathBuilder[DiffRoot]) BagDiffPath[DiffRoot] {
-	return BagDiffPath[DiffRoot]{path: path}
-}
-
-var BagDiff = NewBagDiffPath[*Bag](diff.NewPathBuilder[*Bag]())
-
-func (path BagDiffPath[DiffRoot]) Items() BagItemsDiffPath[DiffRoot] {
-	return BagItemsDiffPath[DiffRoot]{
-		path: diff.NewMapPath[DiffRoot, uint64, *item.Item](path.path, 1),
-	}
-}
-
-type BagItemsDiffPath[DiffRoot any] struct {
-	path diff.MapPath[DiffRoot, uint64, *item.Item]
-}
-
-func (path BagItemsDiffPath[DiffRoot]) Changes() diff.MapPath[DiffRoot, uint64, *item.Item] {
-	return path.path
-}
-
-func (path BagItemsDiffPath[DiffRoot]) Any() item.ItemDiffPath[DiffRoot] {
-	return item.NewItemDiffPath[DiffRoot](path.path.AnyPath())
-}
-
-func (path BagItemsDiffPath[DiffRoot]) Key(key uint64) item.ItemDiffPath[DiffRoot] {
-	return item.NewItemDiffPath[DiffRoot](path.path.KeyPath(key))
-}
-
-func (path BagDiffPath[DiffRoot]) Order() BagOrderDiffPath[DiffRoot] {
-	return BagOrderDiffPath[DiffRoot]{
-		path: diff.NewSlicePath[DiffRoot, *item.Item](path.path, 2),
-	}
-}
-
-type BagOrderDiffPath[DiffRoot any] struct {
-	path diff.SlicePath[DiffRoot, *item.Item]
-}
-
-func (path BagOrderDiffPath[DiffRoot]) Changes() diff.SlicePath[DiffRoot, *item.Item] {
-	return path.path
-}
-
-func (path BagOrderDiffPath[DiffRoot]) Any() item.ItemDiffPath[DiffRoot] {
-	return item.NewItemDiffPath[DiffRoot](path.path.AnyPath())
-}
-
-func (path BagOrderDiffPath[DiffRoot]) Index(index int) item.ItemDiffPath[DiffRoot] {
-	return item.NewItemDiffPath[DiffRoot](path.path.IndexPath(index))
-}
-
 func (value *Bag) InitLink(writer *diff.Writer) {
-	if writer != nil {
-		diff.BindWriter[*Bag](writer)
-	}
-	value.InitDiffLink(writer, make(map[*diff.Object]struct{}))
-}
-
-func (value *Bag) EnsureDiffLink() {
-	if value == nil {
+	if value.Object.Initialized() {
+		if writer != nil {
+			value.Object.Init(writer)
+		}
 		return
 	}
-	if value.items.Initialized() {
-		return
-	}
-	value.InitDiffLink(nil, make(map[*diff.Object]struct{}))
-}
-
-func (value *Bag) InitDiffLink(writer *diff.Writer, visited map[*diff.Object]struct{}) {
-	if value == nil {
-		return
-	}
-	if visited == nil {
-		visited = make(map[*diff.Object]struct{})
-	}
-	if _, exists := visited[&value.Object]; exists {
-		return
-	}
-	visited[&value.Object] = struct{}{}
 	value.Object.Init(writer)
-	value.items.Range(func(_ uint64, child *item.Item) bool {
-		if child != nil {
-			child.InitDiffLink(nil, visited)
-		}
-		return true
-	})
 	value.items.Init(&value.Object, 1)
-	value.order.Range(func(_ int, child *item.Item) bool {
-		if child != nil {
-			child.InitDiffLink(nil, visited)
-		}
-		return true
-	})
 	value.order.Init(&value.Object, 2)
 }
 
-func (value *Bag) AppendDiffValue(data []byte) []byte {
-	data = value.items.AppendValue(data, 1)
-	data = value.order.AppendValue(data, 2)
-	return data
+func (value *Bag) Snapshot() *_pbData.Bag {
+	snapshot := new(_pbData.Bag)
+	value.items.Range(func(key uint64, child *item.Item) bool {
+		diff.SetMap(&snapshot.Items, key, child.Snapshot())
+		return true
+	})
+	value.order.Range(func(_ int, child *item.Item) bool {
+		snapshot.Order = append(snapshot.Order, child.Snapshot())
+		return true
+	})
+	return snapshot
 }
 
-func (value *Bag) Commit() diff.Delta[*Bag] {
-	return diff.Delta[*Bag](value.Object.Commit())
-}
-
-func (value *Bag) Snapshot() []byte {
-	return value.AppendDiffValue(nil)
-}
-
-func (value *Bag) LoadSnapshot(data []byte) error {
+func (value *Bag) LoadSnapshot(snapshot *_pbData.Bag) {
 	value.InitLink(nil)
 	value.items.Clear()
+	for key, fieldValue := range snapshot.GetItems() {
+		child := new(item.Item)
+		child.LoadSnapshot(fieldValue)
+		value.items.Store(key, child)
+	}
 	value.order.Clear()
-	fields, err := diff.DecodeFields(data)
-	if err != nil {
-		return err
+	for _, fieldValue := range snapshot.GetOrder() {
+		child := new(item.Item)
+		child.LoadSnapshot(fieldValue)
+		value.order.Append(child)
 	}
-	for _, field := range fields {
-		if err := value.loadDiffField(field); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
-func (value *Bag) Merge(data []byte) error {
+func (value *Bag) NewUpdate() *_pbData.Bag {
+	return new(_pbData.Bag)
+}
+
+func (value *Bag) Commit() *_pbData.Bag {
+	return value.Object.Commit(value.NewUpdate(), value.WriteUpdate)
+}
+
+func (value *Bag) WriteUpdate(update *_pbData.Bag, path diff.Path, operation diff.Operation, data any) {
+	node := path[0]
+	switch node.FieldIndex {
+	case 1:
+		if node.KeyType == diff.PathField {
+			update.ItemsClear = true
+			return
+		}
+		key := node.MapKey.(uint64)
+		if len(path) == 1 {
+			if operation == diff.MapSet {
+				diff.SetMap(&update.ItemsSet, key, data.(*item.Item).Snapshot())
+			} else {
+				update.ItemsDelete = append(update.ItemsDelete, key)
+			}
+			return
+		}
+		child, _ := value.items.Load(key)
+		childUpdate := update.ItemsUpdate[key]
+		if childUpdate == nil {
+			childUpdate = child.NewUpdate()
+			diff.SetMap(&update.ItemsUpdate, key, childUpdate)
+		}
+		child.WriteUpdate(childUpdate, path[1:], operation, data)
+		return
+
+	case 2:
+		update.OrderUpdated = true
+		update.OrderUpdate = update.OrderUpdate[:0]
+		for _, child := range data.([]*item.Item) {
+			update.OrderUpdate = append(update.OrderUpdate, child.Snapshot())
+		}
+		return
+
+	}
+}
+
+func (value *Bag) Merge(update *_pbData.Bag) {
 	value.InitLink(nil)
-	patches, err := diff.DecodePatches(data)
-	if err != nil {
-		return err
+	if update.ItemsClear {
+		value.items.Clear()
 	}
-	for _, patch := range patches {
-		if err := value.MergeDiffPatch(patch.Path, patch.Operation, patch.Value); err != nil {
-			return err
+	for key, fieldValue := range update.ItemsSet {
+		child := new(item.Item)
+		child.LoadSnapshot(fieldValue)
+		value.items.Store(key, child)
+	}
+	for _, key := range update.ItemsDelete {
+		value.items.Delete(key)
+	}
+	for key, fieldValue := range update.ItemsUpdate {
+		child, _ := value.items.Load(key)
+		child.Merge(fieldValue)
+	}
+	if update.OrderUpdated {
+		value.order.Clear()
+		for _, fieldValue := range update.OrderUpdate {
+			child := new(item.Item)
+			child.LoadSnapshot(fieldValue)
+			value.order.Append(child)
 		}
 	}
-	return nil
-}
-
-func (value *Bag) loadDiffField(field diff.EncodedField) error {
-	switch field.FieldIndex {
-	case 1:
-		{
-			entries, err := diff.DecodeValues(field.Value)
-			if err != nil {
-				return err
-			}
-			if len(entries)%2 != 0 {
-				return diff.ErrInvalidData
-			}
-			for index := 0; index < len(entries); index += 2 {
-				mapKey, err := diff.DecodePrimitive[uint64](entries[index])
-				if err != nil {
-					return err
-				}
-				mapValue := new(item.Item)
-				if err := mapValue.LoadSnapshot(entries[index+1]); err != nil {
-					return err
-				}
-				value.items.Store(mapKey, mapValue)
-			}
-			return nil
-		}
-	case 2:
-		{
-			elements, err := diff.DecodeValues(field.Value)
-			if err != nil {
-				return err
-			}
-			for _, element := range elements {
-				elementData, exists, err := diff.DecodePointerElement(element)
-				if err != nil {
-					return err
-				}
-				if !exists {
-					value.order.Append(nil)
-					continue
-				}
-				sliceValue := new(item.Item)
-				if err := sliceValue.LoadSnapshot(elementData); err != nil {
-					return err
-				}
-				value.order.Append(sliceValue)
-			}
-			return nil
-		}
-	}
-	return nil
-}
-
-func (value *Bag) MergeDiffPatch(path []diff.EncodedPathNode, operation diff.Operation, data []byte) error {
-	if len(path) == 0 {
-		return diff.ErrInvalidData
-	}
-	node := path[0]
-	switch node.FieldIndex {
-	case 1:
-		{
-			if node.KeyType == diff.PathField {
-				if len(path) != 1 || operation != diff.MapClear {
-					return diff.ErrInvalidData
-				}
-				value.items.Clear()
-				return nil
-			}
-			if node.KeyType != diff.PathMap {
-				return diff.ErrInvalidData
-			}
-			mapKey, err := diff.DecodePrimitive[uint64](node.MapKey)
-			if err != nil {
-				return err
-			}
-			if len(path) == 1 {
-				switch operation {
-				case diff.MapSet:
-					mapValue := new(item.Item)
-					if err := mapValue.LoadSnapshot(data); err != nil {
-						return err
-					}
-					value.items.Store(mapKey, mapValue)
-				case diff.MapDelete:
-					value.items.Delete(mapKey)
-				default:
-					return diff.ErrInvalidData
-				}
-				return nil
-			}
-			mapValue, exists := value.items.Load(mapKey)
-			if !exists {
-				return diff.ErrInvalidData
-			}
-			return mapValue.MergeDiffPatch(path[1:], operation, data)
-		}
-	case 2:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.SliceReplace {
-				return diff.ErrInvalidData
-			}
-			value.order.Clear()
-			field := diff.EncodedField{FieldIndex: 2, Value: data}
-			elements, err := diff.DecodeValues(field.Value)
-			if err != nil {
-				return err
-			}
-			for _, element := range elements {
-				elementData, exists, err := diff.DecodePointerElement(element)
-				if err != nil {
-					return err
-				}
-				if !exists {
-					value.order.Append(nil)
-					continue
-				}
-				sliceValue := new(item.Item)
-				if err := sliceValue.LoadSnapshot(elementData); err != nil {
-					return err
-				}
-				value.order.Append(sliceValue)
-			}
-			return nil
-		}
-	}
-	return nil
-}
-
-func (value *Bag) FormatDelta(data []byte) (string, error) {
-	patches, err := diff.DecodePatches(data)
-	if err != nil {
-		return "", err
-	}
-	debugPatches := make([]diff.DebugPatch, 0, len(patches))
-	for _, patch := range patches {
-		path, patchValue, err := value.FormatDiffPatch(patch.Path, patch.Operation, patch.Value)
-		if err != nil {
-			return "", err
-		}
-		debugPatches = append(debugPatches, diff.DebugPatch{
-			Path:      path,
-			Operation: patch.Operation,
-			Value:     patchValue,
-		})
-	}
-	return diff.FormatDebugPatches("Bag", debugPatches), nil
-}
-
-func (value *Bag) FormatDiffPatch(path []diff.EncodedPathNode, operation diff.Operation, data []byte) (string, any, error) {
-	if len(path) == 0 {
-		return "", nil, diff.ErrInvalidData
-	}
-	node := path[0]
-	switch node.FieldIndex {
-	case 1:
-		{
-			if node.KeyType == diff.PathField {
-				if len(path) != 1 || operation != diff.MapClear {
-					return "", nil, diff.ErrInvalidData
-				}
-				return "Items", nil, nil
-			}
-			if node.KeyType != diff.PathMap {
-				return "", nil, diff.ErrInvalidData
-			}
-			mapKey, err := diff.DecodePrimitive[uint64](node.MapKey)
-			if err != nil {
-				return "", nil, err
-			}
-			if len(path) == 1 {
-				switch operation {
-				case diff.MapSet:
-					return diff.DebugMapPath("Items", mapKey, ""), diff.DebugSnapshot{Type: "*item.Item", Size: len(data)}, nil
-				case diff.MapDelete:
-					return diff.DebugMapPath("Items", mapKey, ""), nil, nil
-				default:
-					return "", nil, diff.ErrInvalidData
-				}
-			}
-			childPath, mapValue, err := new(item.Item).FormatDiffPatch(path[1:], operation, data)
-			if err != nil {
-				return "", nil, err
-			}
-			return diff.DebugMapPath("Items", mapKey, childPath), mapValue, nil
-		}
-	case 2:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.SliceReplace {
-				return "", nil, diff.ErrInvalidData
-			}
-			elements, err := diff.DecodeValues(data)
-			if err != nil {
-				return "", nil, err
-			}
-			values := make([]any, 0, len(elements))
-			for _, element := range elements {
-				elementData, exists, err := diff.DecodePointerElement(element)
-				if err != nil {
-					return "", nil, err
-				}
-				if !exists {
-					values = append(values, nil)
-					continue
-				}
-				values = append(values, diff.DebugSnapshot{Type: "*item.Item", Size: len(elementData)})
-			}
-			return "Order", values, nil
-		}
-	}
-	return "", nil, diff.ErrInvalidData
 }

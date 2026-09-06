@@ -3,85 +3,43 @@ package client
 import (
 	"sync"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/2comjie/nova/rpc"
 )
 
 type ConnPool struct {
-	mu      sync.RWMutex
-	connMap map[string]*grpc.ClientConn
-	opts    []grpc.DialOption
+	mu      sync.Mutex
+	connMap map[string]*rpc.Conn
+	opts    []rpc.ConnOption
 }
 
-func NewConnPool(opts ...grpc.DialOption) *ConnPool {
-	dialOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	dialOpts = append(dialOpts, opts...)
+func NewConnPool(opts ...rpc.ConnOption) *ConnPool {
 	return &ConnPool{
-		connMap: make(map[string]*grpc.ClientConn),
-		opts:    dialOpts,
+		connMap: make(map[string]*rpc.Conn),
+		opts:    opts,
 	}
 }
 
-func (p *ConnPool) Get(addr string) (*grpc.ClientConn, error) {
-	if addr == "" {
-		return nil, ErrInvalidTarget
+func (p *ConnPool) Get(addr string) (*rpc.Conn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.connMap == nil {
+		return nil, ErrClosed
 	}
-	p.mu.RLock()
-	conn := p.connMap[addr]
-	p.mu.RUnlock()
-	if conn != nil {
+	if conn := p.connMap[addr]; conn != nil {
 		return conn, nil
 	}
 
-	conn, err := grpc.NewClient(addr, p.opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	p.mu.Lock()
-	old := p.connMap[addr]
-	if old != nil {
-		p.mu.Unlock()
-		_ = conn.Close()
-		return old, nil
-	}
+	conn := rpc.NewConn(addr, p.opts...)
 	p.connMap[addr] = conn
-	p.mu.Unlock()
-
 	return conn, nil
 }
 
 func (p *ConnPool) Close() {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	for addr, conn := range p.connMap {
+	connections := p.connMap
+	p.connMap = nil
+	p.mu.Unlock()
+	for _, conn := range connections {
 		_ = conn.Close()
-		delete(p.connMap, addr)
-	}
-}
-
-func (p *ConnPool) Remove(addrs map[string]bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	for addr := range addrs {
-		if conn := p.connMap[addr]; conn != nil {
-			_ = conn.Close()
-			delete(p.connMap, addr)
-		}
-	}
-}
-
-func (p *ConnPool) Prune(activeAddrMap map[string]bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	for addr, conn := range p.connMap {
-		_, ok := activeAddrMap[addr]
-		if !ok {
-			_ = conn.Close()
-			delete(p.connMap, addr)
-		}
 	}
 }

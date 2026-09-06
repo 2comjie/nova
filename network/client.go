@@ -28,17 +28,12 @@ type pendingCall struct {
 	result chan callResult
 }
 
-type bindResult struct {
-	response *protocol.BindResponse
-	err      error
-}
-
 type Client struct {
 	options options
 
 	mutex       sync.Mutex
 	conn        transport.Conn
-	bindWait    chan bindResult
+	bindWait    chan *protocol.BindResponse
 	pending     map[uint64]*pendingCall
 	pushHandler map[uint32]PushHandler
 
@@ -54,13 +49,13 @@ type Client struct {
 	heartbeatRun sync.Once
 }
 
-func NewClient(opts ...Option) (*Client, error) {
+func NewClient(opts ...Option) *Client {
 	options := defaultOptions()
 	for _, option := range opts {
 		option(&options)
 	}
 	if options.dialer == nil {
-		return nil, ErrDialerMissing
+		panic(ErrDialerMissing)
 	}
 	return &Client{
 		options:     options,
@@ -68,7 +63,7 @@ func NewClient(opts ...Option) (*Client, error) {
 		pushHandler: make(map[uint32]PushHandler),
 		heartbeat:   options.heartbeat,
 		done:        make(chan struct{}),
-	}, nil
+	}
 }
 
 func (c *Client) Dial(ctx context.Context) error {
@@ -85,6 +80,11 @@ func (c *Client) Dial(ctx context.Context) error {
 	}
 
 	c.mutex.Lock()
+	if c.closed.Load() {
+		c.mutex.Unlock()
+		_ = conn.Close()
+		return ErrClosed
+	}
 	c.conn = conn
 	c.mutex.Unlock()
 	if err := conn.Start(c); err != nil {
@@ -111,7 +111,7 @@ func (c *Client) Bind(ctx context.Context, token []byte) error {
 		c.mutex.Unlock()
 		return errors.New("network: Bind正在进行")
 	}
-	wait := make(chan bindResult, 1)
+	wait := make(chan *protocol.BindResponse, 1)
 	c.bindWait = wait
 	conn := c.conn
 	c.mutex.Unlock()
@@ -122,7 +122,7 @@ func (c *Client) Bind(ctx context.Context, token []byte) error {
 		c.clearBindWait(wait)
 		return err
 	}
-	err = conn.Write(&packet.Message{
+	err = conn.WriteContext(ctx, &packet.Message{
 		Type: packet.BindReq,
 		Body: body,
 	})
@@ -134,11 +134,8 @@ func (c *Client) Bind(ctx context.Context, token []byte) error {
 
 	defer c.clearBindWait(wait)
 	select {
-	case result := <-wait:
-		if result.err != nil {
-			return result.err
-		}
-		if result.response.Code != protocol.BindCode_BIND_OK {
+	case response := <-wait:
+		if response.Code != protocol.BindCode_BIND_OK {
 			return ErrUnauthorized
 		}
 		return nil
@@ -149,7 +146,7 @@ func (c *Client) Bind(ctx context.Context, token []byte) error {
 	}
 }
 
-func (c *Client) clearBindWait(wait chan bindResult) {
+func (c *Client) clearBindWait(wait chan *protocol.BindResponse) {
 	c.mutex.Lock()
 	if c.bindWait == wait {
 		c.bindWait = nil
@@ -185,7 +182,7 @@ func (c *Client) Call(ctx context.Context, route uint32, body []byte) ([]byte, e
 	c.pending[seq] = call
 	c.mutex.Unlock()
 
-	if err := conn.Write(&packet.Message{
+	if err := conn.WriteContext(ctx, &packet.Message{
 		Type:  packet.Req,
 		Route: route,
 		Seq:   seq,
@@ -207,7 +204,7 @@ func (c *Client) Call(ctx context.Context, route uint32, body []byte) ([]byte, e
 	}
 }
 
-func (c *Client) Tell(_ context.Context, route uint32, body []byte) error {
+func (c *Client) Tell(ctx context.Context, route uint32, body []byte) error {
 	if !c.bound.Load() {
 		return ErrNotBound
 	}
@@ -223,7 +220,7 @@ func (c *Client) Tell(_ context.Context, route uint32, body []byte) error {
 	if conn == nil {
 		return ErrClosed
 	}
-	return conn.Write(&packet.Message{
+	return conn.WriteContext(ctx, &packet.Message{
 		Type:  packet.Req,
 		Route: route,
 		Body:  body,
@@ -289,7 +286,7 @@ func (c *Client) HandleMessage(conn transport.Conn, message *packet.Message) {
 			})
 		}
 		select {
-		case wait <- bindResult{response: response}:
+		case wait <- response:
 		default:
 		}
 	case packet.Rsp:
@@ -388,39 +385,28 @@ func (c *Client) heartbeatLoop() {
 
 func (c *Client) finish() {
 	c.finishOnce.Do(func() {
+		c.mutex.Lock()
 		c.closed.Store(true)
 		c.bound.Store(false)
 		close(c.done)
 
-		c.mutex.Lock()
-		wait := c.bindWait
 		c.bindWait = nil
-		pending := c.pending
-		c.pending = make(map[uint64]*pendingCall)
+		c.pending = nil
 		c.conn = nil
 		c.mutex.Unlock()
-
-		if wait != nil {
-			select {
-			case wait <- bindResult{err: ErrClosed}:
-			default:
-			}
-		}
-		for _, call := range pending {
-			call.result <- callResult{err: ErrClosed}
-		}
 	})
 }
 
 func (c *Client) Close() error {
 	c.mutex.Lock()
+	c.closed.Store(true)
 	conn := c.conn
 	c.mutex.Unlock()
+	c.finish()
 	if conn == nil {
-		c.finish()
 		return nil
 	}
-	err := conn.Close()
-	c.finish()
-	return err
+	return conn.Close()
 }
+
+func (c *Client) Done() <-chan struct{} { return c.done }

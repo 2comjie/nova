@@ -1,40 +1,35 @@
 package network
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
 	"github.com/2comjie/nova/network/transport"
+	"github.com/2comjie/nova/packet"
 )
 
 type Session struct {
-	ID   uint64
+	Id   uint64
 	Conn transport.Conn
+
+	ctx    context.Context
+	cancel context.CancelFunc
+	queue  chan *packet.Message
 
 	acceptedAt  time.Time
 	uid         atomic.Uint64
 	boundAt     atomic.Int64
 	heartbeatAt atomic.Int64
+	queuedBytes atomic.Int64
 }
 
-func (s *Session) UID() uint64 {
-	if s == nil {
-		return 0
-	}
-	return s.uid.Load()
-}
-
-func (s *Session) IsBound() bool {
-	return s != nil && s.uid.Load() != 0
-}
-
+func (s *Session) Uid() uint64              { return s.uid.Load() }
+func (s *Session) IsBound() bool            { return s.boundAt.Load() != 0 }
+func (s *Session) Context() context.Context { return s.ctx }
 func (s *Session) BoundAt() time.Time {
-	if s == nil {
-		return time.Time{}
+	if value := s.boundAt.Load(); value != 0 {
+		return time.Unix(0, value)
 	}
-	value := s.boundAt.Load()
-	if value == 0 {
-		return time.Time{}
-	}
-	return time.Unix(0, value)
+	return time.Time{}
 }

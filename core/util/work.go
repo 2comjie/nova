@@ -6,13 +6,13 @@ import (
 	"github.com/2comjie/nova/core/help"
 )
 
-func Shard[T, R any](workerCount int, worker func(workerID int) (T, bool), initial R, merge func(result R, value T) R) R {
+func Shard[T, R any](workerCount int, worker func(workerId int) (T, bool), initial R, merge func(result R, value T) R) R {
 	if workerCount <= 0 {
 		return initial
 	}
 
 	type workerResult struct {
-		workerID int
+		workerId int
 		value    T
 		ok       bool
 	}
@@ -22,13 +22,13 @@ func Shard[T, R any](workerCount int, worker func(workerID int) (T, bool), initi
 	var wg sync.WaitGroup
 	wg.Add(workerCount)
 
-	for workerID := 0; workerID < workerCount; workerID++ {
+	for workerId := 0; workerId < workerCount; workerId++ {
 		help.SafeGo(func() {
 			defer wg.Done()
-			value, ok := worker(workerID)
+			value, ok := worker(workerId)
 
 			results <- workerResult{
-				workerID: workerID,
+				workerId: workerId,
 				value:    value,
 				ok:       ok,
 			}
@@ -42,7 +42,7 @@ func Shard[T, R any](workerCount int, worker func(workerID int) (T, bool), initi
 
 	workerResults := make([]workerResult, workerCount)
 	for result := range results {
-		workerResults[result.workerID] = result
+		workerResults[result.workerId] = result
 	}
 
 	merged := initial

@@ -1,32 +1,25 @@
 package rpc
 
 import (
+	"context"
 	"errors"
-
-	"github.com/2comjie/nova/rpc/rpcerr"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 )
 
-const ErrorCodeRedirect uint32 = 5
+// 框架错误使用高位区间，业务错误码独立定义。
+const (
+	CodeInternal         uint32 = 0xffff0001
+	CodeInvalidArgument  uint32 = 0xffff0002
+	CodeNotFound         uint32 = 0xffff0003
+	CodeCanceled         uint32 = 0xffff0005
+	CodeDeadlineExceeded uint32 = 0xffff0006
+	CodeBusy             uint32 = 0xffff0007
+	ErrorCodeRedirect    uint32 = 5
+)
 
-type CodedError interface {
-	error
-	ErrorCode() uint32
-}
-
-type DetailError interface {
-	CodedError
-	ErrorDetail() []byte
-}
-
-type Error struct {
-	Code    uint32
-	Message string
-	Detail  []byte
-}
+var (
+	ErrClosed = errors.New("rpc: connection closed")
+	ErrBusy   = NewError(CodeBusy, "rpc: too many pending requests")
+)
 
 func NewError(code uint32, message string) *Error {
 	return &Error{Code: code, Message: message}
@@ -36,86 +29,21 @@ func NewErrorWithDetail(code uint32, message string, detail []byte) *Error {
 	return &Error{Code: code, Message: message, Detail: detail}
 }
 
-func (e *Error) Error() string {
-	return e.Message
-}
+func (e *Error) Error() string { return e.Message }
 
-func (e *Error) ErrorCode() uint32 {
-	return e.Code
-}
-
-func (e *Error) ErrorDetail() []byte {
-	return e.Detail
-}
-
-func EncodeError(err error) error {
+func FromError(err error) *Error {
 	if err == nil {
 		return nil
 	}
-
-	var codedError CodedError
-	if !errors.As(err, &codedError) {
-		return err
+	if failure, ok := err.(*Error); ok {
+		return failure
 	}
-
-	var detail []byte
-	var detailError DetailError
-	if errors.As(err, &detailError) {
-		detail = detailError.ErrorDetail()
+	code := CodeInternal
+	switch {
+	case errors.Is(err, context.Canceled):
+		code = CodeCanceled
+	case errors.Is(err, context.DeadlineExceeded):
+		code = CodeDeadlineExceeded
 	}
-
-	encoded, encodeErr := status.New(codes.Unknown, err.Error()).WithDetails(&ErrorDetail{
-		Code:   codedError.ErrorCode(),
-		Detail: detail,
-	})
-	if encodeErr != nil {
-		panic(encodeErr)
-	}
-	return encoded.Err()
-}
-
-func DecodeError(err error) error {
-	return DecodeErr(err)
-}
-
-func DecodeErr(err error) rpcerr.Err {
-	if err == nil {
-		return nil
-	}
-
-	statusValue, ok := status.FromError(err)
-	if !ok {
-		return rpcerr.Wrap(err)
-	}
-	for _, detail := range statusValue.Details() {
-		if errorDetail, ok := detail.(*ErrorDetail); ok {
-			return rpcerr.NewWithDetail(errorDetail.Code, statusValue.Message(), errorDetail.Detail)
-		}
-	}
-	return rpcerr.Wrap(err)
-}
-
-type clientStream struct {
-	grpc.ClientStream
-}
-
-func WrapClientStream(stream grpc.ClientStream) grpc.ClientStream {
-	return &clientStream{ClientStream: stream}
-}
-
-func (s *clientStream) Header() (metadata.MD, error) {
-	header, err := s.ClientStream.Header()
-	return header, DecodeError(err)
-}
-
-func (s *clientStream) CloseSend() error {
-	return DecodeError(s.ClientStream.CloseSend())
-}
-
-func (s *clientStream) SendMsg(message any) error {
-	return DecodeError(s.ClientStream.SendMsg(message))
-}
-
-func (s *clientStream) RecvMsg(message any) error {
-	return DecodeError(s.ClientStream.RecvMsg(message))
+	return NewError(code, err.Error())
 }

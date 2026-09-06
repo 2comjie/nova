@@ -4,7 +4,19 @@ package nova.rpc;
 
 option go_package = "github.com/2comjie/nova/rpc;rpc";
 
-message ErrorDetail {
+message Error {
   uint32 code = 1;
-  bytes detail = 2;
+  string message = 2;
+  bytes detail = 3;
+}
+
+message Request {
+  string method = 1;
+  bytes body = 2;
+  int64 timeout_nanos = 3;
+}
+
+message Response {
+  bytes body = 1;
+  Error failure = 2;
 }

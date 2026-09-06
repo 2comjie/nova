@@ -1,10 +1,5 @@
 package diff
 
-import (
-	"encoding/binary"
-	"reflect"
-)
-
 type PathKeyType uint8
 
 const (
@@ -24,61 +19,42 @@ type Operation uint8
 
 const (
 	PrimitiveSet Operation = 1
-
 	PointerSet   Operation = 2
 	PointerClear Operation = 3
-
-	MapSet    Operation = 4
-	MapDelete Operation = 5
-	MapClear  Operation = 6
-
+	MapSet       Operation = 4
+	MapDelete    Operation = 5
+	MapClear     Operation = 6
 	SliceReplace Operation = 7
 )
 
-type Patch struct {
+type patch struct {
 	Path      Path
 	Operation Operation
 	Value     any
 }
 
 type Writer struct {
-	patches  []Patch
-	rootType reflect.Type
+	patches []patch
 }
 
 func NewWriter() *Writer {
 	return &Writer{}
 }
 
-func BindWriter[Root any](writer *Writer) {
-	writer.rootType = reflect.TypeFor[Root]()
-}
-
-func (w *Writer) dispatchChange(phase listenerPhase, path listenerPath, event *changeEvent) {
-	dispatchListeners(w.rootType, phase, path, event)
-}
-
-func (w *Writer) WritePatch(patch Patch) {
-	patch.Path = append(Path(nil), patch.Path...)
-
-	switch patch.Operation {
-	case PrimitiveSet, PointerSet, PointerClear, MapSet, MapDelete, MapClear, SliceReplace:
-		w.mergeOverwrite(patch)
-	default:
-		panic("diff: 未知Patch操作")
+func SetMap[K comparable, V any](values *map[K]V, key K, value V) {
+	if *values == nil {
+		*values = make(map[K]V)
 	}
+	(*values)[key] = value
+}
+
+func (w *Writer) writePatch(patch patch) {
+	patch.Path = append(Path(nil), patch.Path...)
+	w.mergeOverwrite(patch)
 }
 
 func (w *Writer) Len() int {
 	return len(w.patches)
-}
-
-func (w *Writer) Range(fn func(Patch) bool) {
-	for _, patch := range w.patches {
-		if !fn(patch) {
-			return
-		}
-	}
 }
 
 func (w *Writer) Reset() {
@@ -86,7 +62,14 @@ func (w *Writer) Reset() {
 	w.patches = w.patches[:0]
 }
 
-func (w *Writer) mergeOverwrite(patch Patch) {
+func (w *Writer) mergeOverwrite(patch patch) {
+	for _, current := range w.patches {
+		if (current.Operation == PointerSet || current.Operation == MapSet || current.Operation == SliceReplace) &&
+			len(current.Path) < len(patch.Path) && pathWithin(current.Path, patch.Path) {
+			return
+		}
+	}
+
 	writeIndex := 0
 	for _, current := range w.patches {
 		if pathWithin(patch.Path, current.Path) {
@@ -132,54 +115,10 @@ func samePathNode(left PathNode, right PathNode) bool {
 	return true
 }
 
-func (w *Writer) Commit() []byte {
-	data := binary.AppendUvarint(nil, uint64(len(w.patches)))
+func (w *Writer) Commit[Update any](update Update, write func(Update, Path, Operation, any)) Update {
 	for _, patch := range w.patches {
-		var lengthIndex int
-
-		data, lengthIndex = beginValue(data)
-		data = appendPath(data, patch.Path)
-		data = endValue(data, lengthIndex)
-
-		data = append(data, byte(patch.Operation))
-
-		data, lengthIndex = beginValue(data)
-		data = appendPatchValue(data, patch.Value)
-		data = endValue(data, lengthIndex)
+		write(update, patch.Path, patch.Operation, patch.Value)
 	}
-	return data
-}
-
-func appendPath(data []byte, path Path) []byte {
-	for _, node := range path {
-		tag := uint64(node.FieldIndex)<<2 | uint64(node.KeyType)
-		data = binary.AppendUvarint(data, tag)
-		if node.KeyType != PathMap {
-			continue
-		}
-
-		var lengthIndex int
-		data, lengthIndex = beginValue(data)
-		data = appendPrimitive(data, node.MapKey)
-		data = endValue(data, lengthIndex)
-	}
-	return data
-}
-
-func appendPatchValue(data []byte, value any) []byte {
-	if value == nil {
-		return data
-	}
-
-	reflectValue := reflect.ValueOf(value)
-	if reflectValue.Kind() == reflect.Pointer && reflectValue.IsNil() {
-		return data
-	}
-
-	if diffValue, ok := value.(interface {
-		AppendDiffValue([]byte) []byte
-	}); ok {
-		return diffValue.AppendDiffValue(data)
-	}
-	return appendPrimitive(data, value)
+	w.Reset()
+	return update
 }

@@ -5,7 +5,7 @@ type Message struct {
 	Body  []byte
 }
 
-type ActivationPolicy uint8
+type ActivationPolicy uint32
 
 const (
 	ActivationLoad    ActivationPolicy = 1 // 仅加载

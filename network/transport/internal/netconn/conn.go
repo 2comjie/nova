@@ -1,63 +1,45 @@
 package netconn
 
 import (
+	"context"
 	"errors"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/2comjie/nova/core/buffer"
 	"github.com/2comjie/nova/core/help"
 	"github.com/2comjie/nova/network/transport"
+	"github.com/2comjie/nova/network/transport/internal/writequeue"
 	"github.com/2comjie/nova/packet"
 )
-
-const (
-	defaultWriteQueue = 256
-	defaultWriteWait  = 10 * time.Second
-	maxQueuedBytes    = 4 << 20
-)
-
-type writeRequest struct {
-	message *packet.Message
-	result  chan error
-	size    int64
-}
 
 type Conn struct {
 	conn         net.Conn
 	codec        *packet.Codec
 	kind         transport.Type
 	secure       bool
-	writeWait    time.Duration
-	writes       chan writeRequest
+	writes       *writequeue.Queue
 	done         chan struct{}
 	startOnce    sync.Once
 	closeOnce    sync.Once
 	notifyOnce   sync.Once
 	handlerMutex sync.RWMutex
 	handler      transport.Handler
-	queuedBytes  atomic.Int64
 }
 
 func New(conn net.Conn, codec *packet.Codec, kind transport.Type, secure bool, writeQueue int, writeWait time.Duration) *Conn {
 	if codec == nil {
 		codec = packet.NewCodec(packet.DefaultMaxFrame)
 	}
-	if writeQueue <= 0 {
-		writeQueue = defaultWriteQueue
-	}
-	if writeWait <= 0 {
-		writeWait = defaultWriteWait
-	}
+	writes := writequeue.New(codec, writeQueue, writeWait)
 	return &Conn{
-		conn:      conn,
-		codec:     codec,
-		kind:      kind,
-		secure:    secure,
-		writeWait: writeWait,
-		writes:    make(chan writeRequest, writeQueue),
-		done:      make(chan struct{}),
+		conn:   conn,
+		codec:  codec,
+		kind:   kind,
+		secure: secure,
+		writes: writes,
+		done:   writes.Done,
 	}
 }
 
@@ -94,36 +76,16 @@ func (c *Conn) Start(handler transport.Handler) error {
 }
 
 func (c *Conn) Write(message *packet.Message) error {
-	if message == nil {
-		return packet.ErrType
-	}
-	request := writeRequest{
-		message: message,
-		result:  make(chan error, 1),
-		size:    int64(packet.HeaderSize + len(message.Body)),
-	}
-	if c.queuedBytes.Add(request.size) > maxQueuedBytes {
-		c.queuedBytes.Add(-request.size)
-		_ = c.Close()
-		return transport.ErrWriteQueueFull
-	}
-	select {
-	case <-c.done:
-		c.queuedBytes.Add(-request.size)
-		return transport.ErrClosed
-	case c.writes <- request:
-	default:
-		c.queuedBytes.Add(-request.size)
-		_ = c.Close()
-		return transport.ErrWriteQueueFull
-	}
+	return c.WriteContext(context.Background(), message)
+}
 
-	select {
-	case err := <-request.result:
-		return err
-	case <-c.done:
-		return transport.ErrClosed
+func (c *Conn) WriteContext(ctx context.Context, message *packet.Message) error {
+	err := c.writes.Write(ctx, message)
+	if err == transport.ErrWriteQueueFull {
+		c.writes.Close()
+		_ = c.conn.Close()
 	}
+	return err
 }
 
 func (c *Conn) readLoop() {
@@ -153,31 +115,20 @@ func (c *Conn) readLoop() {
 }
 
 func (c *Conn) writeLoop() {
-	for {
-		select {
-		case <-c.done:
-			return
-		case request := <-c.writes:
-			c.queuedBytes.Add(-request.size)
-			frame, err := c.codec.Encode(request.message)
-			if err == nil {
-				_ = c.conn.SetWriteDeadline(time.Now().Add(c.writeWait))
-				_, err = frame.WriteTo(c.conn)
-				frame.Release()
-			}
-			request.result <- err
-			if err != nil {
-				_ = c.Close()
-				return
-			}
+	defer c.Close()
+	c.writes.Run(func(frame *buffer.Bytes, deadline time.Time) error {
+		if err := c.conn.SetWriteDeadline(deadline); err != nil {
+			return err
 		}
-	}
+		_, err := frame.WriteTo(c.conn)
+		return err
+	}, func() { _ = c.conn.Close() })
 }
 
 func (c *Conn) Close() error {
 	var closeErr error
 	c.closeOnce.Do(func() {
-		close(c.done)
+		c.writes.Close()
 		closeErr = c.conn.Close()
 
 		c.handlerMutex.RLock()

@@ -10,11 +10,12 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/2comjie/nova/core/buffer"
 	"github.com/2comjie/nova/core/help"
 	"github.com/2comjie/nova/network/transport"
+	"github.com/2comjie/nova/network/transport/internal/writequeue"
 	"github.com/2comjie/nova/packet"
 	"github.com/gorilla/websocket"
 )
@@ -23,7 +24,6 @@ const (
 	defaultPath       = "/"
 	defaultWriteQueue = 256
 	defaultWriteWait  = 10 * time.Second
-	maxQueuedBytes    = 4 << 20
 )
 
 type options struct {
@@ -276,38 +276,30 @@ func (d *dialer) DialContext(ctx context.Context) (transport.Conn, error) {
 	), nil
 }
 
-type writeRequest struct {
-	message *packet.Message
-	result  chan error
-	size    int64
-}
-
 type conn struct {
 	raw          *websocket.Conn
 	codec        *packet.Codec
 	secure       bool
-	writeWait    time.Duration
-	writes       chan writeRequest
+	writes       *writequeue.Queue
 	done         chan struct{}
 	startOnce    sync.Once
 	closeOnce    sync.Once
 	notifyOnce   sync.Once
 	handlerMutex sync.RWMutex
 	handler      transport.Handler
-	queuedBytes  atomic.Int64
 }
 
 func newConn(raw *websocket.Conn, codec *packet.Codec, secure bool, writeQueue int, writeWait time.Duration) *conn {
 	if codec == nil {
 		codec = packet.NewCodec(packet.DefaultMaxFrame)
 	}
+	writes := writequeue.New(codec, writeQueue, writeWait)
 	return &conn{
-		raw:       raw,
-		codec:     codec,
-		secure:    secure,
-		writeWait: writeWait,
-		writes:    make(chan writeRequest, writeQueue),
-		done:      make(chan struct{}),
+		raw:    raw,
+		codec:  codec,
+		secure: secure,
+		writes: writes,
+		done:   writes.Done,
 	}
 }
 
@@ -344,36 +336,16 @@ func (c *conn) Start(handler transport.Handler) error {
 }
 
 func (c *conn) Write(message *packet.Message) error {
-	if message == nil {
-		return packet.ErrType
-	}
-	request := writeRequest{
-		message: message,
-		result:  make(chan error, 1),
-		size:    int64(packet.HeaderSize + len(message.Body)),
-	}
-	if c.queuedBytes.Add(request.size) > maxQueuedBytes {
-		c.queuedBytes.Add(-request.size)
-		_ = c.Close()
-		return transport.ErrWriteQueueFull
-	}
-	select {
-	case <-c.done:
-		c.queuedBytes.Add(-request.size)
-		return transport.ErrClosed
-	case c.writes <- request:
-	default:
-		c.queuedBytes.Add(-request.size)
-		_ = c.Close()
-		return transport.ErrWriteQueueFull
-	}
+	return c.WriteContext(context.Background(), message)
+}
 
-	select {
-	case err := <-request.result:
-		return err
-	case <-c.done:
-		return transport.ErrClosed
+func (c *conn) WriteContext(ctx context.Context, message *packet.Message) error {
+	err := c.writes.Write(ctx, message)
+	if err == transport.ErrWriteQueueFull {
+		c.writes.Close()
+		_ = c.raw.Close()
 	}
+	return err
 }
 
 func (c *conn) readLoop() {
@@ -416,31 +388,19 @@ func (c *conn) readLoop() {
 }
 
 func (c *conn) writeLoop() {
-	for {
-		select {
-		case <-c.done:
-			return
-		case request := <-c.writes:
-			c.queuedBytes.Add(-request.size)
-			frame, err := c.codec.Encode(request.message)
-			if err == nil {
-				_ = c.raw.SetWriteDeadline(time.Now().Add(c.writeWait))
-				err = c.raw.WriteMessage(websocket.BinaryMessage, frame.Bytes())
-				frame.Release()
-			}
-			request.result <- err
-			if err != nil {
-				_ = c.Close()
-				return
-			}
+	defer c.Close()
+	c.writes.Run(func(frame *buffer.Bytes, deadline time.Time) error {
+		if err := c.raw.SetWriteDeadline(deadline); err != nil {
+			return err
 		}
-	}
+		return c.raw.WriteMessage(websocket.BinaryMessage, frame.Bytes())
+	}, func() { _ = c.raw.Close() })
 }
 
 func (c *conn) Close() error {
 	var closeErr error
 	c.closeOnce.Do(func() {
-		close(c.done)
+		c.writes.Close()
 		closeErr = c.raw.Close()
 
 		c.handlerMutex.RLock()

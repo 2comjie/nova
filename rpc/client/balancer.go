@@ -64,24 +64,24 @@ func (b *weightedRoundRobinBalancer) Pick(_ context.Context, serviceName string,
 	totalWeight := 0
 	for i := range instances {
 		instance := instances[i]
-		active[instance.ID] = struct{}{}
+		active[instance.Id] = struct{}{}
 
 		weight := instance.Weight
 		if weight <= 0 {
 			weight = 1
 		}
-		current[instance.ID] += weight
+		current[instance.Id] += weight
 		totalWeight += weight
-		if current[instance.ID] > current[instances[selected].ID] {
+		if current[instance.Id] > current[instances[selected].Id] {
 			selected = i
 		}
 	}
 
-	for instanceID := range current {
-		if _, ok := active[instanceID]; !ok {
-			delete(current, instanceID)
+	for instanceId := range current {
+		if _, ok := active[instanceId]; !ok {
+			delete(current, instanceId)
 		}
 	}
-	current[instances[selected].ID] -= totalWeight
+	current[instances[selected].Id] -= totalWeight
 	return instances[selected], nil
 }

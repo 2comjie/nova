@@ -35,7 +35,7 @@ func Node(opts ...Option) (*NodeApp, error) {
 		Instance:    instance,
 		Router:      options.nodeRouter,
 		NodeLocator: locator.NewNodeLocator(options.locator),
-		GateLocator: locator.NewGateLocator(options.locator, options.discover),
+		GateLocator: locator.NewGateLocator(options.locator),
 		GateClient:  pbGate.NewGateClient(resources.rpcClient),
 		Registry:    options.registry,
 		RPCServer:   rpcServer,

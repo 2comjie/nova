@@ -21,28 +21,29 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type ErrorDetail struct {
+type Error struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Code          uint32                 `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
-	Detail        []byte                 `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Detail        []byte                 `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ErrorDetail) Reset() {
-	*x = ErrorDetail{}
+func (x *Error) Reset() {
+	*x = Error{}
 	mi := &file_rpc_error_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ErrorDetail) String() string {
+func (x *Error) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ErrorDetail) ProtoMessage() {}
+func (*Error) ProtoMessage() {}
 
-func (x *ErrorDetail) ProtoReflect() protoreflect.Message {
+func (x *Error) ProtoReflect() protoreflect.Message {
 	mi := &file_rpc_error_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -54,21 +55,141 @@ func (x *ErrorDetail) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ErrorDetail.ProtoReflect.Descriptor instead.
-func (*ErrorDetail) Descriptor() ([]byte, []int) {
+// Deprecated: Use Error.ProtoReflect.Descriptor instead.
+func (*Error) Descriptor() ([]byte, []int) {
 	return file_rpc_error_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ErrorDetail) GetCode() uint32 {
+func (x *Error) GetCode() uint32 {
 	if x != nil {
 		return x.Code
 	}
 	return 0
 }
 
-func (x *ErrorDetail) GetDetail() []byte {
+func (x *Error) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *Error) GetDetail() []byte {
 	if x != nil {
 		return x.Detail
+	}
+	return nil
+}
+
+// 仅用于服务间 TCP RPC，不属于游戏客户端协议。
+type Request struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Method        string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	Body          []byte                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	TimeoutNanos  int64                  `protobuf:"varint,3,opt,name=timeout_nanos,json=timeoutNanos,proto3" json:"timeout_nanos,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Request) Reset() {
+	*x = Request{}
+	mi := &file_rpc_error_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Request) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Request) ProtoMessage() {}
+
+func (x *Request) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_error_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Request.ProtoReflect.Descriptor instead.
+func (*Request) Descriptor() ([]byte, []int) {
+	return file_rpc_error_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Request) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *Request) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+func (x *Request) GetTimeoutNanos() int64 {
+	if x != nil {
+		return x.TimeoutNanos
+	}
+	return 0
+}
+
+type Response struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Body          []byte                 `protobuf:"bytes,1,opt,name=body,proto3" json:"body,omitempty"`
+	Failure       *Error                 `protobuf:"bytes,2,opt,name=failure,proto3" json:"failure,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Response) Reset() {
+	*x = Response{}
+	mi := &file_rpc_error_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Response) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Response) ProtoMessage() {}
+
+func (x *Response) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_error_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Response.ProtoReflect.Descriptor instead.
+func (*Response) Descriptor() ([]byte, []int) {
+	return file_rpc_error_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Response) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+func (x *Response) GetFailure() *Error {
+	if x != nil {
+		return x.Failure
 	}
 	return nil
 }
@@ -77,10 +198,18 @@ var File_rpc_error_proto protoreflect.FileDescriptor
 
 const file_rpc_error_proto_rawDesc = "" +
 	"\n" +
-	"\x0frpc/error.proto\x12\bnova.rpc\"9\n" +
-	"\vErrorDetail\x12\x12\n" +
-	"\x04code\x18\x01 \x01(\rR\x04code\x12\x16\n" +
-	"\x06detail\x18\x02 \x01(\fR\x06detailB!Z\x1fgithub.com/2comjie/nova/rpc;rpcb\x06proto3"
+	"\x0frpc/error.proto\x12\bnova.rpc\"M\n" +
+	"\x05Error\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\rR\x04code\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x16\n" +
+	"\x06detail\x18\x03 \x01(\fR\x06detail\"Z\n" +
+	"\aRequest\x12\x16\n" +
+	"\x06method\x18\x01 \x01(\tR\x06method\x12\x12\n" +
+	"\x04body\x18\x02 \x01(\fR\x04body\x12#\n" +
+	"\rtimeout_nanos\x18\x03 \x01(\x03R\ftimeoutNanos\"I\n" +
+	"\bResponse\x12\x12\n" +
+	"\x04body\x18\x01 \x01(\fR\x04body\x12)\n" +
+	"\afailure\x18\x02 \x01(\v2\x0f.nova.rpc.ErrorR\afailureB!Z\x1fgithub.com/2comjie/nova/rpc;rpcb\x06proto3"
 
 var (
 	file_rpc_error_proto_rawDescOnce sync.Once
@@ -94,16 +223,19 @@ func file_rpc_error_proto_rawDescGZIP() []byte {
 	return file_rpc_error_proto_rawDescData
 }
 
-var file_rpc_error_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_rpc_error_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_rpc_error_proto_goTypes = []any{
-	(*ErrorDetail)(nil), // 0: nova.rpc.ErrorDetail
+	(*Error)(nil),    // 0: nova.rpc.Error
+	(*Request)(nil),  // 1: nova.rpc.Request
+	(*Response)(nil), // 2: nova.rpc.Response
 }
 var file_rpc_error_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: nova.rpc.Response.failure:type_name -> nova.rpc.Error
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_rpc_error_proto_init() }
@@ -117,7 +249,7 @@ func file_rpc_error_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_rpc_error_proto_rawDesc), len(file_rpc_error_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

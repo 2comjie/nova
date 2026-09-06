@@ -6,9 +6,7 @@ import (
 
 	"github.com/2comjie/nova/actor/actorDef"
 	pbActor "github.com/2comjie/nova/internal/pb/transport/actor"
-	"github.com/2comjie/nova/rpc/rpcerr"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
+	"github.com/2comjie/nova/rpc"
 )
 
 type rpcProcessor func(ctx context.Context, key actorDef.Key, policy ActivationPolicy, message Message, needReply bool) ([]byte, bool, error)
@@ -32,7 +30,7 @@ type System struct {
 	tasks       sync.WaitGroup
 }
 
-func NewSystem(registrar grpc.ServiceRegistrar) *System {
+func NewSystem(registrar *rpc.Server) *System {
 	runCtx, stop := context.WithCancel(context.Background())
 	system := &System{
 		runCtx:        runCtx,
@@ -48,21 +46,25 @@ func (s *System) Start() error {
 	return nil
 }
 
-func (s *System) Shutdown(ctx context.Context) error {
+func (s *System) RequestStop() {
 	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.stopping {
+		return
+	}
 	s.stopping = true
-	s.lifecycleMu.Unlock()
-
 	for _, registration := range s.registrations {
 		registration.stop()
 	}
 	s.stop()
-
 	go func() {
 		s.tasks.Wait()
 		close(s.done)
 	}()
+}
 
+func (s *System) Shutdown(ctx context.Context) error {
+	s.RequestStop()
 	select {
 	case <-s.done:
 		return nil
@@ -71,42 +73,28 @@ func (s *System) Shutdown(ctx context.Context) error {
 	}
 }
 
-func (s *System) Ask(ctx context.Context, request *pbActor.Request) (*pbActor.Response, rpcerr.Err) {
+func (s *System) Ask(ctx context.Context, request *pbActor.Request) (*pbActor.Response, *rpc.Error) {
 	return s.process(ctx, request, true)
 }
 
-func (s *System) Tell(ctx context.Context, request *pbActor.Request) (*pbActor.Response, rpcerr.Err) {
+func (s *System) Tell(ctx context.Context, request *pbActor.Request) (*pbActor.Response, *rpc.Error) {
 	return s.process(ctx, request, false)
 }
 
-func (s *System) process(ctx context.Context, request *pbActor.Request, needReply bool) (*pbActor.Response, rpcerr.Err) {
-	if request == nil || request.ActorKey == "" || request.Route == 0 {
-		return nil, rpcerr.NewGRPC(codes.InvalidArgument, "actor: RPC请求无效")
+func (s *System) process(ctx context.Context, request *pbActor.Request, needReply bool) (*pbActor.Response, *rpc.Error) {
+	if request.ActorKey == "" || request.Route == 0 {
+		return nil, rpc.NewError(rpc.CodeInvalidArgument, "actor: RPC请求无效")
 	}
 
 	registration, exists := s.registrations[actorDef.Type(request.ActorType)]
 	processor := registration.routes[request.Route]
 	if !exists || processor == nil {
-		return nil, rpcerr.NewGRPC(codes.NotFound, "actor: RPC route不存在")
+		return nil, rpc.NewError(rpc.CodeNotFound, "actor: RPC route不存在")
 	}
 
 	body, handled, err := processor(ctx, actorDef.Key(request.ActorKey), ActivationPolicy(request.Activation), Message{Route: request.Route, Body: request.Body}, needReply)
 	if err != nil {
-		return nil, rpcerr.Wrap(err)
+		return nil, rpc.FromError(err)
 	}
 	return &pbActor.Response{Handled: handled, Body: body}, nil
-}
-
-func (s *System) beginTask() bool {
-	s.lifecycleMu.Lock()
-	defer s.lifecycleMu.Unlock()
-	if s.stopping {
-		return false
-	}
-	s.tasks.Add(1)
-	return true
-}
-
-func (s *System) endTask() {
-	s.tasks.Done()
 }

@@ -17,7 +17,7 @@ const (
 )
 
 type ChatSendRequest struct {
-	ToUID uint64 `json:"to_uid"`
+	ToUid uint64 `json:"to_uid"`
 	Text  string `json:"text"`
 }
 
@@ -27,12 +27,12 @@ type ChatSendResponse struct {
 }
 
 type ChatPush struct {
-	FromUID uint64 `json:"from_uid"`
+	FromUid uint64 `json:"from_uid"`
 	Text    string `json:"text"`
 }
 
 type PlayerProfile struct {
-	UID   uint64 `json:"uid"`
+	Uid   uint64 `json:"uid"`
 	Level int    `json:"level"`
 	Exp   int    `json:"exp"`
 	Gold  int    `json:"gold"`

@@ -46,7 +46,7 @@ func Gate(opts ...Option) (*GateApp, error) {
 		Router:         options.gateRouter,
 		NodeClient:     pbNode.NewNodeClient(resources.rpcClient),
 		GateClient:     pbGate.NewGateClient(resources.rpcClient),
-		Locator:        locator.NewGateLocator(options.locator, options.discover),
+		Locator:        locator.NewGateLocator(options.locator),
 		Registry:       options.registry,
 		RPCServer:      rpcServer,
 		RPCListener:    resources.rpcListener,

@@ -42,6 +42,7 @@ func TestCodecRejectInvalidMessage(t *testing.T) {
 	tests := []*Message{
 		{Type: Req, Route: 0, Seq: 1},
 		{Type: Rsp, Route: 1, Seq: 0},
+		{Type: 8, Route: 1, Seq: 1},
 		{Type: Push, Route: 1, Seq: 1},
 		{Type: Ping, Body: []byte{1}},
 		{Type: 99},

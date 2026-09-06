@@ -1,12 +1,12 @@
 package client
 
 import (
+	"github.com/2comjie/nova/rpc"
 	"github.com/2comjie/nova/rpc/lx"
-	"google.golang.org/grpc"
 )
 
 type options struct {
-	dialOptions []grpc.DialOption
+	dialOptions []rpc.ConnOption
 	balancers   map[lx.BalancePolicy]Balancer
 }
 
@@ -22,8 +22,8 @@ func defaultOptions() options {
 	}
 }
 
-// WithDialOptions 设置 gRPC 连接参数。
-func WithDialOptions(opts ...grpc.DialOption) Option {
+// WithConnOptions 设置 TCP RPC 连接参数。
+func WithConnOptions(opts ...rpc.ConnOption) Option {
 	return func(options *options) {
 		options.dialOptions = append(options.dialOptions, opts...)
 	}

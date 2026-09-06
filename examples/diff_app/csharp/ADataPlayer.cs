@@ -25,18 +25,32 @@ namespace Nova.Generated.Player {
       byte[] descriptorData = global::System.Convert.FromBase64String(
           string.Concat(
             "CiNkaWZmX2FwcC9wbGF5ZXIvYV9kYXRhX3BsYXllci5wcm90bxIGcGxheWVy",
-            "Gh1kaWZmX2FwcC9iYWcvYV9kYXRhX2JhZy5wcm90byK7AQoGUGxheWVyEgsK",
+            "Gh1kaWZmX2FwcC9iYWcvYV9kYXRhX2JhZy5wcm90byLxBAoGUGxheWVyEgsK",
             "A3VpZBgBIAEoBBINCgVsZXZlbBgCIAEoBRIMCgRuYW1lGAMgASgJEhUKA2Jh",
             "ZxgEIAEoCzIILmJhZy5CYWcSKgoGc2NvcmVzGAUgAygLMhoucGxheWVyLlBs",
-            "YXllci5TY29yZXNFbnRyeRIVCg1yZWNlbnRfbGV2ZWxzGAYgAygFGi0KC1Nj",
-            "b3Jlc0VudHJ5EgsKA2tleRgBIAEoBBINCgV2YWx1ZRgCIAEoBToCOAFCVlo8",
-            "Z2l0aHViLmNvbS8yY29tamllL25vdmEvZXhhbXBsZXMvZGlmZl9hcHAvcGxh",
-            "eWVyL3BiO3BiUGxheWVyqgIVTm92YS5HZW5lcmF0ZWQuUGxheWVyYgZwcm90",
-            "bzM="));
+            "YXllci5TY29yZXNFbnRyeRIVCg1yZWNlbnRfbGV2ZWxzGAYgAygFEhgKCnVp",
+            "ZF91cGRhdGUY6QcgASgESAGIAQESGgoMbGV2ZWxfdXBkYXRlGOoHIAEoBUgC",
+            "iAEBEhkKC25hbWVfdXBkYXRlGOsHIAEoCUgDiAEBEhwKB2JhZ19zZXQY7Acg",
+            "ASgLMgguYmFnLkJhZ0gAEhQKCWJhZ19jbGVhchjUDyABKAhIABIfCgpiYWdf",
+            "dXBkYXRlGLwXIAEoCzIILmJhZy5CYWdIABIVCgxzY29yZXNfY2xlYXIY7Qcg",
+            "ASgIEjIKCnNjb3Jlc19zZXQY1Q8gAygLMh0ucGxheWVyLlBsYXllci5TY29y",
+            "ZXNTZXRFbnRyeRIWCg1zY29yZXNfZGVsZXRlGL0XIAMoBBIeChVyZWNlbnRf",
+            "bGV2ZWxzX3VwZGF0ZWQY7gcgASgIEh0KFHJlY2VudF9sZXZlbHNfdXBkYXRl",
+            "GNYPIAMoBRotCgtTY29yZXNFbnRyeRILCgNrZXkYASABKAQSDQoFdmFsdWUY",
+            "AiABKAU6AjgBGjAKDlNjb3Jlc1NldEVudHJ5EgsKA2tleRgBIAEoBBINCgV2",
+            "YWx1ZRgCIAEoBToCOAFCCgoIYmFnX2RpZmZCDQoLX3VpZF91cGRhdGVCDwoN",
+            "X2xldmVsX3VwZGF0ZUIOCgxfbmFtZV91cGRhdGUinAEKDlBsYXllclN5bmNQ",
+            "dXNoEhYKDnNjaGVtYV92ZXJzaW9uGAEgASgNEhQKDGJhc2VfdmVyc2lvbhgC",
+            "IAEoBBIPCgd2ZXJzaW9uGAMgASgEEh4KBGZ1bGwYCiABKAsyDi5wbGF5ZXIu",
+            "UGxheWVySAASIAoGdXBkYXRlGAsgASgLMg4ucGxheWVyLlBsYXllckgAQgkK",
+            "B3BheWxvYWRCVlo8Z2l0aHViLmNvbS8yY29tamllL25vdmEvZXhhbXBsZXMv",
+            "ZGlmZl9hcHAvcGxheWVyL3BiO3BiUGxheWVyqgIVTm92YS5HZW5lcmF0ZWQu",
+            "UGxheWVyYgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Nova.Generated.Bag.ADataBagReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::Nova.Generated.Player.Player), global::Nova.Generated.Player.Player.Parser, new[]{ "Uid", "Level", "Name", "Bag", "Scores", "RecentLevels" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { null, })
+            new pbr::GeneratedClrTypeInfo(typeof(global::Nova.Generated.Player.Player), global::Nova.Generated.Player.Player.Parser, new[]{ "Uid", "Level", "Name", "Bag", "Scores", "RecentLevels", "UidUpdate", "LevelUpdate", "NameUpdate", "BagSet", "BagClear", "BagUpdate", "ScoresClear", "ScoresSet", "ScoresDelete", "RecentLevelsUpdated", "RecentLevelsUpdate" }, new[]{ "BagDiff", "UidUpdate", "LevelUpdate", "NameUpdate" }, null, null, new pbr::GeneratedClrTypeInfo[] { null, null, }),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Nova.Generated.Player.PlayerSyncPush), global::Nova.Generated.Player.PlayerSyncPush.Parser, new[]{ "SchemaVersion", "BaseVersion", "Version", "Full", "Update" }, new[]{ "Payload" }, null, null, null)
           }));
     }
     #endregion
@@ -51,6 +65,7 @@ namespace Nova.Generated.Player {
   {
     private static readonly pb::MessageParser<Player> _parser = new pb::MessageParser<Player>(() => new Player());
     private pb::UnknownFieldSet _unknownFields;
+    private int _hasBits0;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pb::MessageParser<Player> Parser { get { return _parser; } }
@@ -78,12 +93,33 @@ namespace Nova.Generated.Player {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public Player(Player other) : this() {
+      _hasBits0 = other._hasBits0;
       uid_ = other.uid_;
       level_ = other.level_;
       name_ = other.name_;
       bag_ = other.bag_ != null ? other.bag_.Clone() : null;
       scores_ = other.scores_.Clone();
       recentLevels_ = other.recentLevels_.Clone();
+      uidUpdate_ = other.uidUpdate_;
+      levelUpdate_ = other.levelUpdate_;
+      nameUpdate_ = other.nameUpdate_;
+      scoresClear_ = other.scoresClear_;
+      scoresSet_ = other.scoresSet_.Clone();
+      scoresDelete_ = other.scoresDelete_.Clone();
+      recentLevelsUpdated_ = other.recentLevelsUpdated_;
+      recentLevelsUpdate_ = other.recentLevelsUpdate_.Clone();
+      switch (other.BagDiffCase) {
+        case BagDiffOneofCase.BagSet:
+          BagSet = other.BagSet.Clone();
+          break;
+        case BagDiffOneofCase.BagClear:
+          BagClear = other.BagClear;
+          break;
+        case BagDiffOneofCase.BagUpdate:
+          BagUpdate = other.BagUpdate.Clone();
+          break;
+      }
+
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -163,6 +199,215 @@ namespace Nova.Generated.Player {
       get { return recentLevels_; }
     }
 
+    /// <summary>Field number for the "uid_update" field.</summary>
+    public const int UidUpdateFieldNumber = 1001;
+    private readonly static ulong UidUpdateDefaultValue = 0UL;
+
+    private ulong uidUpdate_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ulong UidUpdate {
+      get { if ((_hasBits0 & 1) != 0) { return uidUpdate_; } else { return UidUpdateDefaultValue; } }
+      set {
+        _hasBits0 |= 1;
+        uidUpdate_ = value;
+      }
+    }
+    /// <summary>Gets whether the "uid_update" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasUidUpdate {
+      get { return (_hasBits0 & 1) != 0; }
+    }
+    /// <summary>Clears the value of the "uid_update" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearUidUpdate() {
+      _hasBits0 &= ~1;
+    }
+
+    /// <summary>Field number for the "level_update" field.</summary>
+    public const int LevelUpdateFieldNumber = 1002;
+    private readonly static int LevelUpdateDefaultValue = 0;
+
+    private int levelUpdate_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int LevelUpdate {
+      get { if ((_hasBits0 & 2) != 0) { return levelUpdate_; } else { return LevelUpdateDefaultValue; } }
+      set {
+        _hasBits0 |= 2;
+        levelUpdate_ = value;
+      }
+    }
+    /// <summary>Gets whether the "level_update" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasLevelUpdate {
+      get { return (_hasBits0 & 2) != 0; }
+    }
+    /// <summary>Clears the value of the "level_update" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearLevelUpdate() {
+      _hasBits0 &= ~2;
+    }
+
+    /// <summary>Field number for the "name_update" field.</summary>
+    public const int NameUpdateFieldNumber = 1003;
+    private readonly static string NameUpdateDefaultValue = "";
+
+    private string nameUpdate_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string NameUpdate {
+      get { return nameUpdate_ ?? NameUpdateDefaultValue; }
+      set {
+        nameUpdate_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+    /// <summary>Gets whether the "name_update" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasNameUpdate {
+      get { return nameUpdate_ != null; }
+    }
+    /// <summary>Clears the value of the "name_update" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearNameUpdate() {
+      nameUpdate_ = null;
+    }
+
+    /// <summary>Field number for the "bag_set" field.</summary>
+    public const int BagSetFieldNumber = 1004;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Nova.Generated.Bag.Bag BagSet {
+      get { return bagDiffCase_ == BagDiffOneofCase.BagSet ? (global::Nova.Generated.Bag.Bag) bagDiff_ : null; }
+      set {
+        bagDiff_ = value;
+        bagDiffCase_ = value == null ? BagDiffOneofCase.None : BagDiffOneofCase.BagSet;
+      }
+    }
+
+    /// <summary>Field number for the "bag_clear" field.</summary>
+    public const int BagClearFieldNumber = 2004;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool BagClear {
+      get { return HasBagClear ? (bool) bagDiff_ : false; }
+      set {
+        bagDiff_ = value;
+        bagDiffCase_ = BagDiffOneofCase.BagClear;
+      }
+    }
+    /// <summary>Gets whether the "bag_clear" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasBagClear {
+      get { return bagDiffCase_ == BagDiffOneofCase.BagClear; }
+    }
+    /// <summary> Clears the value of the oneof if it's currently set to "bag_clear" </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearBagClear() {
+      if (HasBagClear) {
+        ClearBagDiff();
+      }
+    }
+
+    /// <summary>Field number for the "bag_update" field.</summary>
+    public const int BagUpdateFieldNumber = 3004;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Nova.Generated.Bag.Bag BagUpdate {
+      get { return bagDiffCase_ == BagDiffOneofCase.BagUpdate ? (global::Nova.Generated.Bag.Bag) bagDiff_ : null; }
+      set {
+        bagDiff_ = value;
+        bagDiffCase_ = value == null ? BagDiffOneofCase.None : BagDiffOneofCase.BagUpdate;
+      }
+    }
+
+    /// <summary>Field number for the "scores_clear" field.</summary>
+    public const int ScoresClearFieldNumber = 1005;
+    private bool scoresClear_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool ScoresClear {
+      get { return scoresClear_; }
+      set {
+        scoresClear_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "scores_set" field.</summary>
+    public const int ScoresSetFieldNumber = 2005;
+    private static readonly pbc::MapField<ulong, int>.Codec _map_scoresSet_codec
+        = new pbc::MapField<ulong, int>.Codec(pb::FieldCodec.ForUInt64(8, 0UL), pb::FieldCodec.ForInt32(16, 0), 16042);
+    private readonly pbc::MapField<ulong, int> scoresSet_ = new pbc::MapField<ulong, int>();
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::MapField<ulong, int> ScoresSet {
+      get { return scoresSet_; }
+    }
+
+    /// <summary>Field number for the "scores_delete" field.</summary>
+    public const int ScoresDeleteFieldNumber = 3005;
+    private static readonly pb::FieldCodec<ulong> _repeated_scoresDelete_codec
+        = pb::FieldCodec.ForUInt64(24042);
+    private readonly pbc::RepeatedField<ulong> scoresDelete_ = new pbc::RepeatedField<ulong>();
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<ulong> ScoresDelete {
+      get { return scoresDelete_; }
+    }
+
+    /// <summary>Field number for the "recent_levels_updated" field.</summary>
+    public const int RecentLevelsUpdatedFieldNumber = 1006;
+    private bool recentLevelsUpdated_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool RecentLevelsUpdated {
+      get { return recentLevelsUpdated_; }
+      set {
+        recentLevelsUpdated_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "recent_levels_update" field.</summary>
+    public const int RecentLevelsUpdateFieldNumber = 2006;
+    private static readonly pb::FieldCodec<int> _repeated_recentLevelsUpdate_codec
+        = pb::FieldCodec.ForInt32(16050);
+    private readonly pbc::RepeatedField<int> recentLevelsUpdate_ = new pbc::RepeatedField<int>();
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<int> RecentLevelsUpdate {
+      get { return recentLevelsUpdate_; }
+    }
+
+    private object bagDiff_;
+    /// <summary>Enum of possible cases for the "bag_diff" oneof.</summary>
+    public enum BagDiffOneofCase {
+      None = 0,
+      BagSet = 1004,
+      BagClear = 2004,
+      BagUpdate = 3004,
+    }
+    private BagDiffOneofCase bagDiffCase_ = BagDiffOneofCase.None;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public BagDiffOneofCase BagDiffCase {
+      get { return bagDiffCase_; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearBagDiff() {
+      bagDiffCase_ = BagDiffOneofCase.None;
+      bagDiff_ = null;
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -184,6 +429,18 @@ namespace Nova.Generated.Player {
       if (!object.Equals(Bag, other.Bag)) return false;
       if (!Scores.Equals(other.Scores)) return false;
       if(!recentLevels_.Equals(other.recentLevels_)) return false;
+      if (UidUpdate != other.UidUpdate) return false;
+      if (LevelUpdate != other.LevelUpdate) return false;
+      if (NameUpdate != other.NameUpdate) return false;
+      if (!object.Equals(BagSet, other.BagSet)) return false;
+      if (BagClear != other.BagClear) return false;
+      if (!object.Equals(BagUpdate, other.BagUpdate)) return false;
+      if (ScoresClear != other.ScoresClear) return false;
+      if (!ScoresSet.Equals(other.ScoresSet)) return false;
+      if(!scoresDelete_.Equals(other.scoresDelete_)) return false;
+      if (RecentLevelsUpdated != other.RecentLevelsUpdated) return false;
+      if(!recentLevelsUpdate_.Equals(other.recentLevelsUpdate_)) return false;
+      if (BagDiffCase != other.BagDiffCase) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -197,6 +454,18 @@ namespace Nova.Generated.Player {
       if (bag_ != null) hash ^= Bag.GetHashCode();
       hash ^= Scores.GetHashCode();
       hash ^= recentLevels_.GetHashCode();
+      if (HasUidUpdate) hash ^= UidUpdate.GetHashCode();
+      if (HasLevelUpdate) hash ^= LevelUpdate.GetHashCode();
+      if (HasNameUpdate) hash ^= NameUpdate.GetHashCode();
+      if (bagDiffCase_ == BagDiffOneofCase.BagSet) hash ^= BagSet.GetHashCode();
+      if (HasBagClear) hash ^= BagClear.GetHashCode();
+      if (bagDiffCase_ == BagDiffOneofCase.BagUpdate) hash ^= BagUpdate.GetHashCode();
+      if (ScoresClear != false) hash ^= ScoresClear.GetHashCode();
+      hash ^= ScoresSet.GetHashCode();
+      hash ^= scoresDelete_.GetHashCode();
+      if (RecentLevelsUpdated != false) hash ^= RecentLevelsUpdated.GetHashCode();
+      hash ^= recentLevelsUpdate_.GetHashCode();
+      hash ^= (int) bagDiffCase_;
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -233,6 +502,41 @@ namespace Nova.Generated.Player {
       }
       scores_.WriteTo(output, _map_scores_codec);
       recentLevels_.WriteTo(output, _repeated_recentLevels_codec);
+      if (HasUidUpdate) {
+        output.WriteRawTag(200, 62);
+        output.WriteUInt64(UidUpdate);
+      }
+      if (HasLevelUpdate) {
+        output.WriteRawTag(208, 62);
+        output.WriteInt32(LevelUpdate);
+      }
+      if (HasNameUpdate) {
+        output.WriteRawTag(218, 62);
+        output.WriteString(NameUpdate);
+      }
+      if (bagDiffCase_ == BagDiffOneofCase.BagSet) {
+        output.WriteRawTag(226, 62);
+        output.WriteMessage(BagSet);
+      }
+      if (ScoresClear != false) {
+        output.WriteRawTag(232, 62);
+        output.WriteBool(ScoresClear);
+      }
+      if (RecentLevelsUpdated != false) {
+        output.WriteRawTag(240, 62);
+        output.WriteBool(RecentLevelsUpdated);
+      }
+      if (HasBagClear) {
+        output.WriteRawTag(160, 125);
+        output.WriteBool(BagClear);
+      }
+      scoresSet_.WriteTo(output, _map_scoresSet_codec);
+      recentLevelsUpdate_.WriteTo(output, _repeated_recentLevelsUpdate_codec);
+      if (bagDiffCase_ == BagDiffOneofCase.BagUpdate) {
+        output.WriteRawTag(226, 187, 1);
+        output.WriteMessage(BagUpdate);
+      }
+      scoresDelete_.WriteTo(output, _repeated_scoresDelete_codec);
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -261,6 +565,41 @@ namespace Nova.Generated.Player {
       }
       scores_.WriteTo(ref output, _map_scores_codec);
       recentLevels_.WriteTo(ref output, _repeated_recentLevels_codec);
+      if (HasUidUpdate) {
+        output.WriteRawTag(200, 62);
+        output.WriteUInt64(UidUpdate);
+      }
+      if (HasLevelUpdate) {
+        output.WriteRawTag(208, 62);
+        output.WriteInt32(LevelUpdate);
+      }
+      if (HasNameUpdate) {
+        output.WriteRawTag(218, 62);
+        output.WriteString(NameUpdate);
+      }
+      if (bagDiffCase_ == BagDiffOneofCase.BagSet) {
+        output.WriteRawTag(226, 62);
+        output.WriteMessage(BagSet);
+      }
+      if (ScoresClear != false) {
+        output.WriteRawTag(232, 62);
+        output.WriteBool(ScoresClear);
+      }
+      if (RecentLevelsUpdated != false) {
+        output.WriteRawTag(240, 62);
+        output.WriteBool(RecentLevelsUpdated);
+      }
+      if (HasBagClear) {
+        output.WriteRawTag(160, 125);
+        output.WriteBool(BagClear);
+      }
+      scoresSet_.WriteTo(ref output, _map_scoresSet_codec);
+      recentLevelsUpdate_.WriteTo(ref output, _repeated_recentLevelsUpdate_codec);
+      if (bagDiffCase_ == BagDiffOneofCase.BagUpdate) {
+        output.WriteRawTag(226, 187, 1);
+        output.WriteMessage(BagUpdate);
+      }
+      scoresDelete_.WriteTo(ref output, _repeated_scoresDelete_codec);
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -285,6 +624,33 @@ namespace Nova.Generated.Player {
       }
       size += scores_.CalculateSize(_map_scores_codec);
       size += recentLevels_.CalculateSize(_repeated_recentLevels_codec);
+      if (HasUidUpdate) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt64Size(UidUpdate);
+      }
+      if (HasLevelUpdate) {
+        size += 2 + pb::CodedOutputStream.ComputeInt32Size(LevelUpdate);
+      }
+      if (HasNameUpdate) {
+        size += 2 + pb::CodedOutputStream.ComputeStringSize(NameUpdate);
+      }
+      if (bagDiffCase_ == BagDiffOneofCase.BagSet) {
+        size += 2 + pb::CodedOutputStream.ComputeMessageSize(BagSet);
+      }
+      if (HasBagClear) {
+        size += 2 + 1;
+      }
+      if (bagDiffCase_ == BagDiffOneofCase.BagUpdate) {
+        size += 3 + pb::CodedOutputStream.ComputeMessageSize(BagUpdate);
+      }
+      if (ScoresClear != false) {
+        size += 2 + 1;
+      }
+      size += scoresSet_.CalculateSize(_map_scoresSet_codec);
+      size += scoresDelete_.CalculateSize(_repeated_scoresDelete_codec);
+      if (RecentLevelsUpdated != false) {
+        size += 2 + 1;
+      }
+      size += recentLevelsUpdate_.CalculateSize(_repeated_recentLevelsUpdate_codec);
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
       }
@@ -314,6 +680,42 @@ namespace Nova.Generated.Player {
       }
       scores_.MergeFrom(other.scores_);
       recentLevels_.Add(other.recentLevels_);
+      if (other.HasUidUpdate) {
+        UidUpdate = other.UidUpdate;
+      }
+      if (other.HasLevelUpdate) {
+        LevelUpdate = other.LevelUpdate;
+      }
+      if (other.HasNameUpdate) {
+        NameUpdate = other.NameUpdate;
+      }
+      if (other.ScoresClear != false) {
+        ScoresClear = other.ScoresClear;
+      }
+      scoresSet_.MergeFrom(other.scoresSet_);
+      scoresDelete_.Add(other.scoresDelete_);
+      if (other.RecentLevelsUpdated != false) {
+        RecentLevelsUpdated = other.RecentLevelsUpdated;
+      }
+      recentLevelsUpdate_.Add(other.recentLevelsUpdate_);
+      switch (other.BagDiffCase) {
+        case BagDiffOneofCase.BagSet:
+          if (BagSet == null) {
+            BagSet = new global::Nova.Generated.Bag.Bag();
+          }
+          BagSet.MergeFrom(other.BagSet);
+          break;
+        case BagDiffOneofCase.BagClear:
+          BagClear = other.BagClear;
+          break;
+        case BagDiffOneofCase.BagUpdate:
+          if (BagUpdate == null) {
+            BagUpdate = new global::Nova.Generated.Bag.Bag();
+          }
+          BagUpdate.MergeFrom(other.BagUpdate);
+          break;
+      }
+
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
 
@@ -361,6 +763,62 @@ namespace Nova.Generated.Player {
             recentLevels_.AddEntriesFrom(input, _repeated_recentLevels_codec);
             break;
           }
+          case 8008: {
+            UidUpdate = input.ReadUInt64();
+            break;
+          }
+          case 8016: {
+            LevelUpdate = input.ReadInt32();
+            break;
+          }
+          case 8026: {
+            NameUpdate = input.ReadString();
+            break;
+          }
+          case 8034: {
+            global::Nova.Generated.Bag.Bag subBuilder = new global::Nova.Generated.Bag.Bag();
+            if (bagDiffCase_ == BagDiffOneofCase.BagSet) {
+              subBuilder.MergeFrom(BagSet);
+            }
+            input.ReadMessage(subBuilder);
+            BagSet = subBuilder;
+            break;
+          }
+          case 8040: {
+            ScoresClear = input.ReadBool();
+            break;
+          }
+          case 8048: {
+            RecentLevelsUpdated = input.ReadBool();
+            break;
+          }
+          case 16032: {
+            BagClear = input.ReadBool();
+            break;
+          }
+          case 16042: {
+            scoresSet_.AddEntriesFrom(input, _map_scoresSet_codec);
+            break;
+          }
+          case 16050:
+          case 16048: {
+            recentLevelsUpdate_.AddEntriesFrom(input, _repeated_recentLevelsUpdate_codec);
+            break;
+          }
+          case 24034: {
+            global::Nova.Generated.Bag.Bag subBuilder = new global::Nova.Generated.Bag.Bag();
+            if (bagDiffCase_ == BagDiffOneofCase.BagUpdate) {
+              subBuilder.MergeFrom(BagUpdate);
+            }
+            input.ReadMessage(subBuilder);
+            BagUpdate = subBuilder;
+            break;
+          }
+          case 24042:
+          case 24040: {
+            scoresDelete_.AddEntriesFrom(input, _repeated_scoresDelete_codec);
+            break;
+          }
         }
       }
     #endif
@@ -406,6 +864,467 @@ namespace Nova.Generated.Player {
           case 50:
           case 48: {
             recentLevels_.AddEntriesFrom(ref input, _repeated_recentLevels_codec);
+            break;
+          }
+          case 8008: {
+            UidUpdate = input.ReadUInt64();
+            break;
+          }
+          case 8016: {
+            LevelUpdate = input.ReadInt32();
+            break;
+          }
+          case 8026: {
+            NameUpdate = input.ReadString();
+            break;
+          }
+          case 8034: {
+            global::Nova.Generated.Bag.Bag subBuilder = new global::Nova.Generated.Bag.Bag();
+            if (bagDiffCase_ == BagDiffOneofCase.BagSet) {
+              subBuilder.MergeFrom(BagSet);
+            }
+            input.ReadMessage(subBuilder);
+            BagSet = subBuilder;
+            break;
+          }
+          case 8040: {
+            ScoresClear = input.ReadBool();
+            break;
+          }
+          case 8048: {
+            RecentLevelsUpdated = input.ReadBool();
+            break;
+          }
+          case 16032: {
+            BagClear = input.ReadBool();
+            break;
+          }
+          case 16042: {
+            scoresSet_.AddEntriesFrom(ref input, _map_scoresSet_codec);
+            break;
+          }
+          case 16050:
+          case 16048: {
+            recentLevelsUpdate_.AddEntriesFrom(ref input, _repeated_recentLevelsUpdate_codec);
+            break;
+          }
+          case 24034: {
+            global::Nova.Generated.Bag.Bag subBuilder = new global::Nova.Generated.Bag.Bag();
+            if (bagDiffCase_ == BagDiffOneofCase.BagUpdate) {
+              subBuilder.MergeFrom(BagUpdate);
+            }
+            input.ReadMessage(subBuilder);
+            BagUpdate = subBuilder;
+            break;
+          }
+          case 24042:
+          case 24040: {
+            scoresDelete_.AddEntriesFrom(ref input, _repeated_scoresDelete_codec);
+            break;
+          }
+        }
+      }
+    }
+    #endif
+
+  }
+
+  [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
+  public sealed partial class PlayerSyncPush : pb::IMessage<PlayerSyncPush>
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      , pb::IBufferMessage
+  #endif
+  {
+    private static readonly pb::MessageParser<PlayerSyncPush> _parser = new pb::MessageParser<PlayerSyncPush>(() => new PlayerSyncPush());
+    private pb::UnknownFieldSet _unknownFields;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pb::MessageParser<PlayerSyncPush> Parser { get { return _parser; } }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pbr::MessageDescriptor Descriptor {
+      get { return global::Nova.Generated.Player.ADataPlayerReflection.Descriptor.MessageTypes[1]; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    pbr::MessageDescriptor pb::IMessage.Descriptor {
+      get { return Descriptor; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public PlayerSyncPush() {
+      OnConstruction();
+    }
+
+    partial void OnConstruction();
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public PlayerSyncPush(PlayerSyncPush other) : this() {
+      schemaVersion_ = other.schemaVersion_;
+      baseVersion_ = other.baseVersion_;
+      version_ = other.version_;
+      switch (other.PayloadCase) {
+        case PayloadOneofCase.Full:
+          Full = other.Full.Clone();
+          break;
+        case PayloadOneofCase.Update:
+          Update = other.Update.Clone();
+          break;
+      }
+
+      _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public PlayerSyncPush Clone() {
+      return new PlayerSyncPush(this);
+    }
+
+    /// <summary>Field number for the "schema_version" field.</summary>
+    public const int SchemaVersionFieldNumber = 1;
+    private uint schemaVersion_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint SchemaVersion {
+      get { return schemaVersion_; }
+      set {
+        schemaVersion_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "base_version" field.</summary>
+    public const int BaseVersionFieldNumber = 2;
+    private ulong baseVersion_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ulong BaseVersion {
+      get { return baseVersion_; }
+      set {
+        baseVersion_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "version" field.</summary>
+    public const int VersionFieldNumber = 3;
+    private ulong version_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ulong Version {
+      get { return version_; }
+      set {
+        version_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "full" field.</summary>
+    public const int FullFieldNumber = 10;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Nova.Generated.Player.Player Full {
+      get { return payloadCase_ == PayloadOneofCase.Full ? (global::Nova.Generated.Player.Player) payload_ : null; }
+      set {
+        payload_ = value;
+        payloadCase_ = value == null ? PayloadOneofCase.None : PayloadOneofCase.Full;
+      }
+    }
+
+    /// <summary>Field number for the "update" field.</summary>
+    public const int UpdateFieldNumber = 11;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Nova.Generated.Player.Player Update {
+      get { return payloadCase_ == PayloadOneofCase.Update ? (global::Nova.Generated.Player.Player) payload_ : null; }
+      set {
+        payload_ = value;
+        payloadCase_ = value == null ? PayloadOneofCase.None : PayloadOneofCase.Update;
+      }
+    }
+
+    private object payload_;
+    /// <summary>Enum of possible cases for the "payload" oneof.</summary>
+    public enum PayloadOneofCase {
+      None = 0,
+      Full = 10,
+      Update = 11,
+    }
+    private PayloadOneofCase payloadCase_ = PayloadOneofCase.None;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public PayloadOneofCase PayloadCase {
+      get { return payloadCase_; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearPayload() {
+      payloadCase_ = PayloadOneofCase.None;
+      payload_ = null;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override bool Equals(object other) {
+      return Equals(other as PlayerSyncPush);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool Equals(PlayerSyncPush other) {
+      if (ReferenceEquals(other, null)) {
+        return false;
+      }
+      if (ReferenceEquals(other, this)) {
+        return true;
+      }
+      if (SchemaVersion != other.SchemaVersion) return false;
+      if (BaseVersion != other.BaseVersion) return false;
+      if (Version != other.Version) return false;
+      if (!object.Equals(Full, other.Full)) return false;
+      if (!object.Equals(Update, other.Update)) return false;
+      if (PayloadCase != other.PayloadCase) return false;
+      return Equals(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override int GetHashCode() {
+      int hash = 1;
+      if (SchemaVersion != 0) hash ^= SchemaVersion.GetHashCode();
+      if (BaseVersion != 0UL) hash ^= BaseVersion.GetHashCode();
+      if (Version != 0UL) hash ^= Version.GetHashCode();
+      if (payloadCase_ == PayloadOneofCase.Full) hash ^= Full.GetHashCode();
+      if (payloadCase_ == PayloadOneofCase.Update) hash ^= Update.GetHashCode();
+      hash ^= (int) payloadCase_;
+      if (_unknownFields != null) {
+        hash ^= _unknownFields.GetHashCode();
+      }
+      return hash;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override string ToString() {
+      return pb::JsonFormatter.ToDiagnosticString(this);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void WriteTo(pb::CodedOutputStream output) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      output.WriteRawMessage(this);
+    #else
+      if (SchemaVersion != 0) {
+        output.WriteRawTag(8);
+        output.WriteUInt32(SchemaVersion);
+      }
+      if (BaseVersion != 0UL) {
+        output.WriteRawTag(16);
+        output.WriteUInt64(BaseVersion);
+      }
+      if (Version != 0UL) {
+        output.WriteRawTag(24);
+        output.WriteUInt64(Version);
+      }
+      if (payloadCase_ == PayloadOneofCase.Full) {
+        output.WriteRawTag(82);
+        output.WriteMessage(Full);
+      }
+      if (payloadCase_ == PayloadOneofCase.Update) {
+        output.WriteRawTag(90);
+        output.WriteMessage(Update);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(output);
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+      if (SchemaVersion != 0) {
+        output.WriteRawTag(8);
+        output.WriteUInt32(SchemaVersion);
+      }
+      if (BaseVersion != 0UL) {
+        output.WriteRawTag(16);
+        output.WriteUInt64(BaseVersion);
+      }
+      if (Version != 0UL) {
+        output.WriteRawTag(24);
+        output.WriteUInt64(Version);
+      }
+      if (payloadCase_ == PayloadOneofCase.Full) {
+        output.WriteRawTag(82);
+        output.WriteMessage(Full);
+      }
+      if (payloadCase_ == PayloadOneofCase.Update) {
+        output.WriteRawTag(90);
+        output.WriteMessage(Update);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(ref output);
+      }
+    }
+    #endif
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int CalculateSize() {
+      int size = 0;
+      if (SchemaVersion != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(SchemaVersion);
+      }
+      if (BaseVersion != 0UL) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt64Size(BaseVersion);
+      }
+      if (Version != 0UL) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt64Size(Version);
+      }
+      if (payloadCase_ == PayloadOneofCase.Full) {
+        size += 1 + pb::CodedOutputStream.ComputeMessageSize(Full);
+      }
+      if (payloadCase_ == PayloadOneofCase.Update) {
+        size += 1 + pb::CodedOutputStream.ComputeMessageSize(Update);
+      }
+      if (_unknownFields != null) {
+        size += _unknownFields.CalculateSize();
+      }
+      return size;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(PlayerSyncPush other) {
+      if (other == null) {
+        return;
+      }
+      if (other.SchemaVersion != 0) {
+        SchemaVersion = other.SchemaVersion;
+      }
+      if (other.BaseVersion != 0UL) {
+        BaseVersion = other.BaseVersion;
+      }
+      if (other.Version != 0UL) {
+        Version = other.Version;
+      }
+      switch (other.PayloadCase) {
+        case PayloadOneofCase.Full:
+          if (Full == null) {
+            Full = new global::Nova.Generated.Player.Player();
+          }
+          Full.MergeFrom(other.Full);
+          break;
+        case PayloadOneofCase.Update:
+          if (Update == null) {
+            Update = new global::Nova.Generated.Player.Player();
+          }
+          Update.MergeFrom(other.Update);
+          break;
+      }
+
+      _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(pb::CodedInputStream input) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      input.ReadRawMessage(this);
+    #else
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+            break;
+          case 8: {
+            SchemaVersion = input.ReadUInt32();
+            break;
+          }
+          case 16: {
+            BaseVersion = input.ReadUInt64();
+            break;
+          }
+          case 24: {
+            Version = input.ReadUInt64();
+            break;
+          }
+          case 82: {
+            global::Nova.Generated.Player.Player subBuilder = new global::Nova.Generated.Player.Player();
+            if (payloadCase_ == PayloadOneofCase.Full) {
+              subBuilder.MergeFrom(Full);
+            }
+            input.ReadMessage(subBuilder);
+            Full = subBuilder;
+            break;
+          }
+          case 90: {
+            global::Nova.Generated.Player.Player subBuilder = new global::Nova.Generated.Player.Player();
+            if (payloadCase_ == PayloadOneofCase.Update) {
+              subBuilder.MergeFrom(Update);
+            }
+            input.ReadMessage(subBuilder);
+            Update = subBuilder;
+            break;
+          }
+        }
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+            break;
+          case 8: {
+            SchemaVersion = input.ReadUInt32();
+            break;
+          }
+          case 16: {
+            BaseVersion = input.ReadUInt64();
+            break;
+          }
+          case 24: {
+            Version = input.ReadUInt64();
+            break;
+          }
+          case 82: {
+            global::Nova.Generated.Player.Player subBuilder = new global::Nova.Generated.Player.Player();
+            if (payloadCase_ == PayloadOneofCase.Full) {
+              subBuilder.MergeFrom(Full);
+            }
+            input.ReadMessage(subBuilder);
+            Full = subBuilder;
+            break;
+          }
+          case 90: {
+            global::Nova.Generated.Player.Player subBuilder = new global::Nova.Generated.Player.Player();
+            if (payloadCase_ == PayloadOneofCase.Update) {
+              subBuilder.MergeFrom(Update);
+            }
+            input.ReadMessage(subBuilder);
+            Update = subBuilder;
             break;
           }
         }

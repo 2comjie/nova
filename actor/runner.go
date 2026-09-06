@@ -7,7 +7,13 @@ import (
 	"time"
 
 	"github.com/2comjie/nova/actor/actorDef"
-	"github.com/2comjie/nova/core/help"
+)
+
+var (
+	ErrRunnerStarted    = errors.New("actor runner already started")
+	ErrRunnerStopped    = errors.New("actor runner stopped")
+	ErrRunnerNotStarted = errors.New("actor runner not started")
+	ErrQueueFull        = errors.New("actor queue full")
 )
 
 type RunnerConfig struct {
@@ -20,16 +26,16 @@ type Runner[T actorDef.Actor] struct {
 	actor  T
 	config RunnerConfig
 
-	runCtx context.Context
-	stop   context.CancelFunc
-	queue  chan func(T)
-	done   chan struct{}
-	start  chan error
+	runCtx        context.Context
+	cancel        context.CancelFunc
+	queue         chan func(T)
+	stopRequested chan struct{}
+	done          chan struct{}
 
-	stateMu sync.Mutex
-	started bool
-	stopped bool
-
+	stateMu    sync.Mutex
+	started    bool
+	ready      bool
+	stopping   bool
 	stopReason actorDef.StopReason
 }
 
@@ -40,217 +46,219 @@ func NewRunner[T actorDef.Actor](parentCtx context.Context, self actorDef.Pid, a
 	if config.UpdateDt == 0 {
 		config.UpdateDt = 100 * time.Millisecond
 	}
-	runCtx, stop := context.WithCancel(parentCtx)
+	runCtx, cancel := context.WithCancel(parentCtx)
 	return &Runner[T]{
-		self:       self,
-		actor:      actorValue,
-		config:     config,
-		runCtx:     runCtx,
-		stop:       stop,
-		queue:      make(chan func(T), config.QueueCap),
-		done:       make(chan struct{}),
-		start:      make(chan error, 1),
+		self: self, actor: actorValue, config: config, runCtx: runCtx, cancel: cancel,
+		queue:         make(chan func(T), config.QueueCap),
+		stopRequested: make(chan struct{}), done: make(chan struct{}),
 		stopReason: actorDef.StopReasonShutdown,
 	}
 }
 
 func (r *Runner[T]) Start() error {
 	r.stateMu.Lock()
+	if r.stopping {
+		r.stateMu.Unlock()
+		return ErrRunnerStopped
+	}
 	if r.started {
 		r.stateMu.Unlock()
-		return errors.New("already started")
-	}
-	if r.stopped {
-		r.stateMu.Unlock()
-		return errors.New("already stopped")
+		return ErrRunnerStarted
 	}
 	r.started = true
 	r.stateMu.Unlock()
-	help.SafeGo(r.loop)
-	return <-r.start
+	started := make(chan error, 1)
+	go r.loop(started)
+	return <-started
 }
 
 func (r *Runner[T]) RunOnMainLoop(fn func(T)) error {
 	r.stateMu.Lock()
 	defer r.stateMu.Unlock()
-	if !r.started {
-		return errors.New("not started")
+	if r.stopping {
+		return ErrRunnerStopped
 	}
-	if r.stopped {
-		return errors.New("already stopped")
+	if !r.ready {
+		return ErrRunnerNotStarted
 	}
-
 	select {
 	case r.queue <- fn:
 		return nil
 	default:
-		return errors.New("queue full")
+		return ErrQueueFull
 	}
 }
 
-func (r *Runner[T]) WaitResultOnMainLoop(waitCtx context.Context, fn func(T)) error {
-	done := make(chan struct{}, 1)
-
-	err := r.RunOnMainLoop(func(actorValue T) {
-		defer func() { done <- struct{}{} }()
-		fn(actorValue)
-	})
-	if err != nil {
+// WaitResultOnMainLoop must not be called from this actor's own loop.
+// Cancellation skips pending work; an executing handler must cooperate with ctx.
+func (r *Runner[T]) WaitResultOnMainLoop(ctx context.Context, fn func(context.Context, T) error) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-
+	result := make(chan error, 1)
+	if err := r.RunOnMainLoop(func(actorValue T) {
+		if err := ctx.Err(); err != nil {
+			result <- err
+			return
+		}
+		execCtx, cancel := context.WithCancel(ctx)
+		stopCancel := context.AfterFunc(r.runCtx, cancel)
+		defer stopCancel()
+		defer cancel()
+		result <- fn(execCtx, actorValue)
+	}); err != nil {
+		return err
+	}
 	select {
-	case <-done:
-		return nil
-	case <-waitCtx.Done():
-		return waitCtx.Err()
+	case err := <-result:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
 	case <-r.done:
 		select {
-		case <-done:
-			return nil
+		case err := <-result:
+			return err
 		default:
+			return ErrRunnerStopped
 		}
-		return errors.New("runner stopped")
 	}
 }
 
 func (r *Runner[T]) Stop(reason actorDef.StopReason) {
 	r.RequestStop(reason)
-
-	r.stateMu.Lock()
-	started := r.started
-	r.stateMu.Unlock()
-
-	if started {
-		<-r.done
-	}
+	<-r.done
 }
 
+// Shutdown and unload reject new tasks, drain the queue and then call OnStop.
+// Lease loss cancels execution immediately and discards the remaining queue.
+// An OnStart still in progress is canceled for every stop reason.
 func (r *Runner[T]) RequestStop(reason actorDef.StopReason) {
 	r.stateMu.Lock()
 	defer r.stateMu.Unlock()
-
-	if r.stopped {
+	if r.stopping {
+		if reason == actorDef.StopReasonLeaseLost {
+			r.stopReason = reason
+			r.cancel()
+		}
 		return
 	}
-
-	r.stopped = true
+	r.stopping = true
 	r.stopReason = reason
-	r.stop()
-
+	close(r.stopRequested)
+	if !r.ready || reason == actorDef.StopReasonLeaseLost {
+		r.cancel()
+	}
 	if !r.started {
 		close(r.done)
 	}
 }
 
-func (r *Runner[T]) loop() {
-	defer close(r.done)
-
-	startErr := errors.New("actor start panic")
-	help.SafeRun(func() {
-		startErr = r.actor.OnStart(actorDef.ActorStartCtx{
-			Context: r.runCtx,
-			Self:    r.self,
-			Unload: func() {
-				r.RequestStop(actorDef.StopReasonUnload)
-			},
-		})
-	})
-
-	if startErr != nil {
-		r.markStopped()
-		r.start <- startErr
+func (r *Runner[T]) loop(started chan<- error) {
+	defer func() {
+		r.stateMu.Lock()
+		if !r.stopping {
+			r.stopping = true
+			close(r.stopRequested)
+		}
+		r.ready = false
+		r.cancel()
+		r.stateMu.Unlock()
+		close(r.done)
+	}()
+	if err := r.actor.OnStart(actorDef.ActorStartCtx{
+		Context: r.runCtx, Self: r.self,
+		Unload: func() { r.RequestStop(actorDef.StopReasonUnload) },
+	}); err != nil {
+		started <- err
 		return
 	}
-
-	r.start <- nil
-
 	defer func() {
-		r.markStopped()
-		help.SafeRun(func() {
-			r.actor.OnStop(actorDef.ActorStopCtx{
-				Context: context.WithoutCancel(r.runCtx),
-				Self:    r.self,
-				Reason:  r.stopReason,
-			})
-		})
+		r.stateMu.Lock()
+		reason := r.stopReason
+		r.stateMu.Unlock()
+		r.actor.OnStop(actorDef.ActorStopCtx{Context: r.runCtx, Self: r.self, Reason: reason})
 	}()
+	if r.runCtx.Err() != nil {
+		r.RequestStop(actorDef.StopReasonShutdown)
+	}
+	r.stateMu.Lock()
+	stopping := r.stopping
+	r.ready = !stopping
+	r.stateMu.Unlock()
+	if stopping {
+		started <- ErrRunnerStopped
+	} else {
+		started <- nil
+	}
 
 	lastUpdate := time.Now()
 	lastActive := lastUpdate
 	timer := time.NewTimer(r.config.UpdateDt)
 	defer timer.Stop()
-
 	updatePaused := false
 	for {
-		select {
-		case <-r.runCtx.Done():
-			r.markStopped()
-			if r.stopReason == actorDef.StopReasonLeaseLost {
+		r.stateMu.Lock()
+		stopping := r.stopping
+		lost := r.stopReason == actorDef.StopReasonLeaseLost
+		r.stateMu.Unlock()
+		if lost {
+			return
+		}
+		var fn func(T)
+		if stopping {
+			select {
+			case fn = <-r.queue:
+			default:
 				return
 			}
-			for {
-				select {
-				case fn := <-r.queue:
-					help.SafeRun(func() {
-						fn(r.actor)
-					})
-				default:
-					return
+		} else {
+			select {
+			case <-r.stopRequested:
+				continue
+			case <-r.runCtx.Done():
+				r.RequestStop(actorDef.StopReasonShutdown)
+				continue
+			case fn = <-r.queue:
+			case now := <-timer.C:
+				if !r.Running() {
+					continue
 				}
-			}
-		case fn := <-r.queue:
-			lastActive = time.Now()
-			help.SafeRun(func() {
-				fn(r.actor)
-			})
-
-			if updatePaused {
-				updatePaused = false
-				timer.Reset(r.config.UpdateDt)
-			}
-
-		case now := <-timer.C:
-			nextUpdate := r.config.UpdateDt
-			help.SafeRun(func() {
-				nextUpdate = r.actor.OnUpdate(actorDef.ActorUpdateCtx{
-					Context: r.runCtx,
-					Self:    r.self,
-					Delta:   now.Sub(lastUpdate),
-					Idle:    now.Sub(lastActive),
-					Unload: func() {
-						r.RequestStop(actorDef.StopReasonUnload)
-					},
+				next := r.actor.OnUpdate(actorDef.ActorUpdateCtx{
+					Context: r.runCtx, Self: r.self, Delta: now.Sub(lastUpdate), Idle: now.Sub(lastActive),
+					Unload: func() { r.RequestStop(actorDef.StopReasonUnload) },
 				})
-				return
-			})
-
-			lastUpdate = now
-			if nextUpdate < 0 {
-				updatePaused = true
+				lastUpdate = now
+				if next < 0 {
+					updatePaused = true
+					continue
+				}
+				if next == 0 {
+					next = r.config.UpdateDt
+				}
+				timer.Reset(next)
 				continue
 			}
-			if nextUpdate == 0 {
-				nextUpdate = r.config.UpdateDt
-			}
-			timer.Reset(nextUpdate)
+		}
+		// Dequeue does not start execution: lease loss still takes precedence.
+		r.stateMu.Lock()
+		lost = r.stopReason == actorDef.StopReasonLeaseLost
+		r.stateMu.Unlock()
+		if lost {
+			return
+		}
+		lastActive = time.Now()
+		fn(r.actor)
+		if updatePaused {
+			updatePaused = false
+			timer.Reset(r.config.UpdateDt)
 		}
 	}
 }
 
-func (r *Runner[T]) markStopped() {
-	r.stateMu.Lock()
-	r.stopped = true
-	r.stop()
-	r.stateMu.Unlock()
-}
-
-func (r *Runner[T]) Done() <-chan struct{} {
-	return r.done
-}
+func (r *Runner[T]) Done() <-chan struct{} { return r.done }
 
 func (r *Runner[T]) Running() bool {
 	r.stateMu.Lock()
 	defer r.stateMu.Unlock()
-	return r.started && !r.stopped
+	return r.ready && !r.stopping
 }

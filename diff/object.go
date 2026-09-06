@@ -3,14 +3,14 @@ package diff
 type Object struct {
 	_ noCopy
 
-	writer   *Writer
-	parent   ParentLink
-	overflow *[]ParentLink
+	initialized bool
+	writer      *Writer
+	parent      ParentLink
+	overflow    *[]ParentLink
 }
 
 type Parent interface {
 	writeChildPatch(key any, childPath Path, operation Operation, value any)
-	dispatchChildChange(key any, childPath listenerPath, phase listenerPhase, event *changeEvent)
 }
 
 type ParentLink struct {
@@ -19,15 +19,18 @@ type ParentLink struct {
 }
 
 func (o *Object) Init(writer *Writer) {
+	o.initialized = true
 	o.writer = writer
 	o.parent = ParentLink{}
 	o.overflow = nil
 }
 
-func (o *Object) Commit() []byte {
-	data := o.writer.Commit()
-	o.writer.Reset()
-	return data
+func (o *Object) Initialized() bool {
+	return o.initialized
+}
+
+func (o *Object) Commit[Update any](update Update, write func(Update, Path, Operation, any)) Update {
+	return o.writer.Commit(update, write)
 }
 
 func (o *Object) AddParent(parent Parent, key any) {
@@ -107,37 +110,9 @@ func (o *Object) writeChildPatch(key any, childPath Path, operation Operation, v
 	o.writePatch(path, operation, value)
 }
 
-func (o *Object) dispatchChildChange(key any, childPath listenerPath, phase listenerPhase, event *changeEvent) {
-	o.dispatchChange(prependListenerPath(listenerPathNode{
-		selector:   listenerField,
-		fieldIndex: key.(uint32),
-	}, childPath), phase, event)
-}
-
-func (o *Object) dispatchChange(path listenerPath, phase listenerPhase, event *changeEvent) {
-	if o.writer != nil {
-		o.writer.dispatchChange(phase, path, event)
-		return
-	}
-
-	if o.parent.parent != nil {
-		o.parent.parent.dispatchChildChange(o.parent.key, path, phase, event)
-	}
-	if event.canceled || o.overflow == nil {
-		return
-	}
-
-	for _, link := range *o.overflow {
-		link.parent.dispatchChildChange(link.key, path, phase, event)
-		if event.canceled {
-			return
-		}
-	}
-}
-
 func (o *Object) writePatch(path Path, operation Operation, value any) {
 	if o.writer != nil {
-		o.writer.WritePatch(Patch{
+		o.writer.writePatch(patch{
 			Path:      path,
 			Operation: operation,
 			Value:     value,

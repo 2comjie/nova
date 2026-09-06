@@ -22,13 +22,13 @@ type Context struct {
 	Seq     uint64
 	Body    []byte
 
-	RouteID  string
+	RouteId  string
 	Target   Target
 	ActorKey string
 
 	BindingKey      string
 	NodeServiceName string
-	NodeInstanceID  string
+	NodeInstanceId  string
 
 	needReply        bool
 	replied          bool

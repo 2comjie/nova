@@ -19,7 +19,7 @@ func main() {
 	defer func() {
 		_ = listener.Close()
 	}()
-	netServer, err := network.NewServer(
+	netServer := network.NewServer(
 		network.WithListener(listener),
 		network.WithAuther(network.AuthFunc(func(token []byte) (uid uint64, err error) {
 			if len(token) == 0 {
@@ -29,28 +29,24 @@ func main() {
 		})),
 		network.WithHooks(network.Hooks{
 			OnSessionStart: func(session *network.Session) {
-				logx.Infof("session start: %d", session.ID)
+				logx.Infof("session start: %d", session.Id)
 			},
-			OnSessionEnd: func(session *network.Session) {
-				logx.Infof("session end: %d", session.ID)
+			OnSessionEnd: func(_ context.Context, session *network.Session) {
+				logx.Infof("session end: %d", session.Id)
 			},
 			OnSessionBind: func(session *network.Session) error {
-				logx.Infof("session bind: %d %d", session.ID, session.UID())
+				logx.Infof("session bind: %d %d", session.Id, session.Uid())
 				return nil
 			},
 			OnHeartbeat: func(session *network.Session) {
-				logx.Infof("session heartbeat: %d %d", session.ID, session.UID())
+				logx.Infof("session heartbeat: %d %d", session.Id, session.Uid())
 			},
 			OnReq: func(context *network.ReqContext) {
-				logx.Infof("session req: %d %d %d %d %s", context.Session.ID, context.Session.UID(), context.Request.Route, context.Request.Type, context.Request.Body)
+				logx.Infof("session req: %d %d %d %d %s", context.Session.Id, context.Session.Uid(), context.Request.Route, context.Request.Type, context.Request.Body)
 				_ = context.Write([]byte("hello"))
 			},
 		}),
 	)
-	if err != nil {
-		panic(err)
-	}
-
 	err = netServer.Start()
 	if err != nil {
 		panic(err)

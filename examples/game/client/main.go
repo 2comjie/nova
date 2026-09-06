@@ -16,12 +16,9 @@ import (
 
 func main() {
 	uid := flag.Uint64("uid", 1)
-	client, err := network.NewClient(network.WithDialer(
+	client := network.NewClient(network.WithDialer(
 		nettcp.NewDialer(flag.String("addr", "127.0.0.1:8000")),
 	))
-	if err != nil {
-		panic(err)
-	}
 	defer client.Close()
 
 	client.OnPush(shared.RouteChatPush, func(_ context.Context, body []byte) {
@@ -30,7 +27,7 @@ func main() {
 			logx.Errorf("聊天Push格式错误: %v", err)
 			return
 		}
-		logx.Infof("收到聊天 from=%d text=%s", push.FromUID, push.Text)
+		logx.Infof("收到聊天 from=%d text=%s", push.FromUid, push.Text)
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -52,9 +49,9 @@ func main() {
 	}
 	callPlayer(ctx, client, shared.RoutePlayerAddExp, addExpBody, "增加经验后")
 
-	toUID := flag.Uint64("to")
-	if toUID != 0 {
-		sendChat(ctx, client, toUID, flag.String("message", "你好"))
+	toUid := flag.Uint64("to")
+	if toUid != 0 {
+		sendChat(ctx, client, toUid, flag.String("message", "你好"))
 	}
 
 	logx.Infof("客户端保持在线，按Ctrl+C退出")
@@ -79,16 +76,16 @@ func callPlayer(
 	logx.Infof(
 		"%s uid=%d level=%d exp=%d gold=%d",
 		title,
-		profile.UID,
+		profile.Uid,
 		profile.Level,
 		profile.Exp,
 		profile.Gold,
 	)
 }
 
-func sendChat(ctx context.Context, client *network.Client, toUID uint64, text string) {
+func sendChat(ctx context.Context, client *network.Client, toUid uint64, text string) {
 	body, err := json.Marshal(shared.ChatSendRequest{
-		ToUID: toUID,
+		ToUid: toUid,
 		Text:  text,
 	})
 	if err != nil {

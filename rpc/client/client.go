@@ -2,17 +2,19 @@ package client
 
 import (
 	"context"
+	"errors"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/2comjie/nova/core/endpoint"
-	"github.com/2comjie/nova/core/help"
 	"github.com/2comjie/nova/locator"
 	"github.com/2comjie/nova/logx"
 	"github.com/2comjie/nova/registry"
+	"github.com/2comjie/nova/rpc"
 	"github.com/2comjie/nova/rpc/lx"
 	"github.com/cespare/xxhash/v2"
-	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
 type Client struct {
@@ -25,10 +27,12 @@ type Client struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+	done   chan struct{}
 
-	serviceMap  map[string][]endpoint.ServiceInstance
-	serviceAddr map[string]struct{}
+	serviceMap map[string][]endpoint.ServiceInstance
 }
+
+var _ rpc.Invoker = (*Client)(nil)
 
 func NewClient(discover registry.Discover, locator locator.Locator, opts ...Option) *Client {
 	options := defaultOptions()
@@ -38,14 +42,14 @@ func NewClient(discover registry.Discover, locator locator.Locator, opts ...Opti
 
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Client{
-		discover:    discover,
-		locator:     locator,
-		pool:        NewConnPool(options.dialOptions...),
-		balancers:   options.balancers,
-		ctx:         ctx,
-		cancel:      cancel,
-		serviceMap:  make(map[string][]endpoint.ServiceInstance),
-		serviceAddr: make(map[string]struct{}),
+		discover:   discover,
+		locator:    locator,
+		pool:       NewConnPool(options.dialOptions...),
+		balancers:  options.balancers,
+		ctx:        ctx,
+		cancel:     cancel,
+		done:       make(chan struct{}),
+		serviceMap: make(map[string][]endpoint.ServiceInstance),
 	}
 
 	if instances, err := discover.List(ctx); err != nil {
@@ -53,11 +57,19 @@ func NewClient(discover registry.Discover, locator locator.Locator, opts ...Opti
 	} else {
 		c.update(instances)
 	}
-	help.SafeGo(c.watch)
+	go c.watch()
 	return c
 }
 
-func (c *Client) Service(ctx context.Context, serviceName string) (*grpc.ClientConn, error) {
+func (c *Client) Invoke(ctx context.Context, method string, request, response proto.Message) error {
+	conn, err := c.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	return conn.Invoke(ctx, method, request, response)
+}
+
+func (c *Client) Service(ctx context.Context, serviceName string) (*rpc.Conn, error) {
 	if serviceName == "" {
 		return nil, ErrInvalidTarget
 	}
@@ -70,11 +82,11 @@ func (c *Client) Service(ctx context.Context, serviceName string) (*grpc.ClientC
 	return c.pool.Get(instance.RpcTarget())
 }
 
-func (c *Client) Node(ctx context.Context, serviceName, instanceID string) (*grpc.ClientConn, error) {
-	if instanceID == "" || serviceName == "" {
+func (c *Client) Node(ctx context.Context, serviceName, instanceId string) (*rpc.Conn, error) {
+	if instanceId == "" || serviceName == "" {
 		return nil, ErrInvalidTarget
 	}
-	instance, ok, err := c.discover.Get(ctx, instanceID)
+	instance, ok, err := c.discover.Get(ctx, instanceId)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +96,7 @@ func (c *Client) Node(ctx context.Context, serviceName, instanceID string) (*grp
 	return c.pool.Get(instance.RpcTarget())
 }
 
-func (c *Client) Direct(_ context.Context, addr string) (*grpc.ClientConn, error) {
+func (c *Client) Direct(_ context.Context, addr string) (*rpc.Conn, error) {
 	if _, _, err := net.SplitHostPort(addr); err != nil {
 		return nil, ErrInvalidTarget
 	}
@@ -96,21 +108,21 @@ func (c *Client) Route(
 	serviceName string,
 	binding string,
 	key string,
-) (*grpc.ClientConn, error) {
+) (*rpc.Conn, error) {
 	if serviceName == "" || binding == "" || key == "" {
 		return nil, ErrInvalidTarget
 	}
 	if c.locator == nil {
 		return nil, ErrLocatorUnavailable
 	}
-	instanceID, err := c.locator.Locate(ctx, binding, key)
+	instanceId, err := c.locator.Locate(ctx, binding, key)
 	if err != nil {
 		return nil, err
 	}
-	return c.Node(ctx, serviceName, instanceID)
+	return c.Node(ctx, serviceName, instanceId)
 }
 
-func (c *Client) Actor(_ context.Context, serviceName string, actorKey string) (*grpc.ClientConn, error) {
+func (c *Client) Actor(_ context.Context, serviceName string, actorKey string) (*rpc.Conn, error) {
 	instance, err := c.pickActor(serviceName, actorKey)
 	if err != nil {
 		return nil, err
@@ -123,10 +135,10 @@ func (c *Client) ActorInstanceId(_ context.Context, serviceName string, actorKey
 	if err != nil {
 		return "", err
 	}
-	return instance.ID, nil
+	return instance.Id, nil
 }
 
-func (c *Client) Conn(ctx context.Context) (*grpc.ClientConn, error) {
+func (c *Client) Conn(ctx context.Context) (*rpc.Conn, error) {
 	s := lx.GetStrategy(ctx)
 	switch s.Mode {
 	case lx.ModeDirect:
@@ -163,11 +175,11 @@ func (c *Client) pickActor(serviceName string, actorKey string) (endpoint.Servic
 		return endpoint.ServiceInstance{}, ErrNoAnyService
 	}
 	selected := instances[0]
-	selectedScore := xxhash.Sum64String(actorKey + "\x00" + selected.ID)
+	selectedScore := xxhash.Sum64String(actorKey + "\x00" + selected.Id)
 	for index := 1; index < len(instances); index++ {
 		instance := instances[index]
-		score := xxhash.Sum64String(actorKey + "\x00" + instance.ID)
-		if score > selectedScore || score == selectedScore && instance.ID < selected.ID {
+		score := xxhash.Sum64String(actorKey + "\x00" + instance.Id)
+		if score > selectedScore || score == selectedScore && instance.Id < selected.Id {
 			selected = instance
 			selectedScore = score
 		}
@@ -179,16 +191,23 @@ func (c *Client) pickActor(serviceName string, actorKey string) (endpoint.Servic
 func (c *Client) Close() {
 	c.cancel()
 	c.pool.Close()
+	<-c.done
 }
 
 func (c *Client) watch() {
+	defer close(c.done)
 	for {
 		instances, err := c.discover.Next(c.ctx)
 		if err != nil {
-			if c.ctx.Err() != nil {
+			if errors.Is(err, context.Canceled) {
 				return
 			}
 			logx.Errorf("rpc client discover.Next() failed: %v", err)
+			select {
+			case <-c.ctx.Done():
+				return
+			case <-time.After(time.Second):
+			}
 			continue
 		}
 		c.update(instances)
@@ -197,7 +216,6 @@ func (c *Client) watch() {
 
 func (c *Client) update(instances map[string]endpoint.ServiceInstance) {
 	serviceMap := make(map[string][]endpoint.ServiceInstance)
-	activeAddr := make(map[string]struct{})
 	for _, instance := range instances {
 		if instance.Status != endpoint.Working || instance.ServiceName == "" {
 			continue
@@ -206,21 +224,12 @@ func (c *Client) update(instances map[string]endpoint.ServiceInstance) {
 			continue
 		}
 		serviceMap[instance.ServiceName] = append(serviceMap[instance.ServiceName], instance)
-		activeAddr[instance.RpcTarget()] = struct{}{}
 	}
 
 	c.mu.Lock()
-	staleAddr := make(map[string]bool)
-	for addr := range c.serviceAddr {
-		if _, ok := activeAddr[addr]; !ok {
-			staleAddr[addr] = true
-		}
-	}
 	c.serviceMap = serviceMap
-	c.serviceAddr = activeAddr
 	c.mu.Unlock()
-
-	c.pool.Remove(staleAddr)
+	// 下线只停止选点；已有连接保留到 Close，让在途 RPC 正常结束。
 }
 
 func (c *Client) pickService(

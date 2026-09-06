@@ -12,6 +12,8 @@ type ActorStartCtx struct {
 }
 
 type ActorStopCtx struct {
+	// Normal unload/shutdown keeps this context alive through OnStop. Lease loss
+	// cancels it; persistence still needs ownership checks to fence stale writes.
 	context.Context
 	Self   Pid
 	Reason StopReason

@@ -13,15 +13,14 @@ import (
 
 	"github.com/2comjie/nova/app"
 	"github.com/2comjie/nova/core/endpoint"
-	"github.com/2comjie/nova/core/help"
 	pbGate "github.com/2comjie/nova/internal/pb/transport/gate"
 	pbNode "github.com/2comjie/nova/internal/pb/transport/node"
 	"github.com/2comjie/nova/locator"
 	"github.com/2comjie/nova/logx"
+	"github.com/2comjie/nova/network"
 	"github.com/2comjie/nova/registry"
+	"github.com/2comjie/nova/rpc"
 	"github.com/2comjie/nova/rpc/lx"
-	"github.com/2comjie/nova/rpc/rpcerr"
-	"google.golang.org/grpc"
 )
 
 var (
@@ -37,7 +36,7 @@ type Config struct {
 	GateClient  pbGate.GateClient
 	Registry    registry.Registry
 	Discovery   registry.Discover
-	RPCServer   *grpc.Server
+	RPCServer   *rpc.Server
 	RPCListener net.Listener
 	Components  []app.Component
 }
@@ -53,7 +52,7 @@ type Node struct {
 	gateClient  pbGate.GateClient
 	registry    registry.Registry
 	discovery   registry.Discover
-	rpcServer   *grpc.Server
+	rpcServer   *rpc.Server
 	rpcListener net.Listener
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -64,7 +63,7 @@ type Node struct {
 }
 
 func New(config Config) *Node {
-	if config.Instance.ID == "" || config.Instance.ServiceName == "" || config.Instance.ServiceName == locator.GateName {
+	if config.Instance.Id == "" || config.Instance.ServiceName == "" || config.Instance.ServiceName == locator.GateName {
 		panic("node: 必须提供Node ServiceInstance")
 	}
 	if config.Router == nil {
@@ -83,10 +82,10 @@ func New(config Config) *Node {
 		panic("node: 必须提供Registry")
 	}
 	if config.RPCServer == nil {
-		panic("node: 必须提供gRPC Server")
+		panic("node: 必须提供TCP RPC Server")
 	}
 	if config.RPCListener == nil {
-		panic("node: 必须提供gRPC Listener")
+		panic("node: 必须提供TCP RPC Listener")
 	}
 	if config.Discovery == nil {
 		panic("node: 必须提供Discovery")
@@ -108,17 +107,6 @@ func New(config Config) *Node {
 	}
 	pbNode.RegisterNodeServer(config.RPCServer, node)
 	return node
-}
-
-func (n *Node) AddComponent(component app.Component) error {
-	if n.closed.Load() {
-		return ErrClosed
-	}
-	if n.started.Load() {
-		return ErrStarted
-	}
-	n.App.AddComponent(component)
-	return nil
 }
 
 func (n *Node) Router() *Router {
@@ -146,12 +134,12 @@ func (n *Node) Start() error {
 	}
 
 	n.serverWait.Add(1)
-	help.SafeGo(func() {
+	go func() {
 		defer n.serverWait.Done()
 		if err := n.rpcServer.Serve(n.rpcListener); err != nil && !n.closed.Load() {
-			logx.Errorf("node: gRPC服务退出: %v", err)
+			logx.Errorf("node: TCP RPC服务退出: %v", err)
 		}
-	})
+	}()
 	return nil
 }
 
@@ -161,30 +149,21 @@ func (n *Node) Shutdown(ctx context.Context) error {
 	}
 
 	if n.started.Load() {
-		_ = n.registry.Deregister(n.instance.ID)
+		_ = n.registry.Deregister(n.instance.Id)
 	}
 
-	rpcDone := make(chan struct{})
-	help.SafeGo(func() {
-		defer close(rpcDone)
-		n.rpcServer.GracefulStop()
-	})
-	select {
-	case <-rpcDone:
-	case <-ctx.Done():
-		n.rpcServer.Stop()
-		<-rpcDone
-	}
+	n.App.RequestStop()
+	_ = n.rpcServer.Shutdown(ctx)
 	n.serverWait.Wait()
 	n.cancel()
 
 	componentErr := n.App.Shutdown(ctx)
 
 	waitDone := make(chan struct{})
-	help.SafeGo(func() {
+	go func() {
 		defer close(waitDone)
 		n.Wait()
-	})
+	}()
 	select {
 	case <-waitDone:
 	case <-ctx.Done():
@@ -212,13 +191,13 @@ func (n *Node) Done() <-chan struct{} {
 }
 
 func (n *Node) RandString() string {
-	digest := hmac.New(sha256.New, []byte(n.instance.ID))
+	digest := hmac.New(sha256.New, []byte(n.instance.Id))
 	_, _ = digest.Write([]byte(rand.Text()))
 	return hex.EncodeToString(digest.Sum(nil)[:16])
 }
 
 func (n *Node) UpdateMetadata(metadata map[string]string) error {
-	err := n.registry.UpdateMetaData(n.instance.ID, metadata)
+	err := n.registry.UpdateMetaData(n.instance.Id, metadata)
 	if err != nil {
 		return err
 	}
@@ -232,7 +211,7 @@ func (n *Node) UpdateMetadata(metadata map[string]string) error {
 }
 
 func (n *Node) DeleteMetadata(keys ...string) error {
-	err := n.registry.DeleteMetaData(n.instance.ID, keys)
+	err := n.registry.DeleteMetaData(n.instance.Id, keys)
 	if err != nil {
 		return err
 	}
@@ -242,60 +221,102 @@ func (n *Node) DeleteMetadata(keys ...string) error {
 	return nil
 }
 
-func (n *Node) Push(ctx context.Context, uid uint64, route uint32, body []byte) rpcerr.Err {
-	_, err := n.gateClient.Push(ctx, &pbGate.PushRequest{
+func (n *Node) Push(ctx context.Context, uid uint64, route uint32, body []byte) error {
+	gateId, err := n.gateLocator.Locate(ctx, uid)
+	if err != nil {
+		return err
+	}
+	if gateId == "" {
+		return network.ErrNotBound
+	}
+	_, err = n.gateClient.Push(lx.WithNode(ctx, gateId), &pbGate.PushRequest{
 		Uid:             uid,
 		Route:           route,
 		Body:            body,
 		NodeServiceName: n.instance.ServiceName,
-		NodeInstanceId:  n.instance.ID,
+		NodeInstanceId:  n.instance.Id,
 	})
 	return err
 }
 
-func (n *Node) Kick(ctx context.Context, uid uint64) rpcerr.Err {
-	_, err := n.gateClient.Kick(ctx, &pbGate.KickRequest{
+func (n *Node) Kick(ctx context.Context, uid uint64) error {
+	binding, err := n.gateLocator.LocateBinding(ctx, uid)
+	if err != nil {
+		return err
+	}
+	if binding.InstanceId == "" {
+		return nil
+	}
+	_, err = n.gateClient.Kick(lx.WithNode(ctx, binding.InstanceId), &pbGate.KickRequest{
 		Uid:             uid,
 		NodeServiceName: n.instance.ServiceName,
-		NodeInstanceId:  n.instance.ID,
+		NodeInstanceId:  n.instance.Id,
+		SessionId:       binding.SessionId,
 	})
 	return err
 }
 
-func (n *Node) Broadcast(ctx context.Context, route uint32, body []byte) (uint32, rpcerr.Err) {
-	response, err := n.gateClient.Broadcast(ctx, &pbGate.BroadcastRequest{
-		Route:           route,
-		Body:            body,
-		NodeServiceName: n.instance.ServiceName,
-		NodeInstanceId:  n.instance.ID,
-	})
+// Broadcast returns the delivered count from completed Gate calls, stopping at the first error.
+func (n *Node) Broadcast(ctx context.Context, route uint32, body []byte) (uint32, error) {
+	instances, err := n.discovery.List(ctx)
 	if err != nil {
 		return 0, err
 	}
-	return response.Count, nil
-}
-
-func (n *Node) MultiPush(ctx context.Context, uidList []uint64, route uint32, body []byte) (uint32, rpcerr.Err) {
-	response, err := n.gateClient.MultiPush(ctx, &pbGate.MultiPushRequest{
-		UidList:         uidList,
-		Route:           route,
-		Body:            body,
-		NodeServiceName: n.instance.ServiceName,
-		NodeInstanceId:  n.instance.ID,
-	})
-	if err != nil {
-		return 0, err
+	var count uint32
+	for _, instance := range instances {
+		if instance.ServiceName != locator.GateName {
+			continue
+		}
+		response, err := n.gateClient.Broadcast(lx.WithNode(ctx, instance.Id), &pbGate.BroadcastRequest{
+			Route:           route,
+			Body:            body,
+			NodeServiceName: n.instance.ServiceName,
+			NodeInstanceId:  n.instance.Id,
+		})
+		if err != nil {
+			return count, err
+		}
+		count += response.Count
 	}
-	return response.Count, nil
+	return count, nil
 }
 
-func (n *Node) MockGateCall(ctx context.Context, uid uint64, route uint32, body []byte) ([]byte, bool, rpcerr.Err) {
+// MultiPush skips offline users and stops at the first error, returning completed Gate counts.
+func (n *Node) MultiPush(ctx context.Context, uidList []uint64, route uint32, body []byte) (uint32, error) {
+	groups := make(map[string][]uint64)
+	for _, uid := range uidList {
+		gateId, err := n.gateLocator.Locate(ctx, uid)
+		if err != nil {
+			return 0, err
+		}
+		if gateId != "" {
+			groups[gateId] = append(groups[gateId], uid)
+		}
+	}
+	var count uint32
+	for gateId, uids := range groups {
+		response, err := n.gateClient.MultiPush(lx.WithNode(ctx, gateId), &pbGate.MultiPushRequest{
+			UidList:         uids,
+			Route:           route,
+			Body:            body,
+			NodeServiceName: n.instance.ServiceName,
+			NodeInstanceId:  n.instance.Id,
+		})
+		if err != nil {
+			return count, err
+		}
+		count += response.Count
+	}
+	return count, nil
+}
+
+func (n *Node) MockGateCall(ctx context.Context, uid uint64, route uint32, body []byte) ([]byte, bool, error) {
 	response, err := n.gateClient.MockCall(lx.WithBalance(ctx, locator.GateName), &pbGate.MockCallRequest{
 		Uid:             uid,
 		Route:           route,
 		Body:            body,
 		NodeServiceName: n.instance.ServiceName,
-		NodeInstanceId:  n.instance.ID,
+		NodeInstanceId:  n.instance.Id,
 	})
 	if err != nil {
 		return nil, false, err

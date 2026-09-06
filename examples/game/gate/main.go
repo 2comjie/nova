@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"strconv"
 
@@ -34,7 +35,7 @@ func main() {
 	options := infrastructure.DeployOptions()
 	options = append(options,
 		deploy.WithServiceName(flag.String("service", locator.GateName)),
-		deploy.WithInstanceID(flag.String("id", "gate-1")),
+		deploy.WithInstanceId(flag.String("id", "gate-1")),
 		deploy.WithConfig(configCenter),
 		deploy.WithNetworkOptions(
 			network.WithListener(clientListener),
@@ -44,18 +45,18 @@ func main() {
 				}
 				uid, err := strconv.ParseUint(string(token), 10, 64)
 				if err != nil {
-					return 0, errors.New("token中的UID无效")
+					return 0, errors.New("token中的Uid无效")
 				}
 				return uid, nil
 			})),
 		),
 		deploy.WithGateHooks(network.Hooks{
 			OnSessionBind: func(session *network.Session) error {
-				logx.Infof("玩家连接 uid=%d session=%d", session.UID(), session.ID)
+				logx.Infof("玩家连接 uid=%d session=%d", session.Uid(), session.Id)
 				return nil
 			},
-			OnSessionEnd: func(session *network.Session) {
-				logx.Infof("玩家断开 uid=%d session=%d", session.UID(), session.ID)
+			OnSessionEnd: func(_ context.Context, session *network.Session) {
+				logx.Infof("玩家断开 uid=%d session=%d", session.Uid(), session.Id)
 			},
 		}),
 	)
@@ -66,7 +67,7 @@ func main() {
 	}
 	logx.Infof(
 		"Gate启动 id=%s client=%s rpc=%s",
-		gate.Instance().ID,
+		gate.Instance().Id,
 		clientListener.Addr(),
 		gate.Instance().RpcTarget(),
 	)

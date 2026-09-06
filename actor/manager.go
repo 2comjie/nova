@@ -2,16 +2,17 @@ package actor
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/2comjie/nova/actor/actorDef"
 	"github.com/2comjie/nova/actor/actorGuard"
-	"github.com/2comjie/nova/core/help"
-	"github.com/2comjie/nova/rpc/rpcerr"
+	"github.com/2comjie/nova/logx"
+	"github.com/2comjie/nova/rpc"
 	"golang.org/x/sync/singleflight"
 )
 
-type Loader[T actorDef.Actor] func(runCtx context.Context, pid actorDef.Pid) (T, error)
+type Loader[T actorDef.Actor] func(ctx context.Context, pid actorDef.Pid) (T, error)
 
 type activeActor[T actorDef.Actor] struct {
 	runner *Runner[T]
@@ -34,17 +35,11 @@ type Manager[T actorDef.Actor] struct {
 
 func (s *System) Register[T actorDef.Actor](actorType actorDef.Type, guard *actorGuard.Guard, loader Loader[T], runnerConfig RunnerConfig) *Manager[T] {
 	manager := &Manager[T]{
-		system:       s,
-		actorType:    actorType,
-		guard:        guard,
-		loader:       loader,
-		runnerConfig: runnerConfig,
-		actors:       make(map[actorDef.Key]*activeActor[T]),
+		system: s, actorType: actorType, guard: guard, loader: loader,
+		runnerConfig: runnerConfig, actors: make(map[actorDef.Key]*activeActor[T]),
 	}
-
 	s.registrations[actorType] = managerRegistration{
-		stop:   manager.requestStopAll,
-		routes: make(map[uint32]rpcProcessor),
+		stop: manager.requestStopAll, routes: make(map[uint32]rpcProcessor),
 	}
 	return manager
 }
@@ -54,10 +49,7 @@ func (m *Manager[T]) TryGetActor(key actorDef.Key) (*Runner[T], bool) {
 	active := m.actors[key]
 	stopping := m.stopping
 	m.mu.RUnlock()
-	if stopping || active == nil || !active.runner.Running() {
-		return nil, false
-	}
-	if !active.lease.Active() {
+	if stopping || active == nil || !active.runner.Running() || !active.lease.Active() {
 		return nil, false
 	}
 	return active.runner, true
@@ -69,16 +61,15 @@ func (m *Manager[T]) ResolveActor(ctx context.Context, key actorDef.Key, policy 
 		runner, err := m.GetOrLoadActor(ctx, key)
 		return runner, err == nil, err
 	case ActivationIgnore, ActivationRequire:
-		runner, exists := m.TryGetActor(key)
-		if exists {
+		if runner, exists := m.TryGetActor(key); exists {
 			return runner, true, nil
 		}
-		ownerInstanceId, err := m.guard.Owner(ctx, actorDef.Pid{Type: m.actorType, Key: key})
+		owner, err := m.guard.Owner(ctx, actorDef.Pid{Type: m.actorType, Key: key})
 		if err != nil {
 			return nil, false, err
 		}
-		if ownerInstanceId != "" && ownerInstanceId != m.guard.InstanceId() {
-			return nil, false, rpcerr.NewWithDetail(ErrorCodeActorRedirect, "actor guarded by instance "+ownerInstanceId, []byte(ownerInstanceId))
+		if owner != "" && owner != m.guard.InstanceId() {
+			return nil, false, rpc.NewErrorWithDetail(ErrorCodeActorRedirect, "actor guarded by instance "+owner, []byte(owner))
 		}
 		if policy == ActivationRequire {
 			return nil, false, ErrActorNotActive
@@ -89,82 +80,76 @@ func (m *Manager[T]) ResolveActor(ctx context.Context, key actorDef.Key, policy 
 	}
 }
 
-func (m *Manager[T]) GetOrLoadActor(waitCtx context.Context, key actorDef.Key) (*Runner[T], error) {
+func (m *Manager[T]) GetOrLoadActor(ctx context.Context, key actorDef.Key) (*Runner[T], error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if runner, ok := m.TryGetActor(key); ok {
 		return runner, nil
 	}
-
-	resultCh := m.loads.DoChan(string(key), func() (any, error) {
-		return m.activateActor(key)
-	})
-
+	resultCh := m.loads.DoChan(string(key), func() (any, error) { return m.activateActor(key) })
 	select {
 	case result := <-resultCh:
 		if result.Err != nil {
 			return nil, result.Err
 		}
 		return result.Val.(*Runner[T]), nil
-	case <-waitCtx.Done():
-		return nil, waitCtx.Err()
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 
 func (m *Manager[T]) activateActor(key actorDef.Key) (*Runner[T], error) {
-	if !m.system.beginTask() {
+	m.system.lifecycleMu.Lock()
+	if m.system.stopping {
+		m.system.lifecycleMu.Unlock()
 		return nil, ErrSystemStopped
 	}
-	defer m.system.endTask()
+	m.system.tasks.Add(1)
+	m.system.lifecycleMu.Unlock()
+	defer m.system.tasks.Done()
 
 	if runner, ok := m.TryGetActor(key); ok {
 		return runner, nil
 	}
-	if previous := m.findActor(key); previous != nil {
+	m.mu.RLock()
+	previous := m.actors[key]
+	m.mu.RUnlock()
+	if previous != nil {
 		select {
 		case <-previous.done:
 		case <-m.system.runCtx.Done():
 			return nil, ErrSystemStopped
 		}
 	}
-
 	pid := actorDef.Pid{Type: m.actorType, Key: key}
-	lease, err := m.acquireLease(pid)
+	lease, owner, acquired, err := m.guard.TryAcquire(m.system.runCtx, pid)
 	if err != nil {
 		return nil, err
 	}
-
-	runner, err := m.startActor(pid, lease)
-	if err != nil {
-		_ = lease.Release()
-		return nil, err
+	if !acquired {
+		return nil, rpc.NewErrorWithDetail(ErrorCodeActorRedirect, "actor guarded by instance "+owner, []byte(owner))
 	}
 
-	active := &activeActor[T]{runner: runner, lease: lease, done: make(chan struct{})}
-	if !m.addActor(key, active) {
-		runner.Stop(actorDef.StopReasonShutdown)
-		_ = lease.Release()
-		return nil, ErrSystemStopped
-	}
-
-	m.system.tasks.Add(1)
-	help.SafeGo(func() {
-		m.waitActorExit(key, active)
-	})
-	return runner, nil
-}
-
-func (m *Manager[T]) acquireLease(pid actorDef.Pid) (*actorGuard.Lease, error) {
-	lease, ownerInstanceId, acquired, err := m.guard.TryAcquire(m.system.runCtx, pid)
-	if err != nil {
-		return nil, err
-	}
-	if acquired {
-		return lease, nil
-	}
-	return nil, rpcerr.NewWithDetail(ErrorCodeActorRedirect, "actor guarded by instance "+ownerInstanceId, []byte(ownerInstanceId))
-}
-
-func (m *Manager[T]) startActor(pid actorDef.Pid, lease *actorGuard.Lease) (*Runner[T], error) {
-	actorValue, err := m.loader(m.system.runCtx, pid)
+	// The activation owns the lease until the exit watcher takes over.
+	releaseLease := true
+	defer func() {
+		if releaseLease {
+			if err := lease.Release(); err != nil && !errors.Is(err, actorGuard.ErrGuardLost) {
+				logx.Errorf("actor %s lease release failed: %v", pid, err)
+			}
+		}
+	}()
+	loadCtx, cancelLoad := context.WithCancel(m.system.runCtx)
+	go func() {
+		select {
+		case <-lease.Done():
+			cancelLoad()
+		case <-loadCtx.Done():
+		}
+	}()
+	actorValue, err := m.loader(loadCtx, pid)
+	cancelLoad()
 	if err != nil {
 		return nil, err
 	}
@@ -173,53 +158,46 @@ func (m *Manager[T]) startActor(pid actorDef.Pid, lease *actorGuard.Lease) (*Run
 	}
 
 	runner := NewRunner(context.Background(), pid, actorValue, m.runnerConfig)
+	active := &activeActor[T]{runner: runner, lease: lease, done: make(chan struct{})}
+	m.mu.Lock()
+	if m.stopping {
+		m.mu.Unlock()
+		return nil, ErrSystemStopped
+	}
+	// Publish before OnStart so shutdown and lease loss can stop initialization.
+	m.actors[key] = active
+	m.mu.Unlock()
+
+	m.system.tasks.Add(1)
+	releaseLease = false
+	go func() {
+		defer m.system.tasks.Done()
+		select {
+		case <-lease.Done():
+			runner.RequestStop(actorDef.StopReasonLeaseLost)
+		case <-runner.Done():
+		}
+		<-runner.Done()
+		// OnStop has completed before ownership becomes available elsewhere.
+		if err := lease.Release(); err != nil && !errors.Is(err, actorGuard.ErrGuardLost) {
+			logx.Errorf("actor %s lease release failed: %v", pid, err)
+		}
+		m.mu.Lock()
+		delete(m.actors, key)
+		m.mu.Unlock()
+		close(active.done)
+	}()
 	if err := runner.Start(); err != nil {
 		return nil, err
 	}
-	if lease.Active() {
-		return runner, nil
-	}
-
-	runner.Stop(actorDef.StopReasonLeaseLost)
-	return nil, actorGuard.ErrGuardLost
+	return runner, nil
 }
 
-func (m *Manager[T]) waitActorExit(key actorDef.Key, active *activeActor[T]) {
-	defer m.system.endTask()
-	select {
-	case <-active.lease.Done():
-		active.runner.RequestStop(actorDef.StopReasonLeaseLost)
-	case <-active.runner.Done():
-		_ = active.lease.Release()
-	}
-	<-active.runner.Done()
-
-	m.mu.Lock()
-	if m.actors[key] == active {
-		delete(m.actors, key)
-	}
-	m.mu.Unlock()
-	close(active.done)
-}
-
-func (m *Manager[T]) findActor(key actorDef.Key) *activeActor[T] {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.actors[key]
-}
-
-func (m *Manager[T]) addActor(key actorDef.Key, active *activeActor[T]) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.stopping {
-		return false
-	}
-	m.actors[key] = active
-	return true
-}
-
+// UnloadActor waits for OnStop and lease release. Inside an actor use ctx.Unload.
 func (m *Manager[T]) UnloadActor(key actorDef.Key) {
-	active := m.findActor(key)
+	m.mu.RLock()
+	active := m.actors[key]
+	m.mu.RUnlock()
 	if active == nil {
 		return
 	}
@@ -236,6 +214,4 @@ func (m *Manager[T]) requestStopAll() {
 	m.mu.Unlock()
 }
 
-func (m *Manager[T]) RPC() *RPCRouteGroup[T] {
-	return &RPCRouteGroup[T]{actors: m}
-}
+func (m *Manager[T]) RPC() *RPCRouteGroup[T] { return &RPCRouteGroup[T]{actors: m} }

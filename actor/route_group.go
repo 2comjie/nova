@@ -1,6 +1,7 @@
 package actor
 
 import (
+	"context"
 	"slices"
 
 	"github.com/2comjie/nova/actor/actorDef"
@@ -49,13 +50,13 @@ func (g *RouteGroup[T]) Handle(route uint32, handler Handler[T]) {
 			return err
 		}
 
-		var handleErr error = ErrMessageHandlerPanic
-		err = runner.WaitResultOnMainLoop(ctx, func(actorValue T) {
-			handleErr = handler(actorValue, runner.self, ctx)
+		execCtx, cancel := context.WithCancel(ctx.Context)
+		stopCancel := context.AfterFunc(runner.runCtx, cancel)
+		defer stopCancel()
+		defer cancel()
+		ctx.Context = execCtx
+		return runner.WaitResultOnMainLoop(execCtx, func(_ context.Context, actorValue T) error {
+			return handler(actorValue, runner.self, ctx)
 		})
-		if err != nil {
-			return err
-		}
-		return handleErr
 	})
 }

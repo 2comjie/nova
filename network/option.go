@@ -13,6 +13,9 @@ const (
 	defaultMaxBody          = 8 << 20
 	defaultMaxToken         = 8 << 10
 	defaultMaxPending       = 1024
+	defaultRequestTimeout   = 30 * time.Second
+	defaultRequestQueue     = 128
+	maxQueuedRequestBytes   = 4 << 20
 )
 
 type options struct {
@@ -28,6 +31,8 @@ type options struct {
 	maxBody          int
 	maxToken         int
 	maxPending       int
+	requestTimeout   time.Duration
+	requestQueue     int
 }
 
 type Option func(*options)
@@ -40,7 +45,18 @@ func defaultOptions() options {
 		maxBody:          defaultMaxBody,
 		maxToken:         defaultMaxToken,
 		maxPending:       defaultMaxPending,
+		requestTimeout:   defaultRequestTimeout,
+		requestQueue:     defaultRequestQueue,
 	}
+}
+
+// WithRequestTimeout bounds each business request. Zero disables the deadline.
+func WithRequestTimeout(timeout time.Duration) Option {
+	return func(options *options) { options.requestTimeout = timeout }
+}
+
+func WithRequestQueue(capacity int) Option {
+	return func(options *options) { options.requestQueue = capacity }
 }
 
 func WithListener(listener transport.Listener) Option {

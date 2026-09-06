@@ -5,15 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-
-	"github.com/2comjie/nova/registry"
 )
 
 const GateName = "gate"
 
 type Locator interface {
+	SetOnBindingLost(callback func(name, key, value string))
 	Bind(ctx context.Context, name string, key string, value string) (previous string, err error)
-	Restore(ctx context.Context, name string, key string, current string, previous string) (bool, error)
 	Unbind(ctx context.Context, name string, key string, instanceId string) error
 	Locate(ctx context.Context, name string, key string) (string, error)
 	Close()
@@ -42,11 +40,7 @@ func (l *NodeLocator) Locate(ctx context.Context, name string, key string) (stri
 	if name == GateName {
 		return "", ErrNodeNotSupport
 	}
-	instanceId, err := l.provider.Locate(ctx, name, key)
-	if err != nil {
-		return "", err
-	}
-	return instanceId, nil
+	return l.provider.Locate(ctx, name, key)
 }
 
 func (l *NodeLocator) Close() {
@@ -55,83 +49,70 @@ func (l *NodeLocator) Close() {
 
 type GateLocator struct {
 	provider Locator
-
-	discover registry.Discover
 }
 
 type GateBinding struct {
-	InstanceID string `json:"instance_id"`
-	SessionID  uint64 `json:"session_id"`
+	InstanceId string `json:"instance_id"`
+	SessionId  uint64 `json:"session_id"`
 }
 
-func NewGateLocator(provider Locator, discover registry.Discover) *GateLocator {
-	return &GateLocator{
-		provider: provider,
-		discover: discover,
-	}
+func NewGateLocator(provider Locator) *GateLocator {
+	return &GateLocator{provider: provider}
 }
 
 func NewNodeLocator(provider Locator) *NodeLocator {
 	return &NodeLocator{provider: provider}
 }
 
-func (l *GateLocator) Bind(ctx context.Context, uid uint64, binding GateBinding) (GateBinding, error) {
-	value, err := encodeGateBinding(binding)
-	if err != nil {
-		return GateBinding{}, err
-	}
-	previous, err := l.provider.Bind(ctx, GateName, strconv.FormatUint(uid, 10), value)
-	if err != nil || previous == "" {
-		return GateBinding{}, err
-	}
-	return decodeGateBinding(previous)
+func (l *GateLocator) SetOnBindingLost(callback func(uid uint64, binding GateBinding)) {
+	l.provider.SetOnBindingLost(func(name, key, value string) {
+		if name != GateName {
+			return
+		}
+		uid, err := strconv.ParseUint(key, 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		binding, err := decodeGateBinding(value)
+		if err != nil {
+			panic(err)
+		}
+		callback(uid, binding)
+	})
 }
 
-func (l *GateLocator) Restore(ctx context.Context, uid uint64, current GateBinding, previous GateBinding) (bool, error) {
-	currentValue, err := encodeGateBinding(current)
-	if err != nil {
-		return false, err
-	}
-	previousValue, err := encodeGateBinding(previous)
-	if err != nil {
-		return false, err
-	}
-	return l.provider.Restore(ctx, GateName, strconv.FormatUint(uid, 10), currentValue, previousValue)
+func (l *GateLocator) Bind(ctx context.Context, uid uint64, binding GateBinding) error {
+	_, err := l.provider.Bind(ctx, GateName, strconv.FormatUint(uid, 10), encodeGateBinding(binding))
+	return err
 }
 
 func (l *GateLocator) Unbind(ctx context.Context, uid uint64, binding GateBinding) error {
-	value, err := encodeGateBinding(binding)
-	if err != nil {
-		return err
-	}
-	return l.provider.Unbind(ctx, GateName, strconv.FormatUint(uid, 10), value)
+	return l.provider.Unbind(ctx, GateName, strconv.FormatUint(uid, 10), encodeGateBinding(binding))
 }
 
 func (l *GateLocator) Locate(ctx context.Context, uid uint64) (string, error) {
+	binding, err := l.LocateBinding(ctx, uid)
+	return binding.InstanceId, err
+}
+
+func (l *GateLocator) LocateBinding(ctx context.Context, uid uint64) (GateBinding, error) {
 	value, err := l.provider.Locate(ctx, GateName, strconv.FormatUint(uid, 10))
 	if err != nil || value == "" {
-		return "", err
+		return GateBinding{}, err
 	}
-	binding, err := decodeGateBinding(value)
-	if err != nil {
-		return "", err
-	}
-	return binding.InstanceID, nil
+	return decodeGateBinding(value)
 }
 
 func (l *GateLocator) Close() {
 	l.provider.Close()
 }
 
-func encodeGateBinding(binding GateBinding) (string, error) {
-	if binding.InstanceID == "" || binding.SessionID == 0 {
-		return "", fmt.Errorf("locator: GateBinding无效 instance=%q session=%d", binding.InstanceID, binding.SessionID)
+func encodeGateBinding(binding GateBinding) string {
+	if binding.InstanceId == "" || binding.SessionId == 0 {
+		panic("locator: GateBinding缺少InstanceId或SessionId")
 	}
-	value, err := json.Marshal(binding)
-	if err != nil {
-		return "", err
-	}
-	return string(value), nil
+	value, _ := json.Marshal(binding)
+	return string(value)
 }
 
 func decodeGateBinding(value string) (GateBinding, error) {
@@ -139,8 +120,8 @@ func decodeGateBinding(value string) (GateBinding, error) {
 	if err := json.Unmarshal([]byte(value), &binding); err != nil {
 		return GateBinding{}, err
 	}
-	if binding.InstanceID == "" || binding.SessionID == 0 {
-		return GateBinding{}, fmt.Errorf("locator: GateBinding无效 instance=%q session=%d", binding.InstanceID, binding.SessionID)
+	if binding.InstanceId == "" || binding.SessionId == 0 {
+		return GateBinding{}, fmt.Errorf("locator: GateBinding无效 instance=%q session=%d", binding.InstanceId, binding.SessionId)
 	}
 	return binding, nil
 }

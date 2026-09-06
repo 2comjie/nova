@@ -39,12 +39,12 @@ type Target struct {
 	Service          string           `json:"service" yaml:"service"`
 	Binding          string           `json:"binding" yaml:"binding"`
 	Balance          lx.BalancePolicy `json:"balance" yaml:"balance"`
-	NodeID           string           `json:"node_id" yaml:"node_id"`
+	NodeId           string           `json:"node_id" yaml:"node_id"`
 	ActorKeyResolver string           `json:"actor_key_resolver" yaml:"actor_key_resolver"`
 }
 
 type Route struct {
-	ID      string         `json:"id" yaml:"id"`
+	Id      string         `json:"id" yaml:"id"`
 	Routes  []uint32       `json:"routes" yaml:"routes"`
 	Filters []FilterConfig `json:"filters" yaml:"filters"`
 	Target  Target         `json:"target" yaml:"target"`
@@ -112,7 +112,7 @@ func (r *Router) Add(routes ...Route) {
 		}
 
 		entry := compiledRoute{
-			id:               route.ID,
+			id:               route.Id,
 			target:           route.Target,
 			actorKeyResolver: actorKeyResolver,
 			handler:          handler,
@@ -131,7 +131,7 @@ func (r *Router) Dispatch(ctx *Context) error {
 	if !exists {
 		return ErrRouteNotFound
 	}
-	ctx.RouteID = route.id
+	ctx.RouteId = route.id
 	ctx.Target = route.target
 	ctx.actorKeyResolver = route.actorKeyResolver
 	return route.handler(ctx)
@@ -177,7 +177,7 @@ func validateTarget(target *Target) error {
 			target.Balance = lx.BalanceWeightedRoundRobin
 		}
 	case RouteModeNode:
-		if target.NodeID == "" {
+		if target.NodeId == "" {
 			return ErrInvalidTarget
 		}
 	default:

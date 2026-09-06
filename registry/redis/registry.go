@@ -11,6 +11,7 @@ import (
 	"github.com/2comjie/nova/core/endpoint"
 	"github.com/2comjie/nova/core/help"
 	"github.com/2comjie/nova/logx"
+	redisPubsub "github.com/2comjie/nova/pubsub/redis"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -50,7 +51,7 @@ func (r *Registry) Register(serviceInstance endpoint.ServiceInstance) error {
 	r.rw.Lock()
 	defer r.rw.Unlock()
 
-	logCtx := logx.WithField("service", serviceInstance.ID)
+	logCtx := logx.WithField("service", serviceInstance.Id)
 	hashKey := r.hashKey()
 	ttlSeconds := int(r.option.ttl.Seconds())
 
@@ -59,41 +60,46 @@ func (r *Registry) Register(serviceInstance endpoint.ServiceInstance) error {
 		return err
 	}
 	if err := help.Retry(r.ctx, 3, time.Second, func() error {
-		return r.rc.Eval(r.ctx, registerScript, []string{hashKey}, data, serviceInstance.ID, ttlSeconds).Err()
+		return r.rc.Eval(r.ctx, registerScript, []string{hashKey}, data, serviceInstance.Id, ttlSeconds).Err()
 	}); err != nil {
 		return err
 	}
 
-	r.publishEvent(UpdateEvent{Type: EventRegister, Instance: serviceInstance})
+	if err := redisPubsub.Publish(r.ctx, r.rc, r.notifyKey(), redisPubsub.Event[struct{}]{Type: "refresh"}); err != nil {
+		logCtx.Errorf("publish registry refresh err %+v", err)
+	}
 
-	if r.stopChs[serviceInstance.ID] == nil {
-		r.stopChs[serviceInstance.ID] = make(chan struct{})
+	if r.stopChs[serviceInstance.Id] == nil {
+		stopCh := make(chan struct{})
+		r.stopChs[serviceInstance.Id] = stopCh
 		help.SafeGo(func() {
-			r.keepAlive(r.stopChs[serviceInstance.ID], serviceInstance.ID)
+			r.keepAlive(stopCh, serviceInstance.Id)
 		})
 	}
 	logCtx.Debugf("register success")
 	return nil
 }
 
-func (r *Registry) Deregister(instanceID string) error {
+func (r *Registry) Deregister(instanceId string) error {
 	r.rw.Lock()
 	defer r.rw.Unlock()
 
-	logCtx := logx.WithField("service", instanceID)
+	logCtx := logx.WithField("service", instanceId)
 	hashKey := r.hashKey()
 
 	if err := help.Retry(r.ctx, 3, time.Second, func() error {
-		return r.rc.Eval(r.ctx, deregisterScript, []string{hashKey}, instanceID).Err()
+		return r.rc.Eval(r.ctx, deregisterScript, []string{hashKey}, instanceId).Err()
 	}); err != nil {
 		return err
 	}
 
-	r.publishEvent(UpdateEvent{Type: EventDeregister, Instance: endpoint.ServiceInstance{ID: instanceID}})
+	if err := redisPubsub.Publish(r.ctx, r.rc, r.notifyKey(), redisPubsub.Event[struct{}]{Type: "refresh"}); err != nil {
+		logCtx.Errorf("publish registry refresh err %+v", err)
+	}
 
-	if r.stopChs[instanceID] != nil {
-		close(r.stopChs[instanceID])
-		delete(r.stopChs, instanceID)
+	if r.stopChs[instanceId] != nil {
+		close(r.stopChs[instanceId])
+		delete(r.stopChs, instanceId)
 	}
 	logCtx.Debugf("deregister success")
 	return nil
@@ -107,7 +113,6 @@ func (r *Registry) UpdateMetaData(instanceId string, meta map[string]string) err
 	hashKey := r.hashKey()
 	ttlSeconds := int(r.option.ttl.Seconds())
 
-	var updatedInst endpoint.ServiceInstance
 	err := help.Retry(r.ctx, 3, time.Second, func() error {
 		data, err := r.rc.HGet(r.ctx, hashKey, instanceId).Result()
 		if err != nil {
@@ -137,14 +142,15 @@ func (r *Registry) UpdateMetaData(instanceId string, meta map[string]string) err
 		if err := r.rc.Do(r.ctx, "HEXPIRE", hashKey, ttlSeconds, "FIELDS", 1, instanceId).Err(); err != nil {
 			return err
 		}
-		updatedInst = inst
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
-	r.publishEvent(UpdateEvent{Type: EventUpdateMeta, Instance: updatedInst})
+	if err := redisPubsub.Publish(r.ctx, r.rc, r.notifyKey(), redisPubsub.Event[struct{}]{Type: "refresh"}); err != nil {
+		logCtx.Errorf("publish registry refresh err %+v", err)
+	}
 	logCtx.Debugf("update meta data success")
 	return nil
 }
@@ -157,7 +163,6 @@ func (r *Registry) DeleteMetaData(instanceId string, keys []string) error {
 	hashKey := r.hashKey()
 	ttlSeconds := int(r.option.ttl.Seconds())
 
-	var updatedInst endpoint.ServiceInstance
 	err := help.Retry(r.ctx, 3, time.Second, func() error {
 		data, err := r.rc.HGet(r.ctx, hashKey, instanceId).Result()
 		if err != nil {
@@ -184,14 +189,15 @@ func (r *Registry) DeleteMetaData(instanceId string, keys []string) error {
 		if err := r.rc.Do(r.ctx, "HEXPIRE", hashKey, ttlSeconds, "FIELDS", 1, instanceId).Err(); err != nil {
 			return err
 		}
-		updatedInst = inst
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
-	r.publishEvent(UpdateEvent{Type: EventDeleteMeta, Instance: updatedInst})
+	if err := redisPubsub.Publish(r.ctx, r.rc, r.notifyKey(), redisPubsub.Event[struct{}]{Type: "refresh"}); err != nil {
+		logCtx.Errorf("publish registry refresh err %+v", err)
+	}
 	logCtx.Debugf("delete meta data success")
 	return nil
 }
@@ -206,10 +212,10 @@ func (r *Registry) Close() {
 	}
 }
 
-func (r *Registry) keepAlive(stopCh chan struct{}, instanceID string) {
+func (r *Registry) keepAlive(stopCh chan struct{}, instanceId string) {
 	tk := time.NewTicker(r.option.tick)
 	defer tk.Stop()
-	logCtx := logx.WithField("service", instanceID)
+	logCtx := logx.WithField("service", instanceId)
 	for {
 		select {
 		case <-stopCh:
@@ -218,21 +224,12 @@ func (r *Registry) keepAlive(stopCh chan struct{}, instanceID string) {
 			return
 		case <-tk.C:
 			if err := help.Retry(r.ctx, 3, time.Second, func() error {
-				return r.rc.Do(r.ctx, "HEXPIRE", r.hashKey(), int(r.option.ttl.Seconds()), "FIELDS", 1, instanceID).Err()
+				return r.rc.Do(r.ctx, "HEXPIRE", r.hashKey(), int(r.option.ttl.Seconds()), "FIELDS", 1, instanceId).Err()
 			}); err != nil {
 				logCtx.Errorf("keep alive failed: %v", err)
 			}
 		}
 	}
-}
-
-func (r *Registry) publishEvent(event UpdateEvent) {
-	data, err := json.Marshal(event)
-	if err != nil {
-		logx.Errorf("marshal event err %+v", err)
-		return
-	}
-	r.rc.Publish(r.ctx, r.notifyKey(), data)
 }
 
 func (r *Registry) hashKey() string {

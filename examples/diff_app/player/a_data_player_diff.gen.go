@@ -5,8 +5,9 @@
 package player
 
 import (
-	diff "github.com/2comjie/nova/diff"
+	"github.com/2comjie/nova/diff"
 	bag "github.com/2comjie/nova/examples/diff_app/bag"
+	_pbData "github.com/2comjie/nova/examples/diff_app/player/pb"
 	logdef "github.com/2comjie/nova/logx/logdef"
 )
 
@@ -26,7 +27,7 @@ func (value *Player) GetUid() uint64 {
 }
 
 func (value *Player) SetUid(fieldValue uint64) bool {
-	value.EnsureDiffLink()
+	value.InitLink(nil)
 	return value.uid.SetValue(fieldValue)
 }
 
@@ -35,7 +36,7 @@ func (value *Player) GetLevel() int32 {
 }
 
 func (value *Player) SetLevel(fieldValue int32) bool {
-	value.EnsureDiffLink()
+	value.InitLink(nil)
 	return value.level.SetValue(fieldValue)
 }
 
@@ -44,7 +45,7 @@ func (value *Player) GetName() string {
 }
 
 func (value *Player) SetName(fieldValue string) bool {
-	value.EnsureDiffLink()
+	value.InitLink(nil)
 	return value.name.SetValue(fieldValue)
 }
 
@@ -53,501 +54,181 @@ func (value *Player) GetBag() *bag.Bag {
 }
 
 func (value *Player) SetBag(fieldValue *bag.Bag) bool {
-	value.EnsureDiffLink()
+	value.InitLink(nil)
 	return value.bag.SetValue(fieldValue)
 }
 
 func (value *Player) ClearBag() bool {
-	value.EnsureDiffLink()
+	value.InitLink(nil)
 	return value.bag.SetValue(nil)
 }
 
 func (value *Player) Scores() *diff.PrimitiveMap[uint64, int32] {
-	value.EnsureDiffLink()
+	value.InitLink(nil)
 	return &value.scores
 }
 
 func (value *Player) RecentLevels() *diff.PrimitiveSlice[int32] {
-	value.EnsureDiffLink()
+	value.InitLink(nil)
 	return &value.recentLevels
 }
 
-type PlayerDiffPath[DiffRoot any] struct {
-	path diff.PathBuilder[DiffRoot]
-}
-
-func NewPlayerDiffPath[DiffRoot any](path diff.PathBuilder[DiffRoot]) PlayerDiffPath[DiffRoot] {
-	return PlayerDiffPath[DiffRoot]{path: path}
-}
-
-var PlayerDiff = NewPlayerDiffPath[*Player](diff.NewPathBuilder[*Player]())
-
-func (path PlayerDiffPath[DiffRoot]) Uid() diff.ValuePath[DiffRoot, uint64] {
-	return diff.NewValuePath[DiffRoot, uint64](path.path.Field(1))
-}
-
-func (path PlayerDiffPath[DiffRoot]) Level() diff.ValuePath[DiffRoot, int32] {
-	return diff.NewValuePath[DiffRoot, int32](path.path.Field(2))
-}
-
-func (path PlayerDiffPath[DiffRoot]) Name() diff.ValuePath[DiffRoot, string] {
-	return diff.NewValuePath[DiffRoot, string](path.path.Field(3))
-}
-
-func (path PlayerDiffPath[DiffRoot]) Bag() PlayerBagDiffPath[DiffRoot] {
-	fieldPath := path.path.Field(4)
-	return PlayerBagDiffPath[DiffRoot]{
-		bag.NewBagDiffPath[DiffRoot](fieldPath),
-		diff.NewValuePath[DiffRoot, *bag.Bag](fieldPath),
-	}
-}
-
-type PlayerBagDiffPath[DiffRoot any] struct {
-	bag.BagDiffPath[DiffRoot]
-	value diff.ValuePath[DiffRoot, *bag.Bag]
-}
-
-func (path PlayerBagDiffPath[DiffRoot]) Changes() diff.ValuePath[DiffRoot, *bag.Bag] {
-	return path.value
-}
-
-func (path PlayerDiffPath[DiffRoot]) Scores() diff.MapPath[DiffRoot, uint64, int32] {
-	return diff.NewMapPath[DiffRoot, uint64, int32](path.path, 5)
-}
-
-func (path PlayerDiffPath[DiffRoot]) RecentLevels() diff.SlicePath[DiffRoot, int32] {
-	return diff.NewSlicePath[DiffRoot, int32](path.path, 6)
-}
-
 func (value *Player) InitLink(writer *diff.Writer) {
-	if writer != nil {
-		diff.BindWriter[*Player](writer)
-	}
-	value.InitDiffLink(writer, make(map[*diff.Object]struct{}))
-}
-
-func (value *Player) EnsureDiffLink() {
-	if value == nil {
+	if value.Object.Initialized() {
+		if writer != nil {
+			value.Object.Init(writer)
+		}
 		return
 	}
-	if value.uid.Initialized() {
-		return
-	}
-	value.InitDiffLink(nil, make(map[*diff.Object]struct{}))
-}
-
-func (value *Player) InitDiffLink(writer *diff.Writer, visited map[*diff.Object]struct{}) {
-	if value == nil {
-		return
-	}
-	if visited == nil {
-		visited = make(map[*diff.Object]struct{})
-	}
-	if _, exists := visited[&value.Object]; exists {
-		return
-	}
-	visited[&value.Object] = struct{}{}
 	value.Object.Init(writer)
 	value.uid.Init(&value.Object, 1)
 	value.level.Init(&value.Object, 2)
 	value.name.Init(&value.Object, 3)
-	if child := value.bag.GetValue(); child != nil {
-		child.InitDiffLink(nil, visited)
-	}
 	value.bag.Init(&value.Object, 4)
 	value.scores.Init(&value.Object, 5)
 	value.recentLevels.Init(&value.Object, 6)
 }
 
-func (value *Player) AppendDiffValue(data []byte) []byte {
-	data = value.uid.AppendValue(data, 1)
-	data = value.level.AppendValue(data, 2)
-	data = value.name.AppendValue(data, 3)
-	data = value.bag.AppendValue(data, 4)
-	data = value.scores.AppendValue(data, 5)
-	data = value.recentLevels.AppendValue(data, 6)
-	return data
+func (value *Player) Snapshot() *_pbData.Player {
+	snapshot := new(_pbData.Player)
+	snapshot.Uid = value.uid.GetValue()
+	snapshot.Level = value.level.GetValue()
+	snapshot.Name = value.name.GetValue()
+	if child := value.bag.GetValue(); child != nil {
+		snapshot.Bag = child.Snapshot()
+	}
+	value.scores.Range(func(key uint64, fieldValue int32) bool {
+		diff.SetMap(&snapshot.Scores, key, fieldValue)
+		return true
+	})
+	value.recentLevels.Range(func(_ int, fieldValue int32) bool {
+		snapshot.RecentLevels = append(snapshot.RecentLevels, fieldValue)
+		return true
+	})
+	return snapshot
 }
 
-func (value *Player) Commit() diff.Delta[*Player] {
-	return diff.Delta[*Player](value.Object.Commit())
-}
-
-func (value *Player) Snapshot() []byte {
-	return value.AppendDiffValue(nil)
-}
-
-func (value *Player) LoadSnapshot(data []byte) error {
+func (value *Player) LoadSnapshot(snapshot *_pbData.Player) {
 	value.InitLink(nil)
-	var zeroUid uint64
-	value.uid.SetValue(zeroUid)
-	var zeroLevel int32
-	value.level.SetValue(zeroLevel)
-	var zeroName string
-	value.name.SetValue(zeroName)
-	value.bag.SetValue(nil)
+	value.uid.SetValue(snapshot.GetUid())
+	value.level.SetValue(snapshot.GetLevel())
+	value.name.SetValue(snapshot.GetName())
+	if fieldValue := snapshot.GetBag(); fieldValue == nil {
+		value.bag.SetValue(nil)
+	} else {
+		child := new(bag.Bag)
+		child.LoadSnapshot(fieldValue)
+		value.bag.SetValue(child)
+	}
 	value.scores.Clear()
+	for key, fieldValue := range snapshot.GetScores() {
+		value.scores.Store(key, fieldValue)
+	}
 	value.recentLevels.Clear()
-	fields, err := diff.DecodeFields(data)
-	if err != nil {
-		return err
+	for _, fieldValue := range snapshot.GetRecentLevels() {
+		value.recentLevels.Append(fieldValue)
 	}
-	for _, field := range fields {
-		if err := value.loadDiffField(field); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
-func (value *Player) Merge(data []byte) error {
+func (value *Player) NewUpdate() *_pbData.Player {
+	return new(_pbData.Player)
+}
+
+func (value *Player) Commit() *_pbData.Player {
+	return value.Object.Commit(value.NewUpdate(), value.WriteUpdate)
+}
+
+func (value *Player) WriteUpdate(update *_pbData.Player, path diff.Path, operation diff.Operation, data any) {
+	node := path[0]
+	switch node.FieldIndex {
+	case 1:
+		fieldValue := data.(uint64)
+		update.UidUpdate = &fieldValue
+		return
+
+	case 2:
+		fieldValue := data.(int32)
+		update.LevelUpdate = &fieldValue
+		return
+
+	case 3:
+		fieldValue := data.(string)
+		update.NameUpdate = &fieldValue
+		return
+
+	case 4:
+		if len(path) == 1 {
+			if operation == diff.PointerSet {
+				update.BagDiff = &_pbData.Player_BagSet{BagSet: data.(*bag.Bag).Snapshot()}
+			} else {
+				update.BagDiff = &_pbData.Player_BagClear{BagClear: true}
+			}
+			return
+		}
+		child := value.bag.GetValue()
+		childUpdate := update.GetBagUpdate()
+		if childUpdate == nil {
+			childUpdate = child.NewUpdate()
+			update.BagDiff = &_pbData.Player_BagUpdate{BagUpdate: childUpdate}
+		}
+		child.WriteUpdate(childUpdate, path[1:], operation, data)
+		return
+
+	case 5:
+		if node.KeyType == diff.PathField {
+			update.ScoresClear = true
+			return
+		}
+		key := node.MapKey.(uint64)
+		if operation == diff.MapSet {
+			diff.SetMap(&update.ScoresSet, key, data.(int32))
+		} else {
+			update.ScoresDelete = append(update.ScoresDelete, key)
+		}
+		return
+
+	case 6:
+		update.RecentLevelsUpdated = true
+		update.RecentLevelsUpdate = append(update.RecentLevelsUpdate[:0], data.([]int32)...)
+		return
+
+	}
+}
+
+func (value *Player) Merge(update *_pbData.Player) {
 	value.InitLink(nil)
-	patches, err := diff.DecodePatches(data)
-	if err != nil {
-		return err
+	if update.UidUpdate != nil {
+		value.uid.SetValue(update.GetUidUpdate())
 	}
-	for _, patch := range patches {
-		if err := value.MergeDiffPatch(patch.Path, patch.Operation, patch.Value); err != nil {
-			return err
-		}
+	if update.LevelUpdate != nil {
+		value.level.SetValue(update.GetLevelUpdate())
 	}
-	return nil
-}
-
-func (value *Player) loadDiffField(field diff.EncodedField) error {
-	switch field.FieldIndex {
-	case 1:
-		{
-			fieldValue, err := diff.DecodePrimitive[uint64](field.Value)
-			if err != nil {
-				return err
-			}
-			value.uid.SetValue(fieldValue)
-			return nil
-		}
-	case 2:
-		{
-			fieldValue, err := diff.DecodePrimitive[int32](field.Value)
-			if err != nil {
-				return err
-			}
-			value.level.SetValue(fieldValue)
-			return nil
-		}
-	case 3:
-		{
-			fieldValue, err := diff.DecodePrimitive[string](field.Value)
-			if err != nil {
-				return err
-			}
-			value.name.SetValue(fieldValue)
-			return nil
-		}
-	case 4:
-		{
-			fieldValue := new(bag.Bag)
-			if err := fieldValue.LoadSnapshot(field.Value); err != nil {
-				return err
-			}
-			value.bag.SetValue(fieldValue)
-			return nil
-		}
-	case 5:
-		{
-			entries, err := diff.DecodeValues(field.Value)
-			if err != nil {
-				return err
-			}
-			if len(entries)%2 != 0 {
-				return diff.ErrInvalidData
-			}
-			for index := 0; index < len(entries); index += 2 {
-				mapKey, err := diff.DecodePrimitive[uint64](entries[index])
-				if err != nil {
-					return err
-				}
-				mapValue, err := diff.DecodePrimitive[int32](entries[index+1])
-				if err != nil {
-					return err
-				}
-				value.scores.Store(mapKey, mapValue)
-			}
-			return nil
-		}
-	case 6:
-		{
-			elements, err := diff.DecodeValues(field.Value)
-			if err != nil {
-				return err
-			}
-			for _, element := range elements {
-				sliceValue, err := diff.DecodePrimitive[int32](element)
-				if err != nil {
-					return err
-				}
-				value.recentLevels.Append(sliceValue)
-			}
-			return nil
+	if update.NameUpdate != nil {
+		value.name.SetValue(update.GetNameUpdate())
+	}
+	switch fieldValue := update.BagDiff.(type) {
+	case *_pbData.Player_BagSet:
+		child := new(bag.Bag)
+		child.LoadSnapshot(fieldValue.BagSet)
+		value.bag.SetValue(child)
+	case *_pbData.Player_BagClear:
+		value.bag.SetValue(nil)
+	case *_pbData.Player_BagUpdate:
+		value.bag.GetValue().Merge(fieldValue.BagUpdate)
+	}
+	if update.ScoresClear {
+		value.scores.Clear()
+	}
+	for key, fieldValue := range update.ScoresSet {
+		value.scores.Store(key, fieldValue)
+	}
+	for _, key := range update.ScoresDelete {
+		value.scores.Delete(key)
+	}
+	if update.RecentLevelsUpdated {
+		value.recentLevels.Clear()
+		for _, fieldValue := range update.RecentLevelsUpdate {
+			value.recentLevels.Append(fieldValue)
 		}
 	}
-	return nil
-}
-
-func (value *Player) MergeDiffPatch(path []diff.EncodedPathNode, operation diff.Operation, data []byte) error {
-	if len(path) == 0 {
-		return diff.ErrInvalidData
-	}
-	node := path[0]
-	switch node.FieldIndex {
-	case 1:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
-				return diff.ErrInvalidData
-			}
-			fieldValue, err := diff.DecodePrimitive[uint64](data)
-			if err != nil {
-				return err
-			}
-			value.uid.SetValue(fieldValue)
-			return nil
-		}
-	case 2:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
-				return diff.ErrInvalidData
-			}
-			fieldValue, err := diff.DecodePrimitive[int32](data)
-			if err != nil {
-				return err
-			}
-			value.level.SetValue(fieldValue)
-			return nil
-		}
-	case 3:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
-				return diff.ErrInvalidData
-			}
-			fieldValue, err := diff.DecodePrimitive[string](data)
-			if err != nil {
-				return err
-			}
-			value.name.SetValue(fieldValue)
-			return nil
-		}
-	case 4:
-		{
-			if node.KeyType != diff.PathField {
-				return diff.ErrInvalidData
-			}
-			if len(path) == 1 {
-				switch operation {
-				case diff.PointerSet:
-					fieldValue := new(bag.Bag)
-					if err := fieldValue.LoadSnapshot(data); err != nil {
-						return err
-					}
-					value.bag.SetValue(fieldValue)
-				case diff.PointerClear:
-					value.bag.SetValue(nil)
-				default:
-					return diff.ErrInvalidData
-				}
-				return nil
-			}
-			fieldValue := value.bag.GetValue()
-			if fieldValue == nil {
-				return diff.ErrInvalidData
-			}
-			return fieldValue.MergeDiffPatch(path[1:], operation, data)
-		}
-	case 5:
-		{
-			if node.KeyType == diff.PathField {
-				if len(path) != 1 || operation != diff.MapClear {
-					return diff.ErrInvalidData
-				}
-				value.scores.Clear()
-				return nil
-			}
-			if node.KeyType != diff.PathMap {
-				return diff.ErrInvalidData
-			}
-			mapKey, err := diff.DecodePrimitive[uint64](node.MapKey)
-			if err != nil {
-				return err
-			}
-			if len(path) != 1 {
-				return diff.ErrInvalidData
-			}
-			switch operation {
-			case diff.MapSet:
-				mapValue, err := diff.DecodePrimitive[int32](data)
-				if err != nil {
-					return err
-				}
-				value.scores.Store(mapKey, mapValue)
-			case diff.MapDelete:
-				value.scores.Delete(mapKey)
-			default:
-				return diff.ErrInvalidData
-			}
-			return nil
-		}
-	case 6:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.SliceReplace {
-				return diff.ErrInvalidData
-			}
-			value.recentLevels.Clear()
-			field := diff.EncodedField{FieldIndex: 6, Value: data}
-			elements, err := diff.DecodeValues(field.Value)
-			if err != nil {
-				return err
-			}
-			for _, element := range elements {
-				sliceValue, err := diff.DecodePrimitive[int32](element)
-				if err != nil {
-					return err
-				}
-				value.recentLevels.Append(sliceValue)
-			}
-			return nil
-		}
-	}
-	return nil
-}
-
-func (value *Player) FormatDelta(data []byte) (string, error) {
-	patches, err := diff.DecodePatches(data)
-	if err != nil {
-		return "", err
-	}
-	debugPatches := make([]diff.DebugPatch, 0, len(patches))
-	for _, patch := range patches {
-		path, patchValue, err := value.FormatDiffPatch(patch.Path, patch.Operation, patch.Value)
-		if err != nil {
-			return "", err
-		}
-		debugPatches = append(debugPatches, diff.DebugPatch{
-			Path:      path,
-			Operation: patch.Operation,
-			Value:     patchValue,
-		})
-	}
-	return diff.FormatDebugPatches("Player", debugPatches), nil
-}
-
-func (value *Player) FormatDiffPatch(path []diff.EncodedPathNode, operation diff.Operation, data []byte) (string, any, error) {
-	if len(path) == 0 {
-		return "", nil, diff.ErrInvalidData
-	}
-	node := path[0]
-	switch node.FieldIndex {
-	case 1:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
-				return "", nil, diff.ErrInvalidData
-			}
-			fieldValue, err := diff.DecodePrimitive[uint64](data)
-			if err != nil {
-				return "", nil, err
-			}
-			return "Uid", fieldValue, nil
-		}
-	case 2:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
-				return "", nil, diff.ErrInvalidData
-			}
-			fieldValue, err := diff.DecodePrimitive[int32](data)
-			if err != nil {
-				return "", nil, err
-			}
-			return "Level", fieldValue, nil
-		}
-	case 3:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.PrimitiveSet {
-				return "", nil, diff.ErrInvalidData
-			}
-			fieldValue, err := diff.DecodePrimitive[string](data)
-			if err != nil {
-				return "", nil, err
-			}
-			return "Name", fieldValue, nil
-		}
-	case 4:
-		{
-			if node.KeyType != diff.PathField {
-				return "", nil, diff.ErrInvalidData
-			}
-			if len(path) == 1 {
-				switch operation {
-				case diff.PointerSet:
-					return "Bag", diff.DebugSnapshot{Type: "*bag.Bag", Size: len(data)}, nil
-				case diff.PointerClear:
-					return "Bag", nil, nil
-				default:
-					return "", nil, diff.ErrInvalidData
-				}
-			}
-			childPath, fieldValue, err := new(bag.Bag).FormatDiffPatch(path[1:], operation, data)
-			if err != nil {
-				return "", nil, err
-			}
-			return diff.DebugFieldPath("Bag", childPath), fieldValue, nil
-		}
-	case 5:
-		{
-			if node.KeyType == diff.PathField {
-				if len(path) != 1 || operation != diff.MapClear {
-					return "", nil, diff.ErrInvalidData
-				}
-				return "Scores", nil, nil
-			}
-			if node.KeyType != diff.PathMap {
-				return "", nil, diff.ErrInvalidData
-			}
-			mapKey, err := diff.DecodePrimitive[uint64](node.MapKey)
-			if err != nil {
-				return "", nil, err
-			}
-			if len(path) != 1 {
-				return "", nil, diff.ErrInvalidData
-			}
-			switch operation {
-			case diff.MapSet:
-				mapValue, err := diff.DecodePrimitive[int32](data)
-				if err != nil {
-					return "", nil, err
-				}
-				return diff.DebugMapPath("Scores", mapKey, ""), mapValue, nil
-			case diff.MapDelete:
-				return diff.DebugMapPath("Scores", mapKey, ""), nil, nil
-			default:
-				return "", nil, diff.ErrInvalidData
-			}
-		}
-	case 6:
-		{
-			if node.KeyType != diff.PathField || len(path) != 1 || operation != diff.SliceReplace {
-				return "", nil, diff.ErrInvalidData
-			}
-			elements, err := diff.DecodeValues(data)
-			if err != nil {
-				return "", nil, err
-			}
-			values := make([]int32, 0, len(elements))
-			for _, element := range elements {
-				fieldValue, err := diff.DecodePrimitive[int32](element)
-				if err != nil {
-					return "", nil, err
-				}
-				values = append(values, fieldValue)
-			}
-			return "RecentLevels", values, nil
-		}
-	}
-	return "", nil, diff.ErrInvalidData
 }

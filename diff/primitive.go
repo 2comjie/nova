@@ -15,10 +15,6 @@ func (p *Primitive[T]) Init(parent *Object, diffIndex uint32) {
 	p.diffIndex = diffIndex
 }
 
-func (p *Primitive[T]) Initialized() bool {
-	return p.parent != nil
-}
-
 func (p *Primitive[T]) GetValue() T {
 	return p.value
 }
@@ -27,25 +23,7 @@ func (p *Primitive[T]) SetValue(value T) bool {
 	if p.value == value {
 		return false
 	}
-
-	value, event, accepted := beforeValueChange(p.parent, p.diffIndex, ChangeSet, p.value, value)
-	if !accepted || p.value == value {
-		return false
-	}
-
 	p.value = value
 	p.parent.writeChildPatch(p.diffIndex, nil, PrimitiveSet, value)
-	afterValueChange(p.parent, p.diffIndex, event)
 	return true
-}
-
-func (p *Primitive[T]) AppendValue(data []byte, diffIndex uint32) []byte {
-	var zero T
-	if p.value == zero {
-		return data
-	}
-
-	data, lengthIndex := beginField(data, diffIndex)
-	data = appendPrimitive(data, p.value)
-	return endValue(data, lengthIndex)
 }

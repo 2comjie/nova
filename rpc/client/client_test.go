@@ -23,15 +23,15 @@ func (f *fakeDiscover) Next(ctx context.Context) (map[string]endpoint.ServiceIns
 	return nil, ctx.Err()
 }
 
-func (f *fakeDiscover) Get(_ context.Context, instanceID string) (endpoint.ServiceInstance, bool, error) {
-	instance, ok := f.instances[instanceID]
+func (f *fakeDiscover) Get(_ context.Context, instanceId string) (endpoint.ServiceInstance, bool, error) {
+	instance, ok := f.instances[instanceId]
 	return instance, ok, nil
 }
 
 func (f *fakeDiscover) Close() {}
 
 type fakeLocator struct {
-	instanceID string
+	instanceId string
 	binding    string
 }
 
@@ -39,12 +39,10 @@ func (f *fakeLocator) Bind(context.Context, string, string, string) (string, err
 	return "", nil
 }
 func (f *fakeLocator) Unbind(context.Context, string, string, string) error { return nil }
-func (f *fakeLocator) Restore(context.Context, string, string, string, string) (bool, error) {
-	return true, nil
-}
+func (f *fakeLocator) SetOnBindingLost(func(string, string, string))        {}
 func (f *fakeLocator) Locate(_ context.Context, binding string, _ string) (string, error) {
 	f.binding = binding
-	return f.instanceID, nil
+	return f.instanceId, nil
 }
 func (f *fakeLocator) Close() {}
 
@@ -56,7 +54,7 @@ func TestPickServiceWeightedRoundRobin(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		counts[instance.ID]++
+		counts[instance.Id]++
 	}
 
 	if counts["node-1"] != 10 || counts["node-2"] != 30 {
@@ -72,7 +70,7 @@ func TestPickServiceRoundRobin(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		counts[instance.ID]++
+		counts[instance.Id]++
 	}
 
 	if counts["node-1"] != 5 || counts["node-2"] != 5 {
@@ -95,7 +93,7 @@ func TestRouteUsesLocatorInstance(t *testing.T) {
 }
 
 type fixedBalancer struct {
-	instanceID string
+	instanceId string
 }
 
 func (b *fixedBalancer) Pick(
@@ -104,7 +102,7 @@ func (b *fixedBalancer) Pick(
 	instances []endpoint.ServiceInstance,
 ) (endpoint.ServiceInstance, error) {
 	for _, instance := range instances {
-		if instance.ID == b.instanceID {
+		if instance.Id == b.instanceId {
 			return instance, nil
 		}
 	}
@@ -113,7 +111,7 @@ func (b *fixedBalancer) Pick(
 
 func TestCustomBalancer(t *testing.T) {
 	const policy lx.BalancePolicy = "fixed"
-	c := newTestClient(t, WithBalancer(policy, &fixedBalancer{instanceID: "node-2"}))
+	c := newTestClient(t, WithBalancer(policy, &fixedBalancer{instanceId: "node-2"}))
 
 	ctx := lx.WithBalance(context.Background(), "game", policy)
 	conn, err := c.Conn(ctx)
@@ -149,8 +147,8 @@ func TestPickActorStableAcrossInstanceOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.ID != second.ID {
-		t.Fatalf("actor moved after reorder: %s -> %s", first.ID, second.ID)
+	if first.Id != second.Id {
+		t.Fatalf("actor moved after reorder: %s -> %s", first.Id, second.Id)
 	}
 }
 
@@ -163,13 +161,13 @@ func TestPickActorMovesSubsetWhenNodeAdded(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		before[key] = instance.ID
+		before[key] = instance.Id
 	}
 
 	c.update(map[string]endpoint.ServiceInstance{
-		"node-1": {ID: "node-1", ServiceName: "game", RpcHost: "127.0.0.1", RpcPort: 9001, Status: endpoint.Working},
-		"node-2": {ID: "node-2", ServiceName: "game", RpcHost: "127.0.0.1", RpcPort: 9002, Status: endpoint.Working},
-		"node-3": {ID: "node-3", ServiceName: "game", RpcHost: "127.0.0.1", RpcPort: 9003, Status: endpoint.Working},
+		"node-1": {Id: "node-1", ServiceName: "game", RpcHost: "127.0.0.1", RpcPort: 9001, Status: endpoint.Working},
+		"node-2": {Id: "node-2", ServiceName: "game", RpcHost: "127.0.0.1", RpcPort: 9002, Status: endpoint.Working},
+		"node-3": {Id: "node-3", ServiceName: "game", RpcHost: "127.0.0.1", RpcPort: 9003, Status: endpoint.Working},
 	})
 
 	moved := 0
@@ -178,10 +176,10 @@ func TestPickActorMovesSubsetWhenNodeAdded(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if instance.ID != previous {
+		if instance.Id != previous {
 			moved++
-			if instance.ID != "node-3" {
-				t.Fatalf("actor %s moved between existing nodes: %s -> %s", key, previous, instance.ID)
+			if instance.Id != "node-3" {
+				t.Fatalf("actor %s moved between existing nodes: %s -> %s", key, previous, instance.Id)
 			}
 		}
 	}
@@ -210,15 +208,15 @@ func newTestClient(t *testing.T, opts ...Option) *Client {
 	t.Helper()
 	discover := &fakeDiscover{instances: map[string]endpoint.ServiceInstance{
 		"node-1": {
-			ID: "node-1", ServiceName: "game", Weight: 1,
+			Id: "node-1", ServiceName: "game", Weight: 1,
 			RpcHost: "127.0.0.1", RpcPort: 9001, Status: endpoint.Working,
 		},
 		"node-2": {
-			ID: "node-2", ServiceName: "game", Weight: 3,
+			Id: "node-2", ServiceName: "game", Weight: 3,
 			RpcHost: "127.0.0.1", RpcPort: 9002, Status: endpoint.Working,
 		},
 	}}
-	c := NewClient(discover, &fakeLocator{instanceID: "node-2"}, opts...)
+	c := NewClient(discover, &fakeLocator{instanceId: "node-2"}, opts...)
 	t.Cleanup(c.Close)
 	return c
 }

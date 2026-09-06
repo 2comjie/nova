@@ -4,38 +4,34 @@ import (
 	"context"
 	"errors"
 
-	"github.com/2comjie/nova/core/help"
 	pbNode "github.com/2comjie/nova/internal/pb/transport/node"
 	"github.com/2comjie/nova/locator"
 	"github.com/2comjie/nova/rpc"
-	"github.com/2comjie/nova/rpc/rpcerr"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
-func (n *Node) Call(ctx context.Context, request *pbNode.Request) (*pbNode.Response, rpcerr.Err) {
+func (n *Node) Call(ctx context.Context, request *pbNode.Request) (*pbNode.Response, *rpc.Error) {
 	nodeContext, err := n.handle(ctx, request, true)
 	if err != nil {
-		return nil, rpcerr.Wrap(err)
+		return nil, rpc.FromError(err)
 	}
 	return &pbNode.Response{
 		Replied:         nodeContext.replied,
 		Body:            nodeContext.responseBody,
 		NodeServiceName: n.instance.ServiceName,
-		NodeInstanceId:  n.instance.ID,
+		NodeInstanceId:  n.instance.Id,
 	}, nil
 }
 
-func (n *Node) Tell(ctx context.Context, request *pbNode.Request) (*pbNode.Response, rpcerr.Err) {
+func (n *Node) Tell(ctx context.Context, request *pbNode.Request) (*pbNode.Response, *rpc.Error) {
 	if _, err := n.handle(ctx, request, false); err != nil {
-		return nil, rpcerr.Wrap(err)
+		return nil, rpc.FromError(err)
 	}
-	return &pbNode.Response{NodeServiceName: n.instance.ServiceName, NodeInstanceId: n.instance.ID}, nil
+	return &pbNode.Response{NodeServiceName: n.instance.ServiceName, NodeInstanceId: n.instance.Id}, nil
 }
 
 func (n *Node) handle(ctx context.Context, request *pbNode.Request, needReply bool) (*Context, error) {
-	if request == nil || request.Uid == 0 || request.Route == 0 || request.GateServiceName != locator.GateName || request.GateInstanceId == "" {
-		return nil, status.Error(codes.InvalidArgument, "node: 请求参数无效")
+	if request.Uid == 0 || request.Route == 0 || request.GateServiceName != locator.GateName || request.GateInstanceId == "" {
+		return nil, rpc.NewError(rpc.CodeInvalidArgument, "node: 请求参数无效")
 	}
 
 	nodeContext := &Context{
@@ -43,30 +39,20 @@ func (n *Node) handle(ctx context.Context, request *pbNode.Request, needReply bo
 		App:     n,
 		Request: &Request{
 			Route:           request.Route,
-			UID:             request.Uid,
+			Uid:             request.Uid,
 			Body:            request.Body,
 			GateServiceName: request.GateServiceName,
-			GateInstanceID:  request.GateInstanceId,
+			GateInstanceId:  request.GateInstanceId,
 			ActorKey:        request.ActorKey,
 			NeedReply:       needReply,
 		},
 	}
 
-	var dispatchErr error
-	if help.SafeRun(func() {
-		dispatchErr = n.router.Dispatch(nodeContext)
-	}) {
-		return nil, status.Error(codes.Internal, "node: Handler执行失败")
-	}
-	if dispatchErr != nil {
-		var rpcError rpc.CodedError
-		if errors.As(dispatchErr, &rpcError) {
-			return nil, dispatchErr
+	if err := n.router.Dispatch(nodeContext); err != nil {
+		if errors.Is(err, ErrRouteNotFound) {
+			return nil, rpc.NewError(rpc.CodeNotFound, "node: route不存在")
 		}
-		if errors.Is(dispatchErr, ErrRouteNotFound) {
-			return nil, status.Error(codes.NotFound, "node: route不存在")
-		}
-		return nil, status.Error(codes.Internal, "node: 请求处理失败")
+		return nil, err
 	}
 	return nodeContext, nil
 }
