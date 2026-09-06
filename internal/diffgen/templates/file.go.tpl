@@ -53,4 +53,48 @@ func (value *{{$typeName}}) {{.Name}}() *{{.RuntimeType}} {
 }
 {{end}}
 {{end}}
+// Snapshot 导出独立的全量 Proto，不修改对象和变更记录。
+func (value *{{.Name}}) Snapshot() *pbData.{{.Name}} {
+    snapshot := &pbData.{{.Name}}{
+{{range .Fields}}
+{{- if eq .Kind "primitive"}}
+        {{.ProtoGoName}}: {{if ne .ValueType .ProtoGoType}}{{.ProtoGoType}}({{end}}value.{{.RuntimeName}}.GetValue(){{if ne .ValueType .ProtoGoType}}){{end}},
+{{- end}}
+{{end}}
+    }
+{{range .Fields}}
+{{- if eq .Kind "pointer"}}
+    if child := value.{{.RuntimeName}}.GetValue(); child != nil {
+        snapshot.{{.ProtoGoName}} = child.Snapshot()
+    }
+{{- else if or (eq .Kind "primitiveMap") (eq .Kind "pointerMap")}}
+    if value.{{.RuntimeName}}.Len() != 0 {
+        snapshot.{{.ProtoGoName}} = make(map[{{.ProtoKeyType}}]{{.ProtoGoType}}, value.{{.RuntimeName}}.Len())
+        value.{{.RuntimeName}}.Range(func(key {{.KeyType}}, fieldValue {{.ValueType}}) bool {
+{{- if eq .Kind "pointerMap"}}
+            snapshot.{{.ProtoGoName}}[{{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = fieldValue.Snapshot()
+{{- else}}
+            snapshot.{{.ProtoGoName}}[{{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = {{if ne .ValueType .ProtoGoType}}{{.ProtoGoType}}({{end}}fieldValue{{if ne .ValueType .ProtoGoType}}){{end}}
+{{- end}}
+            return true
+        })
+    }
+{{- else if or (eq .Kind "primitiveSlice") (eq .Kind "pointerSlice")}}
+    if value.{{.RuntimeName}}.Len() != 0 {
+        snapshot.{{.ProtoGoName}} = make([]{{.ProtoGoType}}, value.{{.RuntimeName}}.Len())
+        for index := range snapshot.{{.ProtoGoName}} {
+            fieldValue := value.{{.RuntimeName}}.GetValue(index)
+{{- if eq .Kind "pointerSlice"}}
+            if fieldValue != nil {
+                snapshot.{{.ProtoGoName}}[index] = fieldValue.Snapshot()
+            }
+{{- else}}
+            snapshot.{{.ProtoGoName}}[index] = {{if ne .ValueType .ProtoGoType}}{{.ProtoGoType}}({{end}}fieldValue{{if ne .ValueType .ProtoGoType}}){{end}}
+{{- end}}
+        }
+    }
+{{- end}}
+{{end}}
+    return snapshot
+}
 {{end}}

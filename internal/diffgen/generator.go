@@ -59,6 +59,8 @@ type dataField struct {
 	ProtoType    string
 	ProtoKeyType string
 	ProtoName    string
+	ProtoGoName  string
+	ProtoGoType  string
 
 	key   types.Type
 	value types.Type
@@ -105,7 +107,8 @@ func Generate(dir, protoDir string) error {
 			GoPackage:   pkg.Module.Path + "/pb/" + pkg.Name,
 		}
 		packageImports := map[string]string{
-			diffPackagePath: "diff",
+			diffPackagePath:  "diff",
+			source.GoPackage: "pbData",
 		}
 		typeString := func(value types.Type) string {
 			return types.TypeString(value, func(valuePkg *types.Package) string {
@@ -174,6 +177,7 @@ func Generate(dir, protoDir string) error {
 					}
 
 					model.RuntimeName = string(model.RuntimeName[0]+'a'-'A') + model.RuntimeName[1:]
+					model.ProtoGoName = strcase.UpperCamelCase(model.ProtoName)
 
 					switch fieldType := types.Unalias(field.Type()).(type) {
 					case *types.Basic:
@@ -241,14 +245,28 @@ func Generate(dir, protoDir string) error {
 
 						model.ProtoType = named.Obj().Name()
 						targetPackage := named.Obj().Pkg()
+						model.ProtoGoType = "*pbData." + named.Obj().Name()
 						if targetPackage.Path() != pkg.PkgPath {
 							model.ProtoType = targetPackage.Name() + "." + model.ProtoType
+							if model.Kind != pointerKind {
+								alias := "pb" + targetPackage.Name()
+								packageImports[pkg.Module.Path+"/pb/"+targetPackage.Name()] = alias
+								model.ProtoGoType = "*" + alias + "." + named.Obj().Name()
+							}
 						}
 						targetPath := fileSet.Position(named.Obj().Pos()).Filename
 						if targetPath != sourcePath {
 							protoName := strings.TrimSuffix(filepath.Base(targetPath), ".go") + ".proto"
 							importPath := filepath.ToSlash(filepath.Join(targetPackage.Name(), protoName))
 							protoImports[importPath] = struct{}{}
+						}
+					default:
+						model.ProtoGoType = model.ProtoType
+						switch model.ProtoType {
+						case "float":
+							model.ProtoGoType = "float32"
+						case "double":
+							model.ProtoGoType = "float64"
 						}
 					}
 
