@@ -3,26 +3,29 @@ package diffgen
 import (
 	"bytes"
 	"embed"
-	"fmt"
 	"go/ast"
 	"go/format"
 	"go/token"
 	"go/types"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"text/template"
 
 	"github.com/spf13/cast"
+	"github.com/stoewer/go-strcase"
 	"golang.org/x/tools/go/packages"
 )
 
 const diffPackagePath = "github.com/2comjie/nova/diff"
 
-//go:embed templates/file.go.tpl
+//go:embed templates/*.tpl
 var templateFile embed.FS
 
 var codeTemplate = template.Must(
-	template.ParseFS(templateFile, "templates/file.go.tpl"),
+	template.ParseFS(templateFile, "templates/*.tpl"),
 )
 
 type fieldKind string
@@ -51,15 +54,22 @@ type dataField struct {
 	ValueType   string
 	ElementType string
 	RuntimeType string
+	Tag         string
+
+	ProtoType    string
+	ProtoKeyType string
+	ProtoName    string
 
 	key   types.Type
 	value types.Type
 }
 
 type sourceFile struct {
-	PackageName string
-	Imports     []sourceImport
-	Types       []dataType
+	PackageName  string
+	GoPackage    string
+	Imports      []sourceImport
+	ProtoImports []string
+	Types        []dataType
 }
 
 type sourceImport struct {
@@ -67,7 +77,7 @@ type sourceImport struct {
 	Path  string
 }
 
-func Generate(dir string) error {
+func Generate(dir, protoDir string) error {
 	fileSet := token.NewFileSet()
 
 	// 加载目录
@@ -88,8 +98,11 @@ func Generate(dir string) error {
 	}
 
 	for _, file := range pkg.Syntax {
+		sourcePath := fileSet.Position(file.Pos()).Filename
+		protoImports := make(map[string]struct{})
 		source := sourceFile{
 			PackageName: pkg.Name,
+			GoPackage:   pkg.Module.Path + "/pb/" + pkg.Name,
 		}
 		packageImports := map[string]string{
 			diffPackagePath: "diff",
@@ -156,6 +169,8 @@ func Generate(dir string) error {
 						Name:        field.Name(),
 						RuntimeName: field.Name(),
 						DiffIndex:   diffIndex,
+						Tag:         structure.Tag(index),
+						ProtoName:   strcase.SnakeCase(field.Name()),
 					}
 
 					model.RuntimeName = string(model.RuntimeName[0]+'a'-'A') + model.RuntimeName[1:]
@@ -166,6 +181,8 @@ func Generate(dir string) error {
 						model.value = fieldType
 						model.ValueType = typeString(fieldType)
 						model.RuntimeType = "diff.Primitive[" + model.ValueType + "]"
+
+						model.ProtoType = protoScalarType(fieldType)
 
 					case *types.Pointer:
 						model.Kind = pointerKind
@@ -180,15 +197,20 @@ func Generate(dir string) error {
 						model.KeyType = typeString(fieldType.Key())
 						model.ValueType = typeString(fieldType.Elem())
 
+						model.ProtoKeyType = protoScalarType(fieldType.Key())
+						switch model.ProtoKeyType {
+						case "float", "double":
+							panic("diffgen: Proto map 的 key 不支持浮点类型")
+						}
+
 						if pointer, ok := types.Unalias(fieldType.Elem()).(*types.Pointer); ok {
 							model.Kind = pointerMapKind
 							model.ElementType = typeString(pointer.Elem())
-							model.RuntimeType = "diff.PointerMap[" +
-								model.KeyType + ", " + model.ValueType + "]"
+							model.RuntimeType = "diff.PointerMap[" + model.KeyType + ", " + model.ValueType + "]"
 						} else {
 							model.Kind = primitiveMapKind
-							model.RuntimeType = "diff.PrimitiveMap[" +
-								model.KeyType + ", " + model.ValueType + "]"
+							model.RuntimeType = "diff.PrimitiveMap[" + model.KeyType + ", " + model.ValueType + "]"
+							model.ProtoType = protoScalarType(fieldType.Elem())
 						}
 
 					case *types.Slice:
@@ -198,16 +220,36 @@ func Generate(dir string) error {
 						if pointer, ok := types.Unalias(fieldType.Elem()).(*types.Pointer); ok {
 							model.Kind = pointerSliceKind
 							model.ElementType = typeString(pointer.Elem())
-							model.RuntimeType =
-								"diff.PointerSlice[" + model.ValueType + "]"
+							model.RuntimeType = "diff.PointerSlice[" + model.ValueType + "]"
 						} else {
 							model.Kind = primitiveSliceKind
-							model.RuntimeType =
-								"diff.PrimitiveSlice[" + model.ValueType + "]"
+							model.RuntimeType = "diff.PrimitiveSlice[" + model.ValueType + "]"
+							model.ProtoType = protoScalarType(fieldType.Elem())
 						}
 
 					default:
 						panic("diffgen: 不支持的字段类型")
+					}
+
+					switch model.Kind {
+					case pointerKind, pointerMapKind, pointerSliceKind:
+						pointer := types.Unalias(model.value).(*types.Pointer)
+						named := types.Unalias(pointer.Elem()).(*types.Named)
+						if _, ok := named.Underlying().(*types.Struct); !ok {
+							panic("diffgen: 对象指针必须指向结构体 " + named.String())
+						}
+
+						model.ProtoType = named.Obj().Name()
+						targetPackage := named.Obj().Pkg()
+						if targetPackage.Path() != pkg.PkgPath {
+							model.ProtoType = targetPackage.Name() + "." + model.ProtoType
+						}
+						targetPath := fileSet.Position(named.Obj().Pos()).Filename
+						if targetPath != sourcePath {
+							protoName := strings.TrimSuffix(filepath.Base(targetPath), ".go") + ".proto"
+							importPath := filepath.ToSlash(filepath.Join(targetPackage.Name(), protoName))
+							protoImports[importPath] = struct{}{}
+						}
 					}
 
 					data.Fields = append(data.Fields, model)
@@ -233,6 +275,11 @@ func Generate(dir string) error {
 			continue
 		}
 
+		for importPath := range protoImports {
+			source.ProtoImports = append(source.ProtoImports, importPath)
+		}
+		sort.Strings(source.ProtoImports)
+
 		var output bytes.Buffer
 		if err := codeTemplate.ExecuteTemplate(&output, "file.go.tpl", source); err != nil {
 			return err
@@ -241,8 +288,51 @@ func Generate(dir string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println(string(code))
+
+		outputPath := strings.TrimSuffix(sourcePath, ".go") + "_diff.gen.go"
+
+		if err := os.WriteFile(outputPath, code, 0644); err != nil {
+			return err
+		}
+
+		output.Reset()
+		if err := codeTemplate.ExecuteTemplate(&output, "file.proto.tpl", source); err != nil {
+			return err
+		}
+
+		protoName := strings.TrimSuffix(filepath.Base(sourcePath), ".go") + ".proto"
+		protoPath := filepath.Join(protoDir, pkg.Name, protoName)
+
+		if err := os.MkdirAll(filepath.Dir(protoPath), 0755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(protoPath, output.Bytes(), 0644); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+func protoScalarType(value types.Type) string {
+	switch value.Underlying().(*types.Basic).Kind() {
+	case types.Bool:
+		return "bool"
+	case types.String:
+		return "string"
+	case types.Int8, types.Int16, types.Int32:
+		return "int32"
+	case types.Int, types.Int64:
+		return "int64"
+	case types.Uint8, types.Uint16, types.Uint32:
+		return "uint32"
+	case types.Uint, types.Uint64:
+		return "uint64"
+	case types.Float32:
+		return "float"
+	case types.Float64:
+		return "double"
+	default:
+		panic("diffgen: 不支持的 Proto 基础类型 " + value.String())
+	}
 }

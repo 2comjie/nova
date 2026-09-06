@@ -9,15 +9,12 @@ import (
 )
 
 func main() {
-	dir := flag.String("dir", ".", "需要生成diff代码的Go包目录")
+	dir := flag.String("dir", ".", "Go 模型目录")
+	protoDir := flag.String("proto-dir", "./proto", "Proto 输出根目录")
 	flag.Parse()
 
-	files, err := diffgen.Generate(*dir)
-	if err != nil {
+	if err := diffgen.Generate(*dir, *protoDir); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
-	}
-	for _, file := range files {
-		fmt.Println(file)
 	}
 }
