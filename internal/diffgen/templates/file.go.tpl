@@ -97,4 +97,63 @@ func (value *{{.Name}}) Snapshot() *pbData.{{.Name}} {
 {{end}}
     return snapshot
 }
+
+// LoadSnapshot 加载全量基线并恢复父子链接，不记录增量。
+// snapshot 必须非空；已有待提交变化由调用方在重置基线前处理。
+func (value *{{.Name}}) LoadSnapshot(snapshot *pbData.{{.Name}}) {
+    value.InitLink(nil)
+{{range .Fields}}
+{{- if eq .Kind "primitive"}}
+    value.{{.RuntimeName}}.LoadSnapshot({{if ne .ValueType .ProtoGoType}}{{.ValueType}}({{end}}snapshot.{{.ProtoGoName}}{{if ne .ValueType .ProtoGoType}}){{end}})
+{{- else if eq .Kind "pointer"}}
+    {
+        var child {{.ValueType}}
+        if snapshot.{{.ProtoGoName}} != nil {
+            child = new({{.ElementType}})
+            child.LoadSnapshot(snapshot.{{.ProtoGoName}})
+        }
+        value.{{.RuntimeName}}.LoadSnapshot(child)
+    }
+{{- else if or (eq .Kind "primitiveMap") (eq .Kind "pointerMap")}}
+    {
+        var values map[{{.KeyType}}]{{.ValueType}}
+        if len(snapshot.{{.ProtoGoName}}) != 0 {
+            values = make(map[{{.KeyType}}]{{.ValueType}}, len(snapshot.{{.ProtoGoName}}))
+            for key, fieldValue := range snapshot.{{.ProtoGoName}} {
+{{- if eq .Kind "pointerMap"}}
+                child := new({{.ElementType}})
+                if fieldValue != nil {
+                    child.LoadSnapshot(fieldValue)
+                }
+                values[{{if ne .KeyType .ProtoKeyType}}{{.KeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = child
+{{- else}}
+                values[{{if ne .KeyType .ProtoKeyType}}{{.KeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = {{if ne .ValueType .ProtoGoType}}{{.ValueType}}({{end}}fieldValue{{if ne .ValueType .ProtoGoType}}){{end}}
+{{- end}}
+            }
+        }
+        value.{{.RuntimeName}}.LoadSnapshot(values)
+    }
+{{- else if or (eq .Kind "primitiveSlice") (eq .Kind "pointerSlice")}}
+    {
+        var values []{{.ValueType}}
+        if len(snapshot.{{.ProtoGoName}}) != 0 {
+            values = make([]{{.ValueType}}, len(snapshot.{{.ProtoGoName}}))
+            for index, fieldValue := range snapshot.{{.ProtoGoName}} {
+{{- if eq .Kind "pointerSlice"}}
+                if fieldValue != nil {
+                    child := new({{.ElementType}})
+                    child.LoadSnapshot(fieldValue)
+                    values[index] = child
+                }
+{{- else}}
+                values[index] = {{if ne .ValueType .ProtoGoType}}{{.ValueType}}({{end}}fieldValue{{if ne .ValueType .ProtoGoType}}){{end}}
+{{- end}}
+            }
+        }
+        value.{{.RuntimeName}}.LoadSnapshot(values)
+    }
+{{- end}}
+{{end}}
+}
+{{template "updates" .}}
 {{end}}

@@ -5,14 +5,33 @@
 package item
 
 import (
-	"github.com/2comjie/nova/diff"
-	_pbData "github.com/2comjie/nova/examples/diff_app/item/pb"
+	diff "github.com/2comjie/nova/diff"
+
+	pbData "github.com/2comjie/nova/examples/pb/item"
 )
 
 type Item struct {
 	diff.Object
-	itemId diff.Primitive[uint64]
-	count  diff.Primitive[int32]
+
+	itemId diff.Primitive[uint64] `diff:"1"`
+
+	count diff.Primitive[int32] `diff:"2"`
+}
+
+func (value *Item) InitLink(writer *diff.Writer) {
+	if value.Object.Initialized() {
+		if writer != nil {
+			value.Object.Init(writer)
+		}
+		return
+	}
+
+	value.Object.Init(writer)
+
+	value.itemId.Init(&value.Object, 1)
+
+	value.count.Init(&value.Object, 2)
+
 }
 
 func (value *Item) GetItemId() uint64 {
@@ -33,61 +52,60 @@ func (value *Item) SetCount(fieldValue int32) bool {
 	return value.count.SetValue(fieldValue)
 }
 
-func (value *Item) InitLink(writer *diff.Writer) {
-	if value.Object.Initialized() {
-		if writer != nil {
-			value.Object.Init(writer)
-		}
-		return
-	}
-	value.Object.Init(writer)
-	value.itemId.Init(&value.Object, 1)
-	value.count.Init(&value.Object, 2)
-}
+// Snapshot 导出独立的全量 Proto，不修改对象和变更记录。
+func (value *Item) Snapshot() *pbData.Item {
+	snapshot := &pbData.Item{
 
-func (value *Item) Snapshot() *_pbData.Item {
-	snapshot := new(_pbData.Item)
-	snapshot.ItemId = value.itemId.GetValue()
-	snapshot.Count = value.count.GetValue()
+		ItemId: value.itemId.GetValue(),
+
+		Count: value.count.GetValue(),
+	}
+
 	return snapshot
 }
 
-func (value *Item) LoadSnapshot(snapshot *_pbData.Item) {
+// LoadSnapshot 加载全量基线并恢复父子链接，不记录增量。
+// snapshot 必须非空；已有待提交变化由调用方在重置基线前处理。
+func (value *Item) LoadSnapshot(snapshot *pbData.Item) {
 	value.InitLink(nil)
-	value.itemId.SetValue(snapshot.GetItemId())
-	value.count.SetValue(snapshot.GetCount())
+
+	value.itemId.LoadSnapshot(snapshot.ItemId)
+
+	value.count.LoadSnapshot(snapshot.Count)
+
 }
 
-func (value *Item) NewUpdate() *_pbData.Item {
-	return new(_pbData.Item)
+// Commit 导出本轮增量并清空 Writer；返回值独立于运行时对象。
+func (value *Item) Commit() *pbData.Item {
+	return value.Object.Commit(new(pbData.Item), value.WriteUpdate)
 }
 
-func (value *Item) Commit() *_pbData.Item {
-	return value.Object.Commit(value.NewUpdate(), value.WriteUpdate)
-}
-
-func (value *Item) WriteUpdate(update *_pbData.Item, path diff.Path, operation diff.Operation, data any) {
+// WriteUpdate 将 Writer 的内部变更转换为有类型的 Proto 字段。
+func (value *Item) WriteUpdate(update *pbData.Item, path diff.Path, operation diff.Operation, data any) {
 	node := path[0]
 	switch node.FieldIndex {
+
 	case 1:
 		fieldValue := data.(uint64)
 		update.ItemIdUpdate = &fieldValue
-		return
 
 	case 2:
 		fieldValue := data.(int32)
 		update.CountUpdate = &fieldValue
-		return
 
 	}
 }
 
-func (value *Item) Merge(update *_pbData.Item) {
+// Merge 按序应用增量。对象必须已加载对应基线；绑定 Writer 时会记录本地变化。
+func (value *Item) Merge(update *pbData.Item) {
 	value.InitLink(nil)
+
 	if update.ItemIdUpdate != nil {
-		value.itemId.SetValue(update.GetItemIdUpdate())
+		value.itemId.SetValue(*update.ItemIdUpdate)
 	}
+
 	if update.CountUpdate != nil {
-		value.count.SetValue(update.GetCountUpdate())
+		value.count.SetValue(*update.CountUpdate)
 	}
+
 }

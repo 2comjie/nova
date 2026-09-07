@@ -1,0 +1,273 @@
+package external
+
+import (
+	"bytes"
+	"math/rand/v2"
+	"testing"
+
+	"github.com/2comjie/nova/diff"
+	"github.com/2comjie/nova/internal/diffgen/testdata/basic"
+	pbBasic "github.com/2comjie/nova/pb/basic"
+	pbExternal "github.com/2comjie/nova/pb/external"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+)
+
+func TestFieldNumbers(t *testing.T) {
+	fields := new(pbBasic.Model).ProtoReflect().Descriptor().Fields()
+	for name, number := range map[protoreflect.Name]protoreflect.FieldNumber{
+		"level": 1, "level_update": 1001,
+		"scores": 2, "scores_clear": 1002, "scores_set": 2002, "scores_delete": 3002,
+		"child": 3, "child_set": 1003, "child_clear": 2003, "child_update": 3003,
+		"children": 4, "children_clear": 1004, "children_set": 2004, "children_delete": 3004, "children_update": 4004,
+		"order": 5, "order_updated": 1005, "order_update": 2005,
+	} {
+		if field := fields.ByName(name); field == nil || field.Number() != number {
+			t.Fatalf("incorrect field number: %s", name)
+		}
+	}
+	if !fields.ByName("level_update").HasPresence() ||
+		fields.ByName("child_set").ContainingOneof() != fields.ByName("child_clear").ContainingOneof() {
+		t.Fatal("delta presence or pointer oneof missing")
+	}
+}
+
+func TestLoadSnapshot(t *testing.T) {
+	input := &pbExternal.Model{
+		Child:    &pbBasic.Child{Count: 7},
+		Children: map[uint64]*pbBasic.Child{1: {Count: 8}, 2: nil},
+		Order:    []*pbBasic.Child{{Count: 9}, nil},
+		Basic:    &pbBasic.Model{Level: 20, Scores: map[uint64]int32{1: 30}, Child: &pbBasic.Child{Count: 10}},
+	}
+	value := new(Model)
+	writer := diff.NewWriter()
+	value.InitLink(writer)
+	value.LoadSnapshot(input)
+	if writer.Len() != 0 || !proto.Equal(input, value.Snapshot()) {
+		t.Fatal("loading must restore full state without patches", value.Snapshot())
+	}
+	input.Child.Count = 100
+	input.Children[1].Count = 200
+	input.Order[0].Count = 300
+	input.Basic.Scores[1] = 400
+	if value.GetChild().GetCount() != 7 || value.Order().GetValue(0).GetCount() != 9 {
+		t.Fatal("loaded objects alias protobuf messages")
+	}
+	child, _ := value.Children().Load(1)
+	score, _ := value.GetBasic().Scores().Load(1)
+	if child.GetCount() != 8 || score != 30 {
+		t.Fatal("loaded maps alias protobuf maps")
+	}
+	value.GetChild().SetCount(11)
+	child.SetCount(12)
+	value.Order().GetValue(0).SetCount(13)
+	value.GetBasic().GetChild().SetCount(14)
+	if writer.Len() != 4 {
+		t.Fatalf("loaded links lost changes: %d", writer.Len())
+	}
+	update := value.Commit()
+	if update.GetChildUpdate().GetCountUpdate() != 11 ||
+		update.ChildrenUpdate[1].GetCountUpdate() != 12 ||
+		!update.OrderUpdated || update.OrderUpdate[0].Count != 13 ||
+		update.GetBasicUpdate().GetChildUpdate().GetCountUpdate() != 14 {
+		t.Fatal("loaded links produced wrong paths", update)
+	}
+
+	// Replacing a baseline detaches only this object's old links.
+	oldChild := value.GetChild()
+	other := new(basic.Model)
+	otherWriter := diff.NewWriter()
+	other.InitLink(otherWriter)
+	other.SetChild(oldChild)
+	otherWriter.Reset()
+	oldMapChild, _ := value.Children().Load(1)
+	oldSliceChild := value.Order().GetValue(0)
+	value.LoadSnapshot(new(pbExternal.Model))
+	oldChild.SetCount(21)
+	oldMapChild.SetCount(22)
+	oldSliceChild.SetCount(23)
+	if writer.Len() != 0 || otherWriter.Len() != 1 || !proto.Equal(value.Snapshot(), new(pbExternal.Model)) {
+		t.Fatal("baseline replacement retained stale links or detached another parent")
+	}
+}
+
+func TestScalarAndCollectionLoad(t *testing.T) {
+	scalarInput := &pbBasic.Scalars{
+		Enabled: true, Name: "test", I: -1, I8: -128, I16: -32768,
+		I32: -2147483648, I64: -9223372036854775808,
+		U: 1, U8: 255, U16: 65535, U32: 4294967295, U64: 18446744073709551615,
+		F32: 1.5, F64: 2.25,
+	}
+	scalars := new(basic.Scalars)
+	scalars.LoadSnapshot(scalarInput)
+	if !proto.Equal(scalarInput, scalars.Snapshot()) {
+		t.Fatal("scalar load changed values")
+	}
+	writer := diff.NewWriter()
+	scalars.InitLink(writer)
+	scalars.SetEnabled(false)
+	scalars.SetName("")
+	scalars.SetI8(0)
+	update := scalars.Commit()
+	if update.EnabledUpdate == nil || *update.EnabledUpdate || update.NameUpdate == nil ||
+		*update.NameUpdate != "" || update.I8Update == nil || *update.I8Update != 0 {
+		t.Fatal("zero updates lost presence", update)
+	}
+	replica := new(basic.Scalars)
+	replica.LoadSnapshot(scalarInput)
+	replica.Merge(update)
+	if !proto.Equal(scalars.Snapshot(), replica.Snapshot()) {
+		t.Fatal("scalar zero updates were not applied")
+	}
+
+	input := &pbBasic.Collections{
+		Signed: map[int32]int32{-128: -32768}, Unsigned: map[uint32]uint32{65535: 255},
+		Flags: map[bool]string{false: "", true: "yes"}, Floats: map[string]float32{"x": 1.5},
+		Doubles: []float64{2.25}, Counts: []int64{-9}, Bytes: []uint32{255},
+	}
+	value := new(basic.Collections)
+	value.Runtime = "preserved"
+	value.InitLink(writer)
+	value.LoadSnapshot(input)
+	if writer.Len() != 0 || !proto.Equal(input, value.Snapshot()) || value.Runtime != "preserved" {
+		t.Fatal("collection load changed values, runtime fields or writer")
+	}
+	input.Doubles[0] = 9
+	input.Signed[-128] = 1
+	signed, _ := value.Signed().Load(-128)
+	if value.Doubles().GetValue(0) != 2.25 || signed != -32768 {
+		t.Fatal("loaded collections alias input")
+	}
+	collectionReplica := new(basic.Collections)
+	collectionReplica.LoadSnapshot(value.Snapshot())
+	value.Signed().Clear()
+	value.Signed().Store(-1, 5)
+	value.Unsigned().Delete(65535)
+	value.Flags().Store(false, "changed")
+	value.Floats().Store("x", 9.5)
+	value.Doubles().Clear()
+	value.Counts().Append(10)
+	value.Bytes().SetValue(0, 0)
+	collectionUpdate := value.Commit()
+	body, err := proto.Marshal(collectionUpdate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded := new(pbBasic.Collections)
+	if err := proto.Unmarshal(body, decoded); err != nil {
+		t.Fatal(err)
+	}
+	collectionReplica.Merge(decoded)
+	if !proto.Equal(value.Snapshot(), collectionReplica.Snapshot()) {
+		t.Fatal("collection delta mismatch", decoded)
+	}
+	value.LoadSnapshot(new(pbBasic.Collections))
+	if !proto.Equal(value.Snapshot(), new(pbBasic.Collections)) || writer.Len() != 0 || value.Runtime != "preserved" {
+		t.Fatal("empty baseline did not clear collections or runtime data was lost")
+	}
+}
+
+func TestDeltaRoundTrip(t *testing.T) {
+	random := rand.New(rand.NewPCG(17, 29))
+	source := new(basic.Model)
+	writer := diff.NewWriter()
+	source.InitLink(writer)
+	replica := new(basic.Model)
+	replica.LoadSnapshot(source.Snapshot())
+	var previous *pbBasic.Model
+	var previousBytes []byte
+	marshal := proto.MarshalOptions{Deterministic: true}
+	for frame := 0; frame < 500; frame++ {
+		for action := 0; action < 8; action++ {
+			key := uint64(random.IntN(4))
+			count := int32(random.IntN(20))
+			switch random.IntN(18) {
+			case 0:
+				source.SetLevel(count)
+			case 1:
+				child := new(basic.Child)
+				child.SetCount(count)
+				source.SetChild(child)
+			case 2:
+				source.SetChild(nil)
+			case 3:
+				if source.GetChild() != nil {
+					source.GetChild().SetCount(count)
+				}
+			case 4:
+				source.Scores().Store(key, count)
+			case 5:
+				source.Scores().Delete(key)
+			case 6:
+				source.Scores().Clear()
+			case 7:
+				child := new(basic.Child)
+				child.SetCount(count)
+				source.Children().Store(key, child)
+			case 8:
+				source.Children().Delete(key)
+			case 9:
+				source.Children().Clear()
+			case 10:
+				if child, exists := source.Children().Load(key); exists {
+					child.SetCount(count)
+				}
+			case 11:
+				child := new(basic.Child)
+				child.SetCount(count)
+				source.Order().Append(child)
+			case 12:
+				source.Order().Append(nil)
+			case 13:
+				source.Order().Clear()
+			case 14:
+				if size := source.Order().Len(); size != 0 {
+					source.Order().Delete(random.IntN(size))
+				}
+			case 15:
+				if size := source.Order().Len(); size != 0 {
+					source.Order().Move(0, size-1)
+				}
+			case 16:
+				if size := source.Order().Len(); size != 0 {
+					if child := source.Order().GetValue(random.IntN(size)); child != nil {
+						child.SetCount(count)
+					}
+				}
+			case 17:
+				child := new(basic.Child)
+				child.SetCount(count)
+				source.SetChild(child)
+				source.Children().Store(key, child)
+				source.Order().Append(child)
+				child.SetCount(count + 1)
+			}
+		}
+		if previous != nil {
+			body, err := marshal.Marshal(previous)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(body, previousBytes) {
+				t.Fatalf("frame %d mutated committed delta", frame)
+			}
+		}
+		update := source.Commit()
+		body, err := marshal.Marshal(update)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded := new(pbBasic.Model)
+		if err := proto.Unmarshal(body, decoded); err != nil {
+			t.Fatal(err)
+		}
+		replica.Merge(decoded)
+		if !proto.Equal(source.Snapshot(), replica.Snapshot()) {
+			t.Fatalf("frame %d mismatch\nsource: %v\nreplica: %v\nupdate: %v", frame, source.Snapshot(), replica.Snapshot(), decoded)
+		}
+		if writer.Len() != 0 || proto.Size(source.Commit()) != 0 {
+			t.Fatal("commit retained old changes")
+		}
+		previous, previousBytes = update, body
+	}
+}

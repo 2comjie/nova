@@ -5,15 +5,37 @@
 package bag
 
 import (
-	"github.com/2comjie/nova/diff"
-	_pbData "github.com/2comjie/nova/examples/diff_app/bag/pb"
+	diff "github.com/2comjie/nova/diff"
+
 	item "github.com/2comjie/nova/examples/diff_app/item"
+
+	pbData "github.com/2comjie/nova/examples/pb/bag"
+
+	pbitem "github.com/2comjie/nova/examples/pb/item"
 )
 
 type Bag struct {
 	diff.Object
-	items diff.PointerMap[uint64, *item.Item]
-	order diff.PointerSlice[*item.Item]
+
+	items diff.PointerMap[uint64, *item.Item] `diff:"1"`
+
+	order diff.PointerSlice[*item.Item] `diff:"2"`
+}
+
+func (value *Bag) InitLink(writer *diff.Writer) {
+	if value.Object.Initialized() {
+		if writer != nil {
+			value.Object.Init(writer)
+		}
+		return
+	}
+
+	value.Object.Init(writer)
+
+	value.items.Init(&value.Object, 1)
+
+	value.order.Init(&value.Object, 2)
+
 }
 
 func (value *Bag) Items() *diff.PointerMap[uint64, *item.Item] {
@@ -26,115 +48,145 @@ func (value *Bag) Order() *diff.PointerSlice[*item.Item] {
 	return &value.order
 }
 
-func (value *Bag) InitLink(writer *diff.Writer) {
-	if value.Object.Initialized() {
-		if writer != nil {
-			value.Object.Init(writer)
-		}
-		return
-	}
-	value.Object.Init(writer)
-	value.items.Init(&value.Object, 1)
-	value.order.Init(&value.Object, 2)
-}
+// Snapshot 导出独立的全量 Proto，不修改对象和变更记录。
+func (value *Bag) Snapshot() *pbData.Bag {
+	snapshot := &pbData.Bag{}
 
-func (value *Bag) Snapshot() *_pbData.Bag {
-	snapshot := new(_pbData.Bag)
-	value.items.Range(func(key uint64, child *item.Item) bool {
-		diff.SetMap(&snapshot.Items, key, child.Snapshot())
-		return true
-	})
-	value.order.Range(func(_ int, child *item.Item) bool {
-		snapshot.Order = append(snapshot.Order, child.Snapshot())
-		return true
-	})
+	if value.items.Len() != 0 {
+		snapshot.Items = make(map[uint64]*pbitem.Item, value.items.Len())
+		value.items.Range(func(key uint64, fieldValue *item.Item) bool {
+			snapshot.Items[key] = fieldValue.Snapshot()
+			return true
+		})
+	}
+
+	if value.order.Len() != 0 {
+		snapshot.Order = make([]*pbitem.Item, value.order.Len())
+		for index := range snapshot.Order {
+			fieldValue := value.order.GetValue(index)
+			if fieldValue != nil {
+				snapshot.Order[index] = fieldValue.Snapshot()
+			}
+		}
+	}
+
 	return snapshot
 }
 
-func (value *Bag) LoadSnapshot(snapshot *_pbData.Bag) {
+// LoadSnapshot 加载全量基线并恢复父子链接，不记录增量。
+// snapshot 必须非空；已有待提交变化由调用方在重置基线前处理。
+func (value *Bag) LoadSnapshot(snapshot *pbData.Bag) {
 	value.InitLink(nil)
-	value.items.Clear()
-	for key, fieldValue := range snapshot.GetItems() {
-		child := new(item.Item)
-		child.LoadSnapshot(fieldValue)
-		value.items.Store(key, child)
+
+	{
+		var values map[uint64]*item.Item
+		if len(snapshot.Items) != 0 {
+			values = make(map[uint64]*item.Item, len(snapshot.Items))
+			for key, fieldValue := range snapshot.Items {
+				child := new(item.Item)
+				if fieldValue != nil {
+					child.LoadSnapshot(fieldValue)
+				}
+				values[key] = child
+			}
+		}
+		value.items.LoadSnapshot(values)
 	}
-	value.order.Clear()
-	for _, fieldValue := range snapshot.GetOrder() {
-		child := new(item.Item)
-		child.LoadSnapshot(fieldValue)
-		value.order.Append(child)
+
+	{
+		var values []*item.Item
+		if len(snapshot.Order) != 0 {
+			values = make([]*item.Item, len(snapshot.Order))
+			for index, fieldValue := range snapshot.Order {
+				if fieldValue != nil {
+					child := new(item.Item)
+					child.LoadSnapshot(fieldValue)
+					values[index] = child
+				}
+			}
+		}
+		value.order.LoadSnapshot(values)
 	}
+
 }
 
-func (value *Bag) NewUpdate() *_pbData.Bag {
-	return new(_pbData.Bag)
+// Commit 导出本轮增量并清空 Writer；返回值独立于运行时对象。
+func (value *Bag) Commit() *pbData.Bag {
+	return value.Object.Commit(new(pbData.Bag), value.WriteUpdate)
 }
 
-func (value *Bag) Commit() *_pbData.Bag {
-	return value.Object.Commit(value.NewUpdate(), value.WriteUpdate)
-}
-
-func (value *Bag) WriteUpdate(update *_pbData.Bag, path diff.Path, operation diff.Operation, data any) {
+// WriteUpdate 将 Writer 的内部变更转换为有类型的 Proto 字段。
+func (value *Bag) WriteUpdate(update *pbData.Bag, path diff.Path, operation diff.Operation, data any) {
 	node := path[0]
 	switch node.FieldIndex {
+
 	case 1:
 		if node.KeyType == diff.PathField {
 			update.ItemsClear = true
 			return
 		}
 		key := node.MapKey.(uint64)
-		if len(path) == 1 {
-			if operation == diff.MapSet {
-				diff.SetMap(&update.ItemsSet, key, data.(*item.Item).Snapshot())
-			} else {
-				update.ItemsDelete = append(update.ItemsDelete, key)
+		if len(path) > 1 {
+			child, _ := value.items.Load(key)
+			childUpdate := update.ItemsUpdate[key]
+			if childUpdate == nil {
+				childUpdate = new(pbitem.Item)
+				diff.SetMap(&update.ItemsUpdate, key, childUpdate)
 			}
+			child.WriteUpdate(childUpdate, path[1:], operation, data)
 			return
 		}
-		child, _ := value.items.Load(key)
-		childUpdate := update.ItemsUpdate[key]
-		if childUpdate == nil {
-			childUpdate = child.NewUpdate()
-			diff.SetMap(&update.ItemsUpdate, key, childUpdate)
+		if operation == diff.MapSet {
+			diff.SetMap(&update.ItemsSet, key, data.(*item.Item).Snapshot())
+		} else {
+			update.ItemsDelete = append(update.ItemsDelete, key)
 		}
-		child.WriteUpdate(childUpdate, path[1:], operation, data)
-		return
 
 	case 2:
 		update.OrderUpdated = true
-		update.OrderUpdate = update.OrderUpdate[:0]
-		for _, child := range data.([]*item.Item) {
-			update.OrderUpdate = append(update.OrderUpdate, child.Snapshot())
+		values := data.([]*item.Item)
+		update.OrderUpdate = make([]*pbitem.Item, len(values))
+		for index, fieldValue := range values {
+			if fieldValue != nil {
+				update.OrderUpdate[index] = fieldValue.Snapshot()
+			}
 		}
-		return
 
 	}
 }
 
-func (value *Bag) Merge(update *_pbData.Bag) {
+// Merge 按序应用增量。对象必须已加载对应基线；绑定 Writer 时会记录本地变化。
+func (value *Bag) Merge(update *pbData.Bag) {
 	value.InitLink(nil)
+
 	if update.ItemsClear {
 		value.items.Clear()
 	}
 	for key, fieldValue := range update.ItemsSet {
 		child := new(item.Item)
-		child.LoadSnapshot(fieldValue)
+		if fieldValue != nil {
+			child.LoadSnapshot(fieldValue)
+		}
 		value.items.Store(key, child)
 	}
 	for _, key := range update.ItemsDelete {
 		value.items.Delete(key)
 	}
-	for key, fieldValue := range update.ItemsUpdate {
+	for key, childUpdate := range update.ItemsUpdate {
 		child, _ := value.items.Load(key)
-		child.Merge(fieldValue)
+		child.Merge(childUpdate)
 	}
+
 	if update.OrderUpdated {
 		value.order.Clear()
 		for _, fieldValue := range update.OrderUpdate {
-			child := new(item.Item)
-			child.LoadSnapshot(fieldValue)
+			var child *item.Item
+			if fieldValue != nil {
+				child = new(item.Item)
+				child.LoadSnapshot(fieldValue)
+			}
 			value.order.Append(child)
 		}
 	}
+
 }

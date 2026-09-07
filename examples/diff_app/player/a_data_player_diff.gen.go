@@ -5,21 +5,57 @@
 package player
 
 import (
-	"github.com/2comjie/nova/diff"
 	bag "github.com/2comjie/nova/examples/diff_app/bag"
-	_pbData "github.com/2comjie/nova/examples/diff_app/player/pb"
+
+	diff "github.com/2comjie/nova/diff"
+
 	logdef "github.com/2comjie/nova/logx/logdef"
+
+	pbData "github.com/2comjie/nova/examples/pb/player"
+
+	pbbag "github.com/2comjie/nova/examples/pb/bag"
 )
 
 type Player struct {
 	logdef.ILogger `diff:"-"`
+
 	diff.Object
-	uid          diff.Primitive[uint64]
-	level        diff.Primitive[int32]
-	name         diff.Primitive[string]
-	bag          diff.Pointer[*bag.Bag]
-	scores       diff.PrimitiveMap[uint64, int32]
-	recentLevels diff.PrimitiveSlice[int32]
+
+	uid diff.Primitive[uint64] `diff:"1"`
+
+	level diff.Primitive[int32] `diff:"2"`
+
+	name diff.Primitive[string] `diff:"3"`
+
+	bag diff.Pointer[*bag.Bag] `diff:"4"`
+
+	scores diff.PrimitiveMap[uint64, int32] `diff:"5"`
+
+	recentLevels diff.PrimitiveSlice[int32] `diff:"6"`
+}
+
+func (value *Player) InitLink(writer *diff.Writer) {
+	if value.Object.Initialized() {
+		if writer != nil {
+			value.Object.Init(writer)
+		}
+		return
+	}
+
+	value.Object.Init(writer)
+
+	value.uid.Init(&value.Object, 1)
+
+	value.level.Init(&value.Object, 2)
+
+	value.name.Init(&value.Object, 3)
+
+	value.bag.Init(&value.Object, 4)
+
+	value.scores.Init(&value.Object, 5)
+
+	value.recentLevels.Init(&value.Object, 6)
+
 }
 
 func (value *Player) GetUid() uint64 {
@@ -58,11 +94,6 @@ func (value *Player) SetBag(fieldValue *bag.Bag) bool {
 	return value.bag.SetValue(fieldValue)
 }
 
-func (value *Player) ClearBag() bool {
-	value.InitLink(nil)
-	return value.bag.SetValue(nil)
-}
-
 func (value *Player) Scores() *diff.PrimitiveMap[uint64, int32] {
 	value.InitLink(nil)
 	return &value.scores
@@ -73,106 +104,121 @@ func (value *Player) RecentLevels() *diff.PrimitiveSlice[int32] {
 	return &value.recentLevels
 }
 
-func (value *Player) InitLink(writer *diff.Writer) {
-	if value.Object.Initialized() {
-		if writer != nil {
-			value.Object.Init(writer)
-		}
-		return
-	}
-	value.Object.Init(writer)
-	value.uid.Init(&value.Object, 1)
-	value.level.Init(&value.Object, 2)
-	value.name.Init(&value.Object, 3)
-	value.bag.Init(&value.Object, 4)
-	value.scores.Init(&value.Object, 5)
-	value.recentLevels.Init(&value.Object, 6)
-}
+// Snapshot 导出独立的全量 Proto，不修改对象和变更记录。
+func (value *Player) Snapshot() *pbData.Player {
+	snapshot := &pbData.Player{
 
-func (value *Player) Snapshot() *_pbData.Player {
-	snapshot := new(_pbData.Player)
-	snapshot.Uid = value.uid.GetValue()
-	snapshot.Level = value.level.GetValue()
-	snapshot.Name = value.name.GetValue()
+		Uid: value.uid.GetValue(),
+
+		Level: value.level.GetValue(),
+
+		Name: value.name.GetValue(),
+	}
+
 	if child := value.bag.GetValue(); child != nil {
 		snapshot.Bag = child.Snapshot()
 	}
-	value.scores.Range(func(key uint64, fieldValue int32) bool {
-		diff.SetMap(&snapshot.Scores, key, fieldValue)
-		return true
-	})
-	value.recentLevels.Range(func(_ int, fieldValue int32) bool {
-		snapshot.RecentLevels = append(snapshot.RecentLevels, fieldValue)
-		return true
-	})
+
+	if value.scores.Len() != 0 {
+		snapshot.Scores = make(map[uint64]int32, value.scores.Len())
+		value.scores.Range(func(key uint64, fieldValue int32) bool {
+			snapshot.Scores[key] = fieldValue
+			return true
+		})
+	}
+
+	if value.recentLevels.Len() != 0 {
+		snapshot.RecentLevels = make([]int32, value.recentLevels.Len())
+		for index := range snapshot.RecentLevels {
+			fieldValue := value.recentLevels.GetValue(index)
+			snapshot.RecentLevels[index] = fieldValue
+		}
+	}
+
 	return snapshot
 }
 
-func (value *Player) LoadSnapshot(snapshot *_pbData.Player) {
+// LoadSnapshot 加载全量基线并恢复父子链接，不记录增量。
+// snapshot 必须非空；已有待提交变化由调用方在重置基线前处理。
+func (value *Player) LoadSnapshot(snapshot *pbData.Player) {
 	value.InitLink(nil)
-	value.uid.SetValue(snapshot.GetUid())
-	value.level.SetValue(snapshot.GetLevel())
-	value.name.SetValue(snapshot.GetName())
-	if fieldValue := snapshot.GetBag(); fieldValue == nil {
-		value.bag.SetValue(nil)
-	} else {
-		child := new(bag.Bag)
-		child.LoadSnapshot(fieldValue)
-		value.bag.SetValue(child)
+
+	value.uid.LoadSnapshot(snapshot.Uid)
+
+	value.level.LoadSnapshot(snapshot.Level)
+
+	value.name.LoadSnapshot(snapshot.Name)
+
+	{
+		var child *bag.Bag
+		if snapshot.Bag != nil {
+			child = new(bag.Bag)
+			child.LoadSnapshot(snapshot.Bag)
+		}
+		value.bag.LoadSnapshot(child)
 	}
-	value.scores.Clear()
-	for key, fieldValue := range snapshot.GetScores() {
-		value.scores.Store(key, fieldValue)
+
+	{
+		var values map[uint64]int32
+		if len(snapshot.Scores) != 0 {
+			values = make(map[uint64]int32, len(snapshot.Scores))
+			for key, fieldValue := range snapshot.Scores {
+				values[key] = fieldValue
+			}
+		}
+		value.scores.LoadSnapshot(values)
 	}
-	value.recentLevels.Clear()
-	for _, fieldValue := range snapshot.GetRecentLevels() {
-		value.recentLevels.Append(fieldValue)
+
+	{
+		var values []int32
+		if len(snapshot.RecentLevels) != 0 {
+			values = make([]int32, len(snapshot.RecentLevels))
+			for index, fieldValue := range snapshot.RecentLevels {
+				values[index] = fieldValue
+			}
+		}
+		value.recentLevels.LoadSnapshot(values)
 	}
+
 }
 
-func (value *Player) NewUpdate() *_pbData.Player {
-	return new(_pbData.Player)
+// Commit 导出本轮增量并清空 Writer；返回值独立于运行时对象。
+func (value *Player) Commit() *pbData.Player {
+	return value.Object.Commit(new(pbData.Player), value.WriteUpdate)
 }
 
-func (value *Player) Commit() *_pbData.Player {
-	return value.Object.Commit(value.NewUpdate(), value.WriteUpdate)
-}
-
-func (value *Player) WriteUpdate(update *_pbData.Player, path diff.Path, operation diff.Operation, data any) {
+// WriteUpdate 将 Writer 的内部变更转换为有类型的 Proto 字段。
+func (value *Player) WriteUpdate(update *pbData.Player, path diff.Path, operation diff.Operation, data any) {
 	node := path[0]
 	switch node.FieldIndex {
+
 	case 1:
 		fieldValue := data.(uint64)
 		update.UidUpdate = &fieldValue
-		return
 
 	case 2:
 		fieldValue := data.(int32)
 		update.LevelUpdate = &fieldValue
-		return
 
 	case 3:
 		fieldValue := data.(string)
 		update.NameUpdate = &fieldValue
-		return
 
 	case 4:
 		if len(path) == 1 {
 			if operation == diff.PointerSet {
-				update.BagDiff = &_pbData.Player_BagSet{BagSet: data.(*bag.Bag).Snapshot()}
+				update.BagDiff = &pbData.Player_BagSet{BagSet: data.(*bag.Bag).Snapshot()}
 			} else {
-				update.BagDiff = &_pbData.Player_BagClear{BagClear: true}
+				update.BagDiff = &pbData.Player_BagClear{BagClear: true}
 			}
 			return
 		}
-		child := value.bag.GetValue()
 		childUpdate := update.GetBagUpdate()
 		if childUpdate == nil {
-			childUpdate = child.NewUpdate()
-			update.BagDiff = &_pbData.Player_BagUpdate{BagUpdate: childUpdate}
+			childUpdate = new(pbbag.Bag)
+			update.BagDiff = &pbData.Player_BagUpdate{BagUpdate: childUpdate}
 		}
-		child.WriteUpdate(childUpdate, path[1:], operation, data)
-		return
+		value.bag.GetValue().WriteUpdate(childUpdate, path[1:], operation, data)
 
 	case 5:
 		if node.KeyType == diff.PathField {
@@ -185,37 +231,45 @@ func (value *Player) WriteUpdate(update *_pbData.Player, path diff.Path, operati
 		} else {
 			update.ScoresDelete = append(update.ScoresDelete, key)
 		}
-		return
 
 	case 6:
 		update.RecentLevelsUpdated = true
-		update.RecentLevelsUpdate = append(update.RecentLevelsUpdate[:0], data.([]int32)...)
-		return
+		values := data.([]int32)
+		update.RecentLevelsUpdate = make([]int32, len(values))
+		for index, fieldValue := range values {
+			update.RecentLevelsUpdate[index] = fieldValue
+		}
 
 	}
 }
 
-func (value *Player) Merge(update *_pbData.Player) {
+// Merge 按序应用增量。对象必须已加载对应基线；绑定 Writer 时会记录本地变化。
+func (value *Player) Merge(update *pbData.Player) {
 	value.InitLink(nil)
+
 	if update.UidUpdate != nil {
-		value.uid.SetValue(update.GetUidUpdate())
+		value.uid.SetValue(*update.UidUpdate)
 	}
+
 	if update.LevelUpdate != nil {
-		value.level.SetValue(update.GetLevelUpdate())
+		value.level.SetValue(*update.LevelUpdate)
 	}
+
 	if update.NameUpdate != nil {
-		value.name.SetValue(update.GetNameUpdate())
+		value.name.SetValue(*update.NameUpdate)
 	}
+
 	switch fieldValue := update.BagDiff.(type) {
-	case *_pbData.Player_BagSet:
+	case *pbData.Player_BagSet:
 		child := new(bag.Bag)
 		child.LoadSnapshot(fieldValue.BagSet)
 		value.bag.SetValue(child)
-	case *_pbData.Player_BagClear:
+	case *pbData.Player_BagClear:
 		value.bag.SetValue(nil)
-	case *_pbData.Player_BagUpdate:
+	case *pbData.Player_BagUpdate:
 		value.bag.GetValue().Merge(fieldValue.BagUpdate)
 	}
+
 	if update.ScoresClear {
 		value.scores.Clear()
 	}
@@ -225,10 +279,12 @@ func (value *Player) Merge(update *_pbData.Player) {
 	for _, key := range update.ScoresDelete {
 		value.scores.Delete(key)
 	}
+
 	if update.RecentLevelsUpdated {
 		value.recentLevels.Clear()
 		for _, fieldValue := range update.RecentLevelsUpdate {
 			value.recentLevels.Append(fieldValue)
 		}
 	}
+
 }

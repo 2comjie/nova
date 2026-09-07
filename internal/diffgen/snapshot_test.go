@@ -1,6 +1,7 @@
 package diffgen
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -234,10 +235,49 @@ func TestPrimitiveCollectionsSnapshot(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workDir, "internal/diffgen/testdata/external/snapshot_test.go"), []byte(snapshotTest), 0644); err != nil {
 		t.Fatal(err)
 	}
+	roundTripTest, err := os.ReadFile("testdata/roundtrip_test.go.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "internal/diffgen/testdata/external/roundtrip_test.go"), roundTripTest, 0644); err != nil {
+		t.Fatal(err)
+	}
 	command = exec.Command(goBin, "test", "-mod=readonly", "-count=1",
 		"./internal/diffgen/testdata/basic", "./internal/diffgen/testdata/external")
 	command.Dir = workDir
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("test generated snapshots: %v\n%s", err, output)
+	}
+	// Regenerating must not include generated runtime files or change output.
+	for _, name := range []string{"basic", "external"} {
+		dir := filepath.Join(workDir, "internal/diffgen/testdata", name)
+		paths, err := filepath.Glob(filepath.Join(dir, "*_diff.gen.go"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		protoPaths, err := filepath.Glob(filepath.Join(protoDir, name, "*.proto"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		before := make(map[string][]byte)
+		for _, path := range append(paths, protoPaths...) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			before[path] = data
+		}
+		if err := Generate(dir, protoDir); err != nil {
+			t.Fatal(err)
+		}
+		for path, expected := range before {
+			actual, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(expected, actual) {
+				t.Fatalf("regeneration changed %s", path)
+			}
+		}
 	}
 }

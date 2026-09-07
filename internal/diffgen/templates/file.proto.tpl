@@ -5,6 +5,7 @@ syntax = "proto3";
 package {{.PackageName}};
 
 option go_package = "{{.GoPackage}}";
+option csharp_namespace = "{{.CSharpNamespace}}";
 
 {{range .ProtoImports}}
 import "{{.}}";
@@ -21,5 +22,27 @@ message {{.Name}} {
   {{.ProtoType}} {{.ProtoName}} = {{.DiffIndex}};
 {{- end}}
 {{- end}}
+
+{{range .Fields}}
+{{- if eq .Kind "primitive"}}
+  optional {{.ProtoType}} {{.ProtoName}}_update = {{index .UpdateIndexes 0}};
+{{- else if eq .Kind "pointer"}}
+  oneof {{.ProtoName}}_diff {
+    {{.ProtoType}} {{.ProtoName}}_set = {{index .UpdateIndexes 0}};
+    bool {{.ProtoName}}_clear = {{index .UpdateIndexes 1}};
+    {{.ProtoType}} {{.ProtoName}}_update = {{index .UpdateIndexes 2}};
+  }
+{{- else if or (eq .Kind "primitiveMap") (eq .Kind "pointerMap")}}
+  bool {{.ProtoName}}_clear = {{index .UpdateIndexes 0}};
+  map<{{.ProtoKeyType}}, {{.ProtoType}}> {{.ProtoName}}_set = {{index .UpdateIndexes 1}};
+  repeated {{.ProtoKeyType}} {{.ProtoName}}_delete = {{index .UpdateIndexes 2}};
+{{- if eq .Kind "pointerMap"}}
+  map<{{.ProtoKeyType}}, {{.ProtoType}}> {{.ProtoName}}_update = {{index .UpdateIndexes 3}};
+{{- end}}
+{{- else}}
+  bool {{.ProtoName}}_updated = {{index .UpdateIndexes 0}};
+  repeated {{.ProtoType}} {{.ProtoName}}_update = {{index .UpdateIndexes 1}};
+{{- end}}
+{{end}}
 }
 {{end}}

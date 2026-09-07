@@ -22,6 +22,11 @@ func (s *PrimitiveSlice[T]) Len() int {
 	return len(s.values)
 }
 
+// LoadSnapshot 接管基线数据，不记录增量。调用方不再修改传入的 slice。
+func (s *PrimitiveSlice[T]) LoadSnapshot(values []T) {
+	s.values = values
+}
+
 func (s *PrimitiveSlice[T]) GetValue(index int) T {
 	return s.values[index]
 }

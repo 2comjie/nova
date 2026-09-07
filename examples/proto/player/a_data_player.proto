@@ -4,18 +4,23 @@ syntax = "proto3";
 
 package player;
 
-option go_package = "github.com/2comjie/nova/examples/diff_app/player/pb;pbPlayer";
+option go_package = "github.com/2comjie/nova/examples/pb/player";
 option csharp_namespace = "Nova.Generated.Player";
 
-import "diff_app/bag/a_data_bag.proto";
+
+import "bag/a_data_bag.proto";
+
+
 
 message Player {
+
   uint64 uid = 1;
   int32 level = 2;
   string name = 3;
   bag.Bag bag = 4;
   map<uint64, int32> scores = 5;
   repeated int32 recent_levels = 6;
+
 
   optional uint64 uid_update = 1001;
 
@@ -35,16 +40,6 @@ message Player {
 
   bool recent_levels_updated = 1006;
   repeated int32 recent_levels_update = 2006;
-}
 
-message PlayerSyncPush {
-  uint32 schema_version = 1;
-  uint64 base_version = 2;
-  uint64 version = 3;
-
-  oneof payload {
-    Player full = 10;
-    Player update = 11;
-  }
 }
 

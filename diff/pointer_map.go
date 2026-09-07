@@ -20,6 +20,19 @@ func (m *PointerMap[K, V]) Len() int {
 	return len(m.values)
 }
 
+// LoadSnapshot 接管基线数据并更新父子链接，不记录增量。
+// values 的元素必须非空，调用方不再修改传入的 map。
+func (m *PointerMap[K, V]) LoadSnapshot(values map[K]V) {
+	for key, value := range m.values {
+		value.RemoveParent(m, key)
+	}
+	m.values = values
+	for key, value := range values {
+		value.InitLink(nil)
+		value.AddParent(m, key)
+	}
+}
+
 func (m *PointerMap[K, V]) Load(key K) (V, bool) {
 	value, exists := m.values[key]
 	return value, exists

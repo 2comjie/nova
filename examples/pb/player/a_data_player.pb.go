@@ -4,12 +4,12 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v5.28.2
-// source: diff_app/player/a_data_player.proto
+// source: player/a_data_player.proto
 
-package pbPlayer
+package player
 
 import (
-	pb "github.com/2comjie/nova/examples/diff_app/bag/pb"
+	bag "github.com/2comjie/nova/examples/pb/bag"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -29,7 +29,7 @@ type Player struct {
 	Uid          uint64                 `protobuf:"varint,1,opt,name=uid,proto3" json:"uid,omitempty"`
 	Level        int32                  `protobuf:"varint,2,opt,name=level,proto3" json:"level,omitempty"`
 	Name         string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Bag          *pb.Bag                `protobuf:"bytes,4,opt,name=bag,proto3" json:"bag,omitempty"`
+	Bag          *bag.Bag               `protobuf:"bytes,4,opt,name=bag,proto3" json:"bag,omitempty"`
 	Scores       map[uint64]int32       `protobuf:"bytes,5,rep,name=scores,proto3" json:"scores,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	RecentLevels []int32                `protobuf:"varint,6,rep,packed,name=recent_levels,json=recentLevels,proto3" json:"recent_levels,omitempty"`
 	UidUpdate    *uint64                `protobuf:"varint,1001,opt,name=uid_update,json=uidUpdate,proto3,oneof" json:"uid_update,omitempty"`
@@ -52,7 +52,7 @@ type Player struct {
 
 func (x *Player) Reset() {
 	*x = Player{}
-	mi := &file_diff_app_player_a_data_player_proto_msgTypes[0]
+	mi := &file_player_a_data_player_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -64,7 +64,7 @@ func (x *Player) String() string {
 func (*Player) ProtoMessage() {}
 
 func (x *Player) ProtoReflect() protoreflect.Message {
-	mi := &file_diff_app_player_a_data_player_proto_msgTypes[0]
+	mi := &file_player_a_data_player_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -77,7 +77,7 @@ func (x *Player) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Player.ProtoReflect.Descriptor instead.
 func (*Player) Descriptor() ([]byte, []int) {
-	return file_diff_app_player_a_data_player_proto_rawDescGZIP(), []int{0}
+	return file_player_a_data_player_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Player) GetUid() uint64 {
@@ -101,7 +101,7 @@ func (x *Player) GetName() string {
 	return ""
 }
 
-func (x *Player) GetBag() *pb.Bag {
+func (x *Player) GetBag() *bag.Bag {
 	if x != nil {
 		return x.Bag
 	}
@@ -150,7 +150,7 @@ func (x *Player) GetBagDiff() isPlayer_BagDiff {
 	return nil
 }
 
-func (x *Player) GetBagSet() *pb.Bag {
+func (x *Player) GetBagSet() *bag.Bag {
 	if x != nil {
 		if x, ok := x.BagDiff.(*Player_BagSet); ok {
 			return x.BagSet
@@ -168,7 +168,7 @@ func (x *Player) GetBagClear() bool {
 	return false
 }
 
-func (x *Player) GetBagUpdate() *pb.Bag {
+func (x *Player) GetBagUpdate() *bag.Bag {
 	if x != nil {
 		if x, ok := x.BagDiff.(*Player_BagUpdate); ok {
 			return x.BagUpdate
@@ -217,7 +217,7 @@ type isPlayer_BagDiff interface {
 }
 
 type Player_BagSet struct {
-	BagSet *pb.Bag `protobuf:"bytes,1004,opt,name=bag_set,json=bagSet,proto3,oneof"`
+	BagSet *bag.Bag `protobuf:"bytes,1004,opt,name=bag_set,json=bagSet,proto3,oneof"`
 }
 
 type Player_BagClear struct {
@@ -225,7 +225,7 @@ type Player_BagClear struct {
 }
 
 type Player_BagUpdate struct {
-	BagUpdate *pb.Bag `protobuf:"bytes,3004,opt,name=bag_update,json=bagUpdate,proto3,oneof"`
+	BagUpdate *bag.Bag `protobuf:"bytes,3004,opt,name=bag_update,json=bagUpdate,proto3,oneof"`
 }
 
 func (*Player_BagSet) isPlayer_BagDiff() {}
@@ -234,117 +234,11 @@ func (*Player_BagClear) isPlayer_BagDiff() {}
 
 func (*Player_BagUpdate) isPlayer_BagDiff() {}
 
-type PlayerSyncPush struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SchemaVersion uint32                 `protobuf:"varint,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	BaseVersion   uint64                 `protobuf:"varint,2,opt,name=base_version,json=baseVersion,proto3" json:"base_version,omitempty"`
-	Version       uint64                 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	// Types that are valid to be assigned to Payload:
-	//
-	//	*PlayerSyncPush_Full
-	//	*PlayerSyncPush_Update
-	Payload       isPlayerSyncPush_Payload `protobuf_oneof:"payload"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
+var File_player_a_data_player_proto protoreflect.FileDescriptor
 
-func (x *PlayerSyncPush) Reset() {
-	*x = PlayerSyncPush{}
-	mi := &file_diff_app_player_a_data_player_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PlayerSyncPush) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PlayerSyncPush) ProtoMessage() {}
-
-func (x *PlayerSyncPush) ProtoReflect() protoreflect.Message {
-	mi := &file_diff_app_player_a_data_player_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PlayerSyncPush.ProtoReflect.Descriptor instead.
-func (*PlayerSyncPush) Descriptor() ([]byte, []int) {
-	return file_diff_app_player_a_data_player_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *PlayerSyncPush) GetSchemaVersion() uint32 {
-	if x != nil {
-		return x.SchemaVersion
-	}
-	return 0
-}
-
-func (x *PlayerSyncPush) GetBaseVersion() uint64 {
-	if x != nil {
-		return x.BaseVersion
-	}
-	return 0
-}
-
-func (x *PlayerSyncPush) GetVersion() uint64 {
-	if x != nil {
-		return x.Version
-	}
-	return 0
-}
-
-func (x *PlayerSyncPush) GetPayload() isPlayerSyncPush_Payload {
-	if x != nil {
-		return x.Payload
-	}
-	return nil
-}
-
-func (x *PlayerSyncPush) GetFull() *Player {
-	if x != nil {
-		if x, ok := x.Payload.(*PlayerSyncPush_Full); ok {
-			return x.Full
-		}
-	}
-	return nil
-}
-
-func (x *PlayerSyncPush) GetUpdate() *Player {
-	if x != nil {
-		if x, ok := x.Payload.(*PlayerSyncPush_Update); ok {
-			return x.Update
-		}
-	}
-	return nil
-}
-
-type isPlayerSyncPush_Payload interface {
-	isPlayerSyncPush_Payload()
-}
-
-type PlayerSyncPush_Full struct {
-	Full *Player `protobuf:"bytes,10,opt,name=full,proto3,oneof"`
-}
-
-type PlayerSyncPush_Update struct {
-	Update *Player `protobuf:"bytes,11,opt,name=update,proto3,oneof"`
-}
-
-func (*PlayerSyncPush_Full) isPlayerSyncPush_Payload() {}
-
-func (*PlayerSyncPush_Update) isPlayerSyncPush_Payload() {}
-
-var File_diff_app_player_a_data_player_proto protoreflect.FileDescriptor
-
-const file_diff_app_player_a_data_player_proto_rawDesc = "" +
+const file_player_a_data_player_proto_rawDesc = "" +
 	"\n" +
-	"#diff_app/player/a_data_player.proto\x12\x06player\x1a\x1ddiff_app/bag/a_data_bag.proto\"\xc6\x06\n" +
+	"\x1aplayer/a_data_player.proto\x12\x06player\x1a\x14bag/a_data_bag.proto\"\xc6\x06\n" +
 	"\x06Player\x12\x10\n" +
 	"\x03uid\x18\x01 \x01(\x04R\x03uid\x12\x14\n" +
 	"\x05level\x18\x02 \x01(\x05R\x05level\x12\x12\n" +
@@ -377,80 +271,65 @@ const file_diff_app_player_a_data_player_proto_rawDesc = "" +
 	"\bbag_diffB\r\n" +
 	"\v_uid_updateB\x0f\n" +
 	"\r_level_updateB\x0e\n" +
-	"\f_name_update\"\xcf\x01\n" +
-	"\x0ePlayerSyncPush\x12%\n" +
-	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12!\n" +
-	"\fbase_version\x18\x02 \x01(\x04R\vbaseVersion\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x04R\aversion\x12$\n" +
-	"\x04full\x18\n" +
-	" \x01(\v2\x0e.player.PlayerH\x00R\x04full\x12(\n" +
-	"\x06update\x18\v \x01(\v2\x0e.player.PlayerH\x00R\x06updateB\t\n" +
-	"\apayloadBVZ<github.com/2comjie/nova/examples/diff_app/player/pb;pbPlayer\xaa\x02\x15Nova.Generated.Playerb\x06proto3"
+	"\f_name_updateBDZ*github.com/2comjie/nova/examples/pb/player\xaa\x02\x15Nova.Generated.Playerb\x06proto3"
 
 var (
-	file_diff_app_player_a_data_player_proto_rawDescOnce sync.Once
-	file_diff_app_player_a_data_player_proto_rawDescData []byte
+	file_player_a_data_player_proto_rawDescOnce sync.Once
+	file_player_a_data_player_proto_rawDescData []byte
 )
 
-func file_diff_app_player_a_data_player_proto_rawDescGZIP() []byte {
-	file_diff_app_player_a_data_player_proto_rawDescOnce.Do(func() {
-		file_diff_app_player_a_data_player_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_diff_app_player_a_data_player_proto_rawDesc), len(file_diff_app_player_a_data_player_proto_rawDesc)))
+func file_player_a_data_player_proto_rawDescGZIP() []byte {
+	file_player_a_data_player_proto_rawDescOnce.Do(func() {
+		file_player_a_data_player_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_player_a_data_player_proto_rawDesc), len(file_player_a_data_player_proto_rawDesc)))
 	})
-	return file_diff_app_player_a_data_player_proto_rawDescData
+	return file_player_a_data_player_proto_rawDescData
 }
 
-var file_diff_app_player_a_data_player_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_diff_app_player_a_data_player_proto_goTypes = []any{
-	(*Player)(nil),         // 0: player.Player
-	(*PlayerSyncPush)(nil), // 1: player.PlayerSyncPush
-	nil,                    // 2: player.Player.ScoresEntry
-	nil,                    // 3: player.Player.ScoresSetEntry
-	(*pb.Bag)(nil),         // 4: bag.Bag
+var file_player_a_data_player_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_player_a_data_player_proto_goTypes = []any{
+	(*Player)(nil),  // 0: player.Player
+	nil,             // 1: player.Player.ScoresEntry
+	nil,             // 2: player.Player.ScoresSetEntry
+	(*bag.Bag)(nil), // 3: bag.Bag
 }
-var file_diff_app_player_a_data_player_proto_depIdxs = []int32{
-	4, // 0: player.Player.bag:type_name -> bag.Bag
-	2, // 1: player.Player.scores:type_name -> player.Player.ScoresEntry
-	4, // 2: player.Player.bag_set:type_name -> bag.Bag
-	4, // 3: player.Player.bag_update:type_name -> bag.Bag
-	3, // 4: player.Player.scores_set:type_name -> player.Player.ScoresSetEntry
-	0, // 5: player.PlayerSyncPush.full:type_name -> player.Player
-	0, // 6: player.PlayerSyncPush.update:type_name -> player.Player
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+var file_player_a_data_player_proto_depIdxs = []int32{
+	3, // 0: player.Player.bag:type_name -> bag.Bag
+	1, // 1: player.Player.scores:type_name -> player.Player.ScoresEntry
+	3, // 2: player.Player.bag_set:type_name -> bag.Bag
+	3, // 3: player.Player.bag_update:type_name -> bag.Bag
+	2, // 4: player.Player.scores_set:type_name -> player.Player.ScoresSetEntry
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
-func init() { file_diff_app_player_a_data_player_proto_init() }
-func file_diff_app_player_a_data_player_proto_init() {
-	if File_diff_app_player_a_data_player_proto != nil {
+func init() { file_player_a_data_player_proto_init() }
+func file_player_a_data_player_proto_init() {
+	if File_player_a_data_player_proto != nil {
 		return
 	}
-	file_diff_app_player_a_data_player_proto_msgTypes[0].OneofWrappers = []any{
+	file_player_a_data_player_proto_msgTypes[0].OneofWrappers = []any{
 		(*Player_BagSet)(nil),
 		(*Player_BagClear)(nil),
 		(*Player_BagUpdate)(nil),
-	}
-	file_diff_app_player_a_data_player_proto_msgTypes[1].OneofWrappers = []any{
-		(*PlayerSyncPush_Full)(nil),
-		(*PlayerSyncPush_Update)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_diff_app_player_a_data_player_proto_rawDesc), len(file_diff_app_player_a_data_player_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_player_a_data_player_proto_rawDesc), len(file_player_a_data_player_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_diff_app_player_a_data_player_proto_goTypes,
-		DependencyIndexes: file_diff_app_player_a_data_player_proto_depIdxs,
-		MessageInfos:      file_diff_app_player_a_data_player_proto_msgTypes,
+		GoTypes:           file_player_a_data_player_proto_goTypes,
+		DependencyIndexes: file_player_a_data_player_proto_depIdxs,
+		MessageInfos:      file_player_a_data_player_proto_msgTypes,
 	}.Build()
-	File_diff_app_player_a_data_player_proto = out.File
-	file_diff_app_player_a_data_player_proto_goTypes = nil
-	file_diff_app_player_a_data_player_proto_depIdxs = nil
+	File_player_a_data_player_proto = out.File
+	file_player_a_data_player_proto_goTypes = nil
+	file_player_a_data_player_proto_depIdxs = nil
 }

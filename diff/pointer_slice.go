@@ -18,6 +18,24 @@ func (s *PointerSlice[V]) Len() int {
 	return len(s.values)
 }
 
+// LoadSnapshot 接管基线数据并更新父子链接，不记录增量。
+// 调用方不再修改传入的 slice。
+func (s *PointerSlice[V]) LoadSnapshot(values []V) {
+	var zero V
+	for index, value := range s.values {
+		if value != zero {
+			value.RemoveParent(s, index)
+		}
+	}
+	s.values = values
+	for index, value := range values {
+		if value != zero {
+			value.InitLink(nil)
+			value.AddParent(s, index)
+		}
+	}
+}
+
 func (s *PointerSlice[V]) GetValue(index int) V {
 	return s.values[index]
 }

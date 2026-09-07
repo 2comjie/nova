@@ -4,26 +4,21 @@ syntax = "proto3";
 
 package item;
 
-option go_package = "github.com/2comjie/nova/examples/diff_app/item/pb;pbItem";
+option go_package = "github.com/2comjie/nova/examples/pb/item";
 option csharp_namespace = "Nova.Generated.Item";
 
+
+
+
 message Item {
+
   uint64 item_id = 1;
   int32 count = 2;
+
 
   optional uint64 item_id_update = 1001;
 
   optional int32 count_update = 1002;
-}
 
-message ItemSyncPush {
-  uint32 schema_version = 1;
-  uint64 base_version = 2;
-  uint64 version = 3;
-
-  oneof payload {
-    Item full = 10;
-    Item update = 11;
-  }
 }
 

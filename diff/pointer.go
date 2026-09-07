@@ -24,6 +24,19 @@ func (p *Pointer[T]) GetValue() T {
 	return p.value
 }
 
+// LoadSnapshot 替换基线对象并更新父子链接，不记录增量。
+func (p *Pointer[T]) LoadSnapshot(value T) {
+	var zero T
+	if p.value != zero {
+		p.value.RemoveParent(p.parent, p.diffIndex)
+	}
+	p.value = value
+	if value != zero {
+		value.InitLink(nil)
+		value.AddParent(p.parent, p.diffIndex)
+	}
+}
+
 func (p *Pointer[T]) SetValue(value T) bool {
 	if p.value == value {
 		return false

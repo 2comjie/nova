@@ -56,22 +56,24 @@ type dataField struct {
 	RuntimeType string
 	Tag         string
 
-	ProtoType    string
-	ProtoKeyType string
-	ProtoName    string
-	ProtoGoName  string
-	ProtoGoType  string
+	ProtoType     string
+	ProtoKeyType  string
+	ProtoName     string
+	ProtoGoName   string
+	ProtoGoType   string
+	UpdateIndexes [4]uint32
 
 	key   types.Type
 	value types.Type
 }
 
 type sourceFile struct {
-	PackageName  string
-	GoPackage    string
-	Imports      []sourceImport
-	ProtoImports []string
-	Types        []dataType
+	PackageName     string
+	GoPackage       string
+	CSharpNamespace string
+	Imports         []sourceImport
+	ProtoImports    []string
+	Types           []dataType
 }
 
 type sourceImport struct {
@@ -98,13 +100,20 @@ func Generate(dir, protoDir string) error {
 	if len(pkg.Errors) != 0 {
 		return pkg.Errors[0]
 	}
+	protoGoPackages := make(map[string]string)
+	packages.Visit(pkgs, nil, func(loaded *packages.Package) {
+		if loaded.Module != nil {
+			protoGoPackages[loaded.PkgPath] = loaded.Module.Path + "/pb/" + loaded.Name
+		}
+	})
 
 	for _, file := range pkg.Syntax {
 		sourcePath := fileSet.Position(file.Pos()).Filename
 		protoImports := make(map[string]struct{})
 		source := sourceFile{
-			PackageName: pkg.Name,
-			GoPackage:   pkg.Module.Path + "/pb/" + pkg.Name,
+			PackageName:     pkg.Name,
+			GoPackage:       pkg.Module.Path + "/pb/" + pkg.Name,
+			CSharpNamespace: "Nova.Generated." + strcase.UpperCamelCase(pkg.Name),
 		}
 		packageImports := map[string]string{
 			diffPackagePath:  "diff",
@@ -163,17 +172,23 @@ func Generate(dir, protoDir string) error {
 						continue
 					}
 
-					diffIndex, err := cast.ToUint32E(tag)
+					diffIndex, err := cast.ToUint64E(tag)
 					if err != nil {
 						return err
+					}
+					if diffIndex == 0 || diffIndex >= 1000 {
+						panic("diffgen: diff index 必须在 1..999，增量字段使用后续千位段")
 					}
 
 					model := dataField{
 						Name:        field.Name(),
 						RuntimeName: field.Name(),
-						DiffIndex:   diffIndex,
+						DiffIndex:   uint32(diffIndex),
 						Tag:         structure.Tag(index),
 						ProtoName:   strcase.SnakeCase(field.Name()),
+					}
+					for segment := range model.UpdateIndexes {
+						model.UpdateIndexes[segment] = uint32(diffIndex) + uint32(segment+1)*1000
 					}
 
 					model.RuntimeName = string(model.RuntimeName[0]+'a'-'A') + model.RuntimeName[1:]
@@ -248,11 +263,9 @@ func Generate(dir, protoDir string) error {
 						model.ProtoGoType = "*pbData." + named.Obj().Name()
 						if targetPackage.Path() != pkg.PkgPath {
 							model.ProtoType = targetPackage.Name() + "." + model.ProtoType
-							if model.Kind != pointerKind {
-								alias := "pb" + targetPackage.Name()
-								packageImports[pkg.Module.Path+"/pb/"+targetPackage.Name()] = alias
-								model.ProtoGoType = "*" + alias + "." + named.Obj().Name()
-							}
+							alias := "pb" + targetPackage.Name()
+							packageImports[protoGoPackages[targetPackage.Path()]] = alias
+							model.ProtoGoType = "*" + alias + "." + named.Obj().Name()
 						}
 						targetPath := fileSet.Position(named.Obj().Pos()).Filename
 						if targetPath != sourcePath {

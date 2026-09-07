@@ -4,14 +4,19 @@ syntax = "proto3";
 
 package bag;
 
-option go_package = "github.com/2comjie/nova/examples/diff_app/bag/pb;pbBag";
+option go_package = "github.com/2comjie/nova/examples/pb/bag";
 option csharp_namespace = "Nova.Generated.Bag";
 
-import "diff_app/item/a_data_item.proto";
+
+import "item/a_data_item.proto";
+
+
 
 message Bag {
+
   map<uint64, item.Item> items = 1;
   repeated item.Item order = 2;
+
 
   bool items_clear = 1001;
   map<uint64, item.Item> items_set = 2001;
@@ -20,16 +25,6 @@ message Bag {
 
   bool order_updated = 1002;
   repeated item.Item order_update = 2002;
-}
 
-message BagSyncPush {
-  uint32 schema_version = 1;
-  uint64 base_version = 2;
-  uint64 version = 3;
-
-  oneof payload {
-    Bag full = 10;
-    Bag update = 11;
-  }
 }
 

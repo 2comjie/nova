@@ -19,6 +19,11 @@ func (p *Primitive[T]) GetValue() T {
 	return p.value
 }
 
+// LoadSnapshot 加载基线值，不记录增量。
+func (p *Primitive[T]) LoadSnapshot(value T) {
+	p.value = value
+}
+
 func (p *Primitive[T]) SetValue(value T) bool {
 	if p.value == value {
 		return false

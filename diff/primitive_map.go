@@ -20,6 +20,11 @@ func (m *PrimitiveMap[K, V]) Len() int {
 	return len(m.values)
 }
 
+// LoadSnapshot 接管基线数据，不记录增量。调用方不再修改传入的 map。
+func (m *PrimitiveMap[K, V]) LoadSnapshot(values map[K]V) {
+	m.values = values
+}
+
 func (m *PrimitiveMap[K, V]) Load(key K) (V, bool) {
 	value, exists := m.values[key]
 	return value, exists
