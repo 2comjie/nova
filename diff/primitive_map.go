@@ -32,7 +32,7 @@ func (m *PrimitiveMap[K, V]) Load(key K) (V, bool) {
 
 func (m *PrimitiveMap[K, V]) Store(key K, value V) bool {
 	oldValue, exists := m.values[key]
-	if exists && oldValue == value {
+	if exists && primitiveEqual(oldValue, value) {
 		return false
 	}
 

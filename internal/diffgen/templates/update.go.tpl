@@ -12,7 +12,7 @@ func (value *{{.Name}}) WriteUpdate(update *pbData.{{.Name}}, path diff.Path, op
 {{range .Fields}}
     case {{.DiffIndex}}:
 {{- if eq .Kind "primitive"}}
-        fieldValue := {{if ne .ValueType .ProtoGoType}}{{.ProtoGoType}}({{end}}data.({{.ValueType}}){{if ne .ValueType .ProtoGoType}}){{end}}
+        fieldValue := {{.Encode (printf "data.(%s)" .ValueType)}}
         update.{{.ProtoGoName}}Update = &fieldValue
 {{- else if eq .Kind "pointer"}}
         if len(path) == 1 {
@@ -51,7 +51,7 @@ func (value *{{.Name}}) WriteUpdate(update *pbData.{{.Name}}, path diff.Path, op
 {{- if eq .Kind "pointerMap"}}
             diff.SetMap(&update.{{.ProtoGoName}}Set, {{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}, data.({{.ValueType}}).Snapshot())
 {{- else}}
-            diff.SetMap(&update.{{.ProtoGoName}}Set, {{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}, {{if ne .ValueType .ProtoGoType}}{{.ProtoGoType}}({{end}}data.({{.ValueType}}){{if ne .ValueType .ProtoGoType}}){{end}})
+            diff.SetMap(&update.{{.ProtoGoName}}Set, {{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}, {{.Encode (printf "data.(%s)" .ValueType)}})
 {{- end}}
         } else {
             update.{{.ProtoGoName}}Delete = append(update.{{.ProtoGoName}}Delete, {{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}})
@@ -66,7 +66,7 @@ func (value *{{.Name}}) WriteUpdate(update *pbData.{{.Name}}, path diff.Path, op
                 update.{{.ProtoGoName}}Update[index] = fieldValue.Snapshot()
             }
 {{- else}}
-            update.{{.ProtoGoName}}Update[index] = {{if ne .ValueType .ProtoGoType}}{{.ProtoGoType}}({{end}}fieldValue{{if ne .ValueType .ProtoGoType}}){{end}}
+            update.{{.ProtoGoName}}Update[index] = {{.Encode "fieldValue"}}
 {{- end}}
         }
 {{- end}}
@@ -80,7 +80,7 @@ func (value *{{.Name}}) Merge(update *pbData.{{.Name}}) {
 {{range .Fields}}
 {{- if eq .Kind "primitive"}}
     if update.{{.ProtoGoName}}Update != nil {
-        value.{{.RuntimeName}}.SetValue({{if ne .ValueType .ProtoGoType}}{{.ValueType}}({{end}}*update.{{.ProtoGoName}}Update{{if ne .ValueType .ProtoGoType}}){{end}})
+        value.{{.RuntimeName}}.SetValue({{.Decode (printf "*update.%sUpdate" .ProtoGoName)}})
     }
 {{- else if eq .Kind "pointer"}}
     switch fieldValue := update.{{.ProtoGoName}}Diff.(type) {
@@ -105,7 +105,7 @@ func (value *{{.Name}}) Merge(update *pbData.{{.Name}}) {
         }
         value.{{.RuntimeName}}.Store({{if ne .KeyType .ProtoKeyType}}{{.KeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}, child)
 {{- else}}
-        value.{{.RuntimeName}}.Store({{if ne .KeyType .ProtoKeyType}}{{.KeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}, {{if ne .ValueType .ProtoGoType}}{{.ValueType}}({{end}}fieldValue{{if ne .ValueType .ProtoGoType}}){{end}})
+        value.{{.RuntimeName}}.Store({{if ne .KeyType .ProtoKeyType}}{{.KeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}, {{.Decode "fieldValue"}})
 {{- end}}
     }
     for _, key := range update.{{.ProtoGoName}}Delete {
@@ -129,7 +129,7 @@ func (value *{{.Name}}) Merge(update *pbData.{{.Name}}) {
             }
             value.{{.RuntimeName}}.Append(child)
 {{- else}}
-            value.{{.RuntimeName}}.Append({{if ne .ValueType .ProtoGoType}}{{.ValueType}}({{end}}fieldValue{{if ne .ValueType .ProtoGoType}}){{end}})
+            value.{{.RuntimeName}}.Append({{.Decode "fieldValue"}})
 {{- end}}
         }
     }

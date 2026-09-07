@@ -30,6 +30,12 @@ go run github.com/2comjie/nova/cmd/diff-gen -dir ./player -proto-dir ./proto
 
 支持基础字段、对象指针、基础 Map、对象 Map、基础 Slice、对象 Slice。对象引用应形成无环图；同一对象可以有多个父引用，每个引用路径都会收到变化。Proto 按值传递，不保留对象共享身份。
 
+`type A int32` 等命名基础类型及 `type B = A` 别名会保留在运行时字段和方法签名中，Proto 按底层基础类型编解码，不额外生成 Proto enum。定义在 `diff_fast` 文件里的基础类型、别名及 const 声明会复制到生成代码；定义在普通 Go 文件里的声明直接复用。自定义方法请放在普通 Go 文件中。
+
+`time.Duration` 按 int64 纳秒处理，保留 Go 的原生精度。`time.Time` 及其别名支持字段和集合元素，Proto、JSON、BSON 均使用 int64 毫秒时间戳。解码使用 UTC，不保留单调时钟、时区身份和不足毫秒的精度；字段、Map 值和 Slice 元素按毫秒比较变化。时间不作为 Map key。
+
+时间整数 0 表示 Unix 起点，缺失的时间整数也按 0 解释。Go 的 `time.Time{}` 编码为其实际毫秒值 `-62135596800000`，不是 0，能够正确往返。
+
 ## 全量与增量
 
 ```go
@@ -71,6 +77,28 @@ replica.Merge(update)
 跨语言客户端应按上述规则应用字段，不能用 `proto.Merge` 或 C# `MergeFrom` 代替增量应用：它们不理解删除、清空和数组替换。生成的 C# 文件是 Proto 消息定义，客户端的运行时状态应用逻辑由客户端实现。
 
 Proto 不区分空 Map/Slice 与 nil 集合；repeated message 的 nil 元素经过编码会成为空消息，不承诺保留 Go 的 nil 元素身份。对象 Map 不保存 nil 值，`Store(key, nil)` 表示删除。窄整数在 Proto 中使用 int32/uint32，外部输入应遵守业务类型范围。
+
+## JSON / BSON
+
+生成对象实现标准的 `MarshalJSON`、`UnmarshalJSON`、`MarshalBSON`、`UnmarshalBSON`，内部使用普通数据结构与标准库 / MongoDB Go Driver v2。对象字段递归调用子对象的编解码，不经过 Proto。
+
+```go
+data, err := json.Marshal(player)
+err = json.Unmarshal(data, player)
+
+document, err := bson.Marshal(player)
+err = bson.Unmarshal(document, player)
+```
+
+生成项目需要依赖 `go.mongodb.org/mongo-driver/v2/bson`。JSON 和 BSON 分别遵循自己的字段标签、`-`、`omitempty` 等选项；`diff:"-"` 字段始终排除，并在解码时保留原值。
+
+解码先进入临时数据结构，全部成功后才替换对象的基线，恢复父子链接，不产生增量、不清空已有 Writer。缺失字段按零值加载，Map/Slice 整体替换，不保留旧元素。JSON 根值 `null` 按空基线加载。对象 Map 中的 null 元素按不存在处理；对象指针和对象 Slice 中的 null 保留。
+
+bool Map 的 key 使用 `diff.BoolKey` 的标准文本接口，输出 `"true"` / `"false"`。整数 Map key 由标准库转换为十进制字段名；`[]byte` 保留原生类型，JSON 使用 Base64，BSON 使用 binary。
+
+BSON 无法表示大于 MaxInt64 的 uint64 值，编码直接返回驱动错误，不截断或改成字符串。BSON 对象指针的 `inline` 会在生成时拒绝，避免驱动展开运行时包装结构而丢失字段；使用普通嵌套对象即可。
+
+编码应在对象所属 Actor 内串行执行，内部数据结构是同步编码视图，不是供后台线程持有的快照。得到字节结果后可以交给其他线程发送或保存。这里不包含 Mongo 连接和增量写入。
 
 ## 多客户端版本
 

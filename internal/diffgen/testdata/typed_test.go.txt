@@ -1,0 +1,127 @@
+package external
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/2comjie/nova/diff"
+	"github.com/2comjie/nova/internal/diffgen/testdata/basic"
+	pbBasic "github.com/2comjie/nova/pb/basic"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"google.golang.org/protobuf/proto"
+)
+
+func TestNamedTypesAndTimes(t *testing.T) {
+	external := new(Model)
+	external.SetState(basic.Running)
+	if external.GetState() != basic.Running || external.Snapshot().State != int32(basic.Running) {
+		t.Fatal("cross-package enum type was lost")
+	}
+	value := new(basic.Typed)
+	writer := diff.NewWriter()
+	value.InitLink(writer)
+	instant := time.Unix(1700000000, 123456789).In(time.FixedZone("local", 8*3600))
+	value.SetState(basic.Running)
+	value.SetMode(basic.ModeActive)
+	value.SetAlias(basic.StatusAlias(basic.Running))
+	value.SetNumber(basic.IntAlias(12))
+	value.States().Store(basic.Idle, basic.Running)
+	value.History().Append(basic.Running)
+	value.Flags().Store(basic.Flag(true), basic.Running)
+	value.SetDelay(1500*time.Millisecond + 5*time.Nanosecond)
+	value.SetWhen(instant)
+	value.Times().Store("start", instant)
+	value.Timeline().Append(instant)
+	if value.GetState() != basic.Running || value.GetDelay() != 1500*time.Millisecond+5*time.Nanosecond {
+		t.Fatal("named Go types or duration changed")
+	}
+	snapshot := value.Snapshot()
+	if snapshot.When != instant.UnixMilli() || snapshot.Times["start"] != instant.UnixMilli() || snapshot.Timeline[0] != instant.UnixMilli() {
+		t.Fatal("time must use millisecond timestamps")
+	}
+	if snapshot.Delay != int64(1500*time.Millisecond+5*time.Nanosecond) {
+		t.Fatal("duration must retain nanoseconds")
+	}
+	replica := new(basic.Typed)
+	replica.LoadSnapshot(snapshot)
+	if !proto.Equal(snapshot, replica.Snapshot()) || replica.GetWhen().Location() != time.UTC {
+		t.Fatal("named types or time failed to load")
+	}
+	value.Commit()
+	sameMillisecond := time.UnixMilli(instant.UnixMilli()).UTC()
+	if value.SetWhen(sameMillisecond) || value.Times().Store("start", sameMillisecond) || value.Timeline().SetValue(0, sameMillisecond) || writer.Len() != 0 {
+		t.Fatal("timezone or sub-millisecond differences emitted changes")
+	}
+	value.SetState(basic.Idle)
+	value.SetWhen(instant.Add(time.Millisecond))
+	value.Times().Store("start", instant.Add(2*time.Millisecond))
+	value.Timeline().SetValue(0, instant.Add(3*time.Millisecond))
+	update := value.Commit()
+	body, err := proto.Marshal(update)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded := new(pbBasic.Typed)
+	if err := proto.Unmarshal(body, decoded); err != nil {
+		t.Fatal(err)
+	}
+	replica.Merge(decoded)
+	if !proto.Equal(value.Snapshot(), replica.Snapshot()) {
+		t.Fatal("typed delta failed", decoded)
+	}
+
+	for _, codec := range []struct {
+		name      string
+		marshal   func(any) ([]byte, error)
+		unmarshal func([]byte, any) error
+	}{{"json", json.Marshal, json.Unmarshal}, {"bson", bson.Marshal, bson.Unmarshal}} {
+		t.Run(codec.name, func(t *testing.T) {
+			body, err := codec.marshal(value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			restored := new(basic.Typed)
+			if err := codec.unmarshal(body, restored); err != nil {
+				t.Fatal(err)
+			}
+			if !proto.Equal(value.Snapshot(), restored.Snapshot()) {
+				t.Fatal("codec changed named types or timestamps")
+			}
+		})
+	}
+	jsonBytes, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var jsonFields map[string]json.RawMessage
+	if err := json.Unmarshal(jsonBytes, &jsonFields); err != nil {
+		t.Fatal(err)
+	}
+	var millis int64
+	if err := json.Unmarshal(jsonFields["when"], &millis); err != nil || millis != value.GetWhen().UnixMilli() {
+		t.Fatal("JSON time isn't an integer timestamp")
+	}
+	bsonBytes, err := bson.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw := bson.Raw(bsonBytes).Lookup("when"); raw.Type != bson.TypeInt64 || raw.Int64() != value.GetWhen().UnixMilli() {
+		t.Fatal("BSON time isn't an int64 timestamp")
+	}
+	value.SetWhen(time.Time{})
+	replica.Merge(value.Commit())
+	if !replica.GetWhen().IsZero() {
+		t.Fatal("Go zero time became Unix epoch")
+	}
+	zeroJSON, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(zeroJSON, replica); err != nil {
+		t.Fatal(err)
+	}
+	if !replica.GetWhen().IsZero() {
+		t.Fatal("JSON lost zero time")
+	}
+}

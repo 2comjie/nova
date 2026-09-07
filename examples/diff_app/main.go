@@ -1,53 +1,85 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/2comjie/nova/diff"
-	"github.com/2comjie/nova/examples/diff_app/bag"
-	"github.com/2comjie/nova/examples/diff_app/item"
-	"github.com/2comjie/nova/examples/diff_app/player"
+	"github.com/2comjie/nova/examples/diff_app/profile"
+	pbProfile "github.com/2comjie/nova/examples/pb/profile"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"google.golang.org/protobuf/proto"
 )
 
 func main() {
-	writer := diff.NewWriter()
-	playerValue := new(player.Player)
-	playerValue.InitLink(writer)
+	if err := run(); err != nil {
+		panic(err)
+	}
+}
 
-	bagValue := new(bag.Bag)
-	playerValue.SetBag(bagValue)
+func run() error {
+	value := new(profile.Profile)
+	value.SetId(1001)
+	value.SetState(profile.Online)
+	value.SetLoginAt(time.UnixMilli(1700000000123))
+	value.SetCooldown(1500*time.Millisecond + 5*time.Nanosecond)
+	value.History().Append(profile.Online)
+	value.RewardsAt().Store("daily", value.GetLoginAt())
 
-	itemValue := new(item.Item)
-	itemValue.SetItemId(1001)
-	itemValue.SetCount(5)
+	value.InitLink(diff.NewWriter())
+	body, err := proto.Marshal(value.Snapshot())
+	if err != nil {
+		return err
+	}
+	snapshot := new(pbProfile.Profile)
+	if err := proto.Unmarshal(body, snapshot); err != nil {
+		return err
+	}
+	replica := new(profile.Profile)
+	replica.LoadSnapshot(snapshot)
+	fmt.Printf("全量 Proto: %d bytes，时间戳: %d ms，时长: %d ns\n", len(body), snapshot.LoginAt, snapshot.Cooldown)
 
-	playerValue.SetUid(10001)
-	playerValue.SetName("taoxi")
-	playerValue.SetLevel(20)
-	playerValue.GetBag().Items().Store(1001, itemValue)
-	playerValue.GetBag().Order().Append(itemValue)
-	playerValue.Scores().Store(1, 100)
-	playerValue.RecentLevels().Append(20)
-
-	full := playerValue.Snapshot()
-	playerValue.Commit()
-
-	playerValue.SetLevel(200)
-	itemValue.SetCount(-1)
-	itemValue.SetCount(12)
-	playerValue.Scores().Store(1, 120)
-	playerValue.RecentLevels().Append(200)
-	update := playerValue.Commit()
-	fmt.Println(update)
-
-	replica := new(player.Player)
-	replica.LoadSnapshot(full)
+	value.SetState(profile.Offline)
+	value.History().Append(profile.Offline)
+	value.RewardsAt().Store("daily", value.GetLoginAt().Add(time.Hour))
+	body, err = proto.Marshal(value.Commit())
+	if err != nil {
+		return err
+	}
+	update := new(pbProfile.Profile)
+	if err := proto.Unmarshal(body, update); err != nil {
+		return err
+	}
 	replica.Merge(update)
+	if !proto.Equal(value.Snapshot(), replica.Snapshot()) {
+		panic("增量合并结果不一致")
+	}
+	fmt.Printf("增量 Proto: %d bytes，合并后状态: %d\n", len(body), replica.GetState())
 
-	replicaItem, _ := replica.GetBag().Items().Load(1001)
-	score, _ := replica.Scores().Load(1)
-	latestLevel := replica.RecentLevels().GetValue(replica.RecentLevels().Len() - 1)
-	fmt.Printf("跨包合并: uid=%d level=%d itemCount=%d score=%d recentLevel=%d updateBytes=%d\n",
-		replica.GetUid(), replica.GetLevel(), replicaItem.GetCount(), score, latestLevel, proto.Size(update))
+	for _, codec := range []struct {
+		name      string
+		marshal   func(any) ([]byte, error)
+		unmarshal func([]byte, any) error
+	}{
+		{"JSON", json.Marshal, json.Unmarshal},
+		{"BSON", bson.Marshal, bson.Unmarshal},
+	} {
+		body, err := codec.marshal(value)
+		if err != nil {
+			return err
+		}
+		restored := new(profile.Profile)
+		if err := codec.unmarshal(body, restored); err != nil {
+			return err
+		}
+		if !proto.Equal(value.Snapshot(), restored.Snapshot()) {
+			panic(codec.name + " 往返结果不一致")
+		}
+		fmt.Printf("%s 往返通过: %d bytes\n", codec.name, len(body))
+		if codec.name == "JSON" {
+			fmt.Println(string(body))
+		}
+	}
+	return nil
 }

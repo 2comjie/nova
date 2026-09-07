@@ -10,6 +10,10 @@ import (
 {{end}}
 )
 
+{{range .Declarations}}
+{{.}}
+{{end}}
+
 {{range .Types}}
 type {{.Name}} struct {
 {{range .RuntimeFields}}
@@ -58,7 +62,7 @@ func (value *{{.Name}}) Snapshot() *pbData.{{.Name}} {
     snapshot := &pbData.{{.Name}}{
 {{range .Fields}}
 {{- if eq .Kind "primitive"}}
-        {{.ProtoGoName}}: {{if ne .ValueType .ProtoGoType}}{{.ProtoGoType}}({{end}}value.{{.RuntimeName}}.GetValue(){{if ne .ValueType .ProtoGoType}}){{end}},
+        {{.ProtoGoName}}: {{.Encode (printf "value.%s.GetValue()" .RuntimeName)}},
 {{- end}}
 {{end}}
     }
@@ -74,7 +78,7 @@ func (value *{{.Name}}) Snapshot() *pbData.{{.Name}} {
 {{- if eq .Kind "pointerMap"}}
             snapshot.{{.ProtoGoName}}[{{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = fieldValue.Snapshot()
 {{- else}}
-            snapshot.{{.ProtoGoName}}[{{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = {{if ne .ValueType .ProtoGoType}}{{.ProtoGoType}}({{end}}fieldValue{{if ne .ValueType .ProtoGoType}}){{end}}
+            snapshot.{{.ProtoGoName}}[{{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = {{.Encode "fieldValue"}}
 {{- end}}
             return true
         })
@@ -89,7 +93,7 @@ func (value *{{.Name}}) Snapshot() *pbData.{{.Name}} {
                 snapshot.{{.ProtoGoName}}[index] = fieldValue.Snapshot()
             }
 {{- else}}
-            snapshot.{{.ProtoGoName}}[index] = {{if ne .ValueType .ProtoGoType}}{{.ProtoGoType}}({{end}}fieldValue{{if ne .ValueType .ProtoGoType}}){{end}}
+            snapshot.{{.ProtoGoName}}[index] = {{.Encode "fieldValue"}}
 {{- end}}
         }
     }
@@ -104,7 +108,7 @@ func (value *{{.Name}}) LoadSnapshot(snapshot *pbData.{{.Name}}) {
     value.InitLink(nil)
 {{range .Fields}}
 {{- if eq .Kind "primitive"}}
-    value.{{.RuntimeName}}.LoadSnapshot({{if ne .ValueType .ProtoGoType}}{{.ValueType}}({{end}}snapshot.{{.ProtoGoName}}{{if ne .ValueType .ProtoGoType}}){{end}})
+    value.{{.RuntimeName}}.LoadSnapshot({{.Decode (printf "snapshot.%s" .ProtoGoName)}})
 {{- else if eq .Kind "pointer"}}
     {
         var child {{.ValueType}}
@@ -127,7 +131,7 @@ func (value *{{.Name}}) LoadSnapshot(snapshot *pbData.{{.Name}}) {
                 }
                 values[{{if ne .KeyType .ProtoKeyType}}{{.KeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = child
 {{- else}}
-                values[{{if ne .KeyType .ProtoKeyType}}{{.KeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = {{if ne .ValueType .ProtoGoType}}{{.ValueType}}({{end}}fieldValue{{if ne .ValueType .ProtoGoType}}){{end}}
+                values[{{if ne .KeyType .ProtoKeyType}}{{.KeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = {{.Decode "fieldValue"}}
 {{- end}}
             }
         }
@@ -146,7 +150,7 @@ func (value *{{.Name}}) LoadSnapshot(snapshot *pbData.{{.Name}}) {
                     values[index] = child
                 }
 {{- else}}
-                values[index] = {{if ne .ValueType .ProtoGoType}}{{.ValueType}}({{end}}fieldValue{{if ne .ValueType .ProtoGoType}}){{end}}
+                values[index] = {{.Decode "fieldValue"}}
 {{- end}}
             }
         }
@@ -156,4 +160,5 @@ func (value *{{.Name}}) LoadSnapshot(snapshot *pbData.{{.Name}}) {
 {{end}}
 }
 {{template "updates" .}}
+{{template "codecs" .}}
 {{end}}

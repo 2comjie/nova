@@ -41,20 +41,27 @@ const (
 
 type dataType struct {
 	Name          string
+	CodecName     string
+	JSONPackage   string
+	BSONPackage   string
 	RuntimeFields []string
 	Fields        []dataField
 }
 
 type dataField struct {
-	Name        string
-	RuntimeName string
-	DiffIndex   uint32
-	Kind        fieldKind
-	KeyType     string
-	ValueType   string
-	ElementType string
-	RuntimeType string
-	Tag         string
+	Name           string
+	RuntimeName    string
+	DiffIndex      uint32
+	Kind           fieldKind
+	KeyType        string
+	ValueType      string
+	ElementType    string
+	RuntimeType    string
+	Tag            string
+	CodecKeyType   string
+	CodecValueType string
+	IsTime         bool
+	TimePackage    string
 
 	ProtoType     string
 	ProtoKeyType  string
@@ -74,6 +81,32 @@ type sourceFile struct {
 	Imports         []sourceImport
 	ProtoImports    []string
 	Types           []dataType
+	Declarations    []string
+}
+
+func isTime(value types.Type) bool {
+	named, ok := types.Unalias(value).(*types.Named)
+	return ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == "time" && named.Obj().Name() == "Time"
+}
+
+func (field dataField) Encode(expression string) string {
+	if field.IsTime {
+		return expression + ".UnixMilli()"
+	}
+	if field.ValueType != field.ProtoGoType {
+		return field.ProtoGoType + "(" + expression + ")"
+	}
+	return expression
+}
+
+func (field dataField) Decode(expression string) string {
+	if field.IsTime {
+		return field.TimePackage + ".UnixMilli(" + expression + ").UTC()"
+	}
+	if field.ValueType != field.ProtoGoType {
+		return field.ValueType + "(" + expression + ")"
+	}
+	return expression
 }
 
 type sourceImport struct {
@@ -116,8 +149,10 @@ func Generate(dir, protoDir string) error {
 			CSharpNamespace: "Nova.Generated." + strcase.UpperCamelCase(pkg.Name),
 		}
 		packageImports := map[string]string{
-			diffPackagePath:  "diff",
-			source.GoPackage: "pbData",
+			diffPackagePath:                       "diff",
+			source.GoPackage:                      "pbData",
+			"encoding/json":                       "json",
+			"go.mongodb.org/mongo-driver/v2/bson": "bson",
 		}
 		typeString := func(value types.Type) string {
 			return types.TypeString(value, func(valuePkg *types.Package) string {
@@ -125,11 +160,60 @@ func Generate(dir, protoDir string) error {
 					return ""
 				}
 
+				if alias, exists := packageImports[valuePkg.Path()]; exists {
+					return alias
+				}
 				packageImports[valuePkg.Path()] = valuePkg.Name()
 				return valuePkg.Name()
 			})
 		}
 
+		declarationImports := make(map[string]bool)
+		exclusive := false
+		for _, group := range file.Comments {
+			for _, comment := range group.List {
+				if strings.HasPrefix(comment.Text, "//go:build ") && strings.Contains(comment.Text, "diff_fast") {
+					exclusive = true
+				}
+			}
+		}
+		if exclusive {
+			for _, declaration := range file.Decls {
+				general, ok := declaration.(*ast.GenDecl)
+				if !ok {
+					continue
+				}
+				var declarations []ast.Node
+				if general.Tok == token.CONST {
+					declarations = append(declarations, general)
+				}
+				if general.Tok == token.TYPE {
+					for _, specification := range general.Specs {
+						typeSpec := specification.(*ast.TypeSpec)
+						_, structure := pkg.TypesInfo.Defs[typeSpec.Name].Type().Underlying().(*types.Struct)
+						if typeSpec.Assign.IsValid() || !structure {
+							declarations = append(declarations, &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{typeSpec}})
+						}
+					}
+				}
+				for _, node := range declarations {
+					var output bytes.Buffer
+					if err := format.Node(&output, fileSet, node); err != nil {
+						return err
+					}
+					source.Declarations = append(source.Declarations, output.String())
+					ast.Inspect(node, func(node ast.Node) bool {
+						if ident, ok := node.(*ast.Ident); ok {
+							if imported, ok := pkg.TypesInfo.Uses[ident].(*types.PkgName); ok {
+								packageImports[imported.Imported().Path()] = imported.Name()
+								declarationImports[imported.Imported().Path()] = true
+							}
+						}
+						return true
+					})
+				}
+			}
+		}
 		for _, declaration := range file.Decls {
 			general, ok := declaration.(*ast.GenDecl)
 			if !ok || general.Tok != token.TYPE {
@@ -150,7 +234,7 @@ func Generate(dir, protoDir string) error {
 					continue
 				}
 
-				data := dataType{Name: named.Obj().Name()}
+				data := dataType{Name: named.Obj().Name(), CodecName: "_diff" + named.Obj().Name() + "Data", JSONPackage: packageImports["encoding/json"], BSONPackage: packageImports["go.mongodb.org/mongo-driver/v2/bson"]}
 				for index := 0; index < structure.NumFields(); index++ {
 					field := structure.Field(index)
 					tag, exists := reflect.StructTag(structure.Tag(index)).Lookup("diff")
@@ -194,16 +278,25 @@ func Generate(dir, protoDir string) error {
 					model.RuntimeName = string(model.RuntimeName[0]+'a'-'A') + model.RuntimeName[1:]
 					model.ProtoGoName = strcase.UpperCamelCase(model.ProtoName)
 
-					switch fieldType := types.Unalias(field.Type()).(type) {
+					underlying := field.Type().Underlying()
+					if isTime(field.Type()) {
+						underlying = types.Typ[types.Int64]
+					}
+					switch fieldType := underlying.(type) {
 					case *types.Basic:
 						model.Kind = primitiveKind
-						model.value = fieldType
-						model.ValueType = typeString(fieldType)
+						model.value = field.Type()
+						model.ValueType = typeString(field.Type())
 						model.RuntimeType = "diff.Primitive[" + model.ValueType + "]"
 
 						model.ProtoType = protoScalarType(fieldType)
 
 					case *types.Pointer:
+						for _, option := range strings.Split(reflect.StructTag(model.Tag).Get("bson"), ",")[1:] {
+							if option == "inline" {
+								panic("diffgen: BSON 对象指针不支持 inline，请使用嵌套字段")
+							}
+						}
 						model.Kind = pointerKind
 						model.value = fieldType
 						model.ValueType = typeString(fieldType)
@@ -214,6 +307,10 @@ func Generate(dir, protoDir string) error {
 						model.key = fieldType.Key()
 						model.value = fieldType.Elem()
 						model.KeyType = typeString(fieldType.Key())
+						model.CodecKeyType = model.KeyType
+						if fieldType.Key().Underlying().(*types.Basic).Kind() == types.Bool {
+							model.CodecKeyType = "diff.BoolKey"
+						}
 						model.ValueType = typeString(fieldType.Elem())
 
 						model.ProtoKeyType = protoScalarType(fieldType.Key())
@@ -248,6 +345,15 @@ func Generate(dir, protoDir string) error {
 
 					default:
 						panic("diffgen: 不支持的字段类型")
+					}
+					model.IsTime = isTime(model.value)
+					model.CodecValueType = model.ValueType
+					if model.IsTime {
+						model.CodecValueType = "int64"
+						if _, exists := packageImports["time"]; !exists {
+							packageImports["time"] = "time"
+						}
+						model.TimePackage = packageImports["time"]
 					}
 
 					switch model.Kind {
@@ -302,8 +408,18 @@ func Generate(dir, protoDir string) error {
 		sort.Slice(source.Imports, func(left, right int) bool {
 			return source.Imports[left].Alias < source.Imports[right].Alias
 		})
-		if len(source.Types) == 0 {
+		if len(source.Types) == 0 && len(source.Declarations) == 0 {
 			continue
+		}
+		if len(source.Types) == 0 {
+			// Only copied declarations need imports in declaration-only files.
+			filtered := source.Imports[:0]
+			for _, imported := range source.Imports {
+				if declarationImports[imported.Path] {
+					filtered = append(filtered, imported)
+				}
+			}
+			source.Imports = filtered
 		}
 
 		for importPath := range protoImports {
@@ -346,6 +462,9 @@ func Generate(dir, protoDir string) error {
 }
 
 func protoScalarType(value types.Type) string {
+	if isTime(value) {
+		return "int64"
+	}
 	switch value.Underlying().(*types.Basic).Kind() {
 	case types.Bool:
 		return "bool"

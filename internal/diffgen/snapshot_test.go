@@ -49,7 +49,7 @@ func TestSnapshot(t *testing.T) {
 		"--proto_path="+protoDir,
 		"--go_out="+workDir,
 		"--go_opt=module=github.com/2comjie/nova",
-		"basic/child.proto", "basic/model.proto", "basic/scalars.proto", "basic/collections.proto", "external/model.proto",
+		"basic/child.proto", "basic/model.proto", "basic/scalars.proto", "basic/collections.proto", "basic/codecs.proto", "basic/typed.proto", "external/model.proto",
 	)
 	command.Dir = workDir
 	if output, err := command.CombinedOutput(); err != nil {
@@ -240,6 +240,20 @@ func TestPrimitiveCollectionsSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(workDir, "internal/diffgen/testdata/external/roundtrip_test.go"), roundTripTest, 0644); err != nil {
+		t.Fatal(err)
+	}
+	codecTest, err := os.ReadFile("testdata/codec_test.go.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "internal/diffgen/testdata/external/codec_test.go"), codecTest, 0644); err != nil {
+		t.Fatal(err)
+	}
+	typedTest, err := os.ReadFile("testdata/typed_test.go.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "internal/diffgen/testdata/external/typed_test.go"), typedTest, 0644); err != nil {
 		t.Fatal(err)
 	}
 	command = exec.Command(goBin, "test", "-mod=readonly", "-count=1",

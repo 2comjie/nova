@@ -1,7 +1,9 @@
 package generic
 
+import "time"
+
 type Primitive interface {
-	Number | ~bool | ~string
+	Number | ~bool | ~string | time.Time
 }
 
 type Number interface {

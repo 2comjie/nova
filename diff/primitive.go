@@ -1,6 +1,16 @@
 package diff
 
-import "github.com/2comjie/nova/generic"
+import (
+	"github.com/2comjie/nova/generic"
+	"time"
+)
+
+func primitiveEqual[T generic.Primitive](left, right T) bool {
+	if value, ok := any(left).(time.Time); ok {
+		return value.UnixMilli() == any(right).(time.Time).UnixMilli()
+	}
+	return left == right
+}
 
 type Primitive[T generic.Primitive] struct {
 	_ noCopy
@@ -25,7 +35,7 @@ func (p *Primitive[T]) LoadSnapshot(value T) {
 }
 
 func (p *Primitive[T]) SetValue(value T) bool {
-	if p.value == value {
+	if primitiveEqual(p.value, value) {
 		return false
 	}
 	p.value = value

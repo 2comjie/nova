@@ -33,7 +33,7 @@ func (s *PrimitiveSlice[T]) GetValue(index int) T {
 
 func (s *PrimitiveSlice[T]) SetValue(index int, value T) bool {
 	oldValue := s.values[index]
-	if oldValue == value {
+	if primitiveEqual(oldValue, value) {
 		return false
 	}
 

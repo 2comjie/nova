@@ -5,6 +5,7 @@ package external
 import models "github.com/2comjie/nova/internal/diffgen/testdata/basic"
 
 type Model struct {
+	State    models.StatusAlias       `diff:"5"`
 	Child    *models.Child            `diff:"1"`
 	Children map[uint64]*models.Child `diff:"2"`
 	Order    []*models.Child          `diff:"3"`
