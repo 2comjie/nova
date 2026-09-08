@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/2comjie/nova/logx"
 	"github.com/spf13/cast"
@@ -26,6 +28,90 @@ const (
 	aofSegmentSize = 256 * 1024 * 1024
 	aofHeaderSize  = 29
 )
+
+type record struct {
+	Id      uint64
+	Version uint64
+	Full    bool
+	Payload []byte
+}
+
+type Store struct {
+	aof *aof
+
+	writeCh chan record
+	wait    sync.WaitGroup
+
+	flushFailCnt int
+}
+
+func NewStore(dir string) (*Store, error) {
+	log, err := openAOF(dir, aofSegmentSize)
+	if err != nil {
+		return nil, err
+	}
+	store := &Store{
+		aof:     log,
+		writeCh: make(chan record, 4096),
+	}
+
+	store.wait.Add(1)
+	go store.write()
+
+	return store, nil
+}
+
+func (s *Store) write() {
+	defer s.wait.Done()
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case value, ok := <-s.writeCh:
+			if !ok {
+				err := s.aof.Close()
+				if err != nil {
+					logx.Errorf("diff_sync: 关闭aof文件错误 %+v", err)
+				}
+				return
+			}
+
+			if err := s.aof.Append(value.Id, value.Version, value.Full, value.Payload); err != nil {
+				logx.Errorf("diff_sync: 写入aof文件错误 %+v", err)
+				// 写入数据都写不进去了 就应该要 直接寄了
+				panic(err)
+			}
+		case <-ticker.C:
+			if err := s.aof.Sync(); err != nil {
+				logx.Error("diff_sync: aof文件刷盘错误 fail cnt %d %+v", s.flushFailCnt, err)
+
+				s.flushFailCnt++
+				if s.flushFailCnt >= 4 {
+					// 直接挂掉服务 刷盘刷不进去了
+					panic(fmt.Sprintf("diff_sync: aof文件刷盘错误 fail cnt %d %+v", s.flushFailCnt, err))
+				}
+			} else {
+				s.flushFailCnt = 0
+			}
+		}
+	}
+}
+
+func (s *Store) Shutdown() {
+	close(s.writeCh)
+	s.wait.Wait()
+}
+
+func (s *Store) append(id uint64, version uint64, full bool, payload []byte) {
+	s.writeCh <- record{
+		Id:      id,
+		Version: version,
+		Full:    full,
+		Payload: payload,
+	}
+}
 
 type aof struct {
 	dir         string
@@ -142,10 +228,17 @@ func (a *aof) open() error {
 	return nil
 }
 
-func (a *aof) Append(id uint64, version uint64, full bool, payload []byte) bool {
+func (a *aof) Append(id uint64, version uint64, full bool, payload []byte) error {
 	size := aofHeaderSize + len(payload)
+
+	if size > a.segmentSize {
+		return errors.New("diff_sync: 单条增量超过 AOF 段大小")
+	}
+
 	if a.offset+size > len(a.data) {
-		return false
+		if err := a.rotate(); err != nil {
+			return err
+		}
 	}
 
 	record := make([]byte, size)
@@ -158,7 +251,10 @@ func (a *aof) Append(id uint64, version uint64, full bool, payload []byte) bool 
 		record[24] = 1
 	}
 
-	binary.LittleEndian.PutUint32(record[25:29], uint32(len(payload)))
+	binary.LittleEndian.PutUint32(
+		record[25:29],
+		uint32(len(payload)),
+	)
 	copy(record[aofHeaderSize:], payload)
 
 	binary.LittleEndian.PutUint32(record[4:8], crc32.ChecksumIEEE(record[8:]))
@@ -166,30 +262,31 @@ func (a *aof) Append(id uint64, version uint64, full bool, payload []byte) bool 
 	copy(a.data[a.offset:], record)
 	a.offset += size
 
-	// 标记下一条记录尚不存在，覆盖崩溃前可能残留的旧数据
 	if a.offset+4 <= len(a.data) {
 		clear(a.data[a.offset : a.offset+4])
 	}
 
-	return true
-}
-
-func (a *aof) Sync() error {
-	err := unix.Msync(a.data, unix.MS_SYNC)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
-func (a *aof) Close() {
-	saveErr := a.Sync()
-	if saveErr != nil {
-		logx.Errorf("save aof failed: %v", saveErr)
+func (a *aof) Sync() error {
+	return unix.Msync(a.data, unix.MS_SYNC)
+}
+
+func (a *aof) Close() error {
+	if err := a.Sync(); err != nil {
+		return err
 	}
-	unmapErr := unix.Munmap(a.data)
-	if unmapErr != nil {
-		logx.Errorf("unmap aof failed: %v", unmapErr)
+	if err := unix.Munmap(a.data); err != nil {
+		return err
 	}
-	_ = a.file.Close()
+	return a.file.Close()
+}
+
+func (a *aof) rotate() error {
+	if err := a.Close(); err != nil {
+		return err
+	}
+	a.index++
+	return a.open()
 }
