@@ -66,7 +66,6 @@ func NewProvider(rc redis.UniversalClient, opts ...Option) *Provider {
 	return p
 }
 
-// SetOnBindingLost 在首次 Bind 前设置。
 func (p *Provider) SetOnBindingLost(callback func(name, key, value string)) {
 	p.onBindingLost = callback
 }

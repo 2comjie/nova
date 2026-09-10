@@ -2,7 +2,8 @@ package net
 
 import (
 	"net"
-	"strconv"
+
+	"github.com/spf13/cast"
 )
 
 const (
@@ -31,7 +32,7 @@ func ParseAddr(addr string, expose ...bool) (string, string, error) {
 		if p, err := AssignRandPort(host); err != nil {
 			return "", "", err
 		} else {
-			port = strconv.Itoa(p)
+			port = cast.ToString(p)
 		}
 	}
 
@@ -71,7 +72,7 @@ func ExtractPort(addr net.Addr) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return strconv.Atoi(port)
+	return cast.ToInt(port), nil
 }
 
 // ExternalIP 获取外网IP地址

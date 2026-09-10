@@ -3,8 +3,8 @@ package locator
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"strconv"
+
+	"github.com/spf13/cast"
 )
 
 const GateName = "gate"
@@ -69,12 +69,12 @@ func (l *GateLocator) SetOnBindingLost(callback func(uid uint64, binding GateBin
 		if name != GateName {
 			return
 		}
-		uid, err := strconv.ParseUint(key, 10, 64)
+		uid, err := cast.ToUint64E(value)
 		if err != nil {
 			panic(err)
 		}
-		binding, err := decodeGateBinding(value)
-		if err != nil {
+		var binding GateBinding
+		if err := json.Unmarshal([]byte(value), &binding); err != nil {
 			panic(err)
 		}
 		callback(uid, binding)
@@ -82,12 +82,14 @@ func (l *GateLocator) SetOnBindingLost(callback func(uid uint64, binding GateBin
 }
 
 func (l *GateLocator) Bind(ctx context.Context, uid uint64, binding GateBinding) error {
-	_, err := l.provider.Bind(ctx, GateName, strconv.FormatUint(uid, 10), encodeGateBinding(binding))
+	bindBs, _ := json.Marshal(binding)
+	_, err := l.provider.Bind(ctx, GateName, cast.ToString(uid), string(bindBs))
 	return err
 }
 
 func (l *GateLocator) Unbind(ctx context.Context, uid uint64, binding GateBinding) error {
-	return l.provider.Unbind(ctx, GateName, strconv.FormatUint(uid, 10), encodeGateBinding(binding))
+	bindBs, _ := json.Marshal(binding)
+	return l.provider.Unbind(ctx, GateName, cast.ToString(uid), string(bindBs))
 }
 
 func (l *GateLocator) Locate(ctx context.Context, uid uint64) (string, error) {
@@ -96,32 +98,17 @@ func (l *GateLocator) Locate(ctx context.Context, uid uint64) (string, error) {
 }
 
 func (l *GateLocator) LocateBinding(ctx context.Context, uid uint64) (GateBinding, error) {
-	value, err := l.provider.Locate(ctx, GateName, strconv.FormatUint(uid, 10))
+	value, err := l.provider.Locate(ctx, GateName, cast.ToString(uid))
 	if err != nil || value == "" {
 		return GateBinding{}, err
 	}
-	return decodeGateBinding(value)
-}
-
-func (l *GateLocator) Close() {
-	l.provider.Close()
-}
-
-func encodeGateBinding(binding GateBinding) string {
-	if binding.InstanceId == "" || binding.SessionId == 0 {
-		panic("locator: GateBinding缺少InstanceId或SessionId")
-	}
-	value, _ := json.Marshal(binding)
-	return string(value)
-}
-
-func decodeGateBinding(value string) (GateBinding, error) {
 	var binding GateBinding
 	if err := json.Unmarshal([]byte(value), &binding); err != nil {
 		return GateBinding{}, err
 	}
-	if binding.InstanceId == "" || binding.SessionId == 0 {
-		return GateBinding{}, fmt.Errorf("locator: GateBinding无效 instance=%q session=%d", binding.InstanceId, binding.SessionId)
-	}
 	return binding, nil
+}
+
+func (l *GateLocator) Close() {
+	l.provider.Close()
 }

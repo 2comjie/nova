@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/compiler/protogen"
@@ -48,7 +47,7 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) error {
 		name := service.GoName
 		clientName := strings.ToLower(name[:1]) + name[1:] + "Client"
 		for _, method := range service.Methods {
-			g.P("const ", name, "_", method.GoName, "_FullMethodName = ", strconv.Quote("/"+string(service.Desc.FullName())+"/"+string(method.Desc.Name())))
+			g.P("const ", name, "_", method.GoName, "_FullMethodName = ", fmt.Sprintf("%q", "/"+string(service.Desc.FullName())+"/"+string(method.Desc.Name())))
 		}
 		g.P(service.Comments.Leading, "type ", name, "Client interface {")
 		for _, method := range service.Methods {
@@ -72,7 +71,7 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) error {
 		g.P("type Unimplemented", name, "Server struct {}")
 		for _, method := range service.Methods {
 			g.P("func (Unimplemented", name, "Server) ", method.GoName, "(ctx ", contextPackage.Ident("Context"), ", request *", method.Input.GoIdent, ") (*", method.Output.GoIdent, ", *", rpcPackage.Ident("Error"), ") {")
-			g.P("return nil, ", rpcPackage.Ident("NewError"), "(", rpcPackage.Ident("CodeNotFound"), ", ", strconv.Quote("method "+method.GoName+" not implemented"), ")")
+			g.P("return nil, ", rpcPackage.Ident("NewError"), "(", rpcPackage.Ident("CodeNotFound"), ", ", fmt.Sprintf("%q", "method "+method.GoName+" not implemented"), ")")
 			g.P("}")
 		}
 		g.P("func Register", name, "Server(server *", rpcPackage.Ident("Server"), ", implementation ", name, "Server) {")

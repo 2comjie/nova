@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"strconv"
 	"sync/atomic"
 	"time"
 
+	"github.com/spf13/cast"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -50,9 +50,9 @@ func (v *atomicValue) Bool() (bool, error) {
 	case bool:
 		return value, nil
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
-		return strconv.ParseBool(fmt.Sprint(value))
+		return cast.ToBoolE(fmt.Sprint(value))
 	case string:
-		return strconv.ParseBool(value)
+		return cast.ToBoolE(value)
 	default:
 		return false, v.typeError()
 	}
@@ -85,7 +85,7 @@ func (v *atomicValue) Int() (int64, error) {
 	case float64:
 		return int64(value), nil
 	case string:
-		return strconv.ParseInt(value, 10, 64)
+		return cast.ToInt64E(value)
 	default:
 		return 0, v.typeError()
 	}
@@ -118,7 +118,7 @@ func (v *atomicValue) Float() (float64, error) {
 	case float64:
 		return value, nil
 	case string:
-		return strconv.ParseFloat(value, 64)
+		return cast.ToFloat64E(value)
 	default:
 		return 0, v.typeError()
 	}

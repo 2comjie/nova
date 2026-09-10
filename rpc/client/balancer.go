@@ -7,8 +7,6 @@ import (
 	"github.com/2comjie/nova/core/endpoint"
 )
 
-// Balancer 从当前服务的可用实例中选择一个实例。
-// instances 只在本次调用期间有效，实现方不能修改或长期持有。
 type Balancer interface {
 	Pick(ctx context.Context, serviceName string, instances []endpoint.ServiceInstance) (endpoint.ServiceInstance, error)
 }

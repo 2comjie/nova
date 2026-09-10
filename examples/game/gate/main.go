@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"strconv"
+	"strings"
 
 	"github.com/2comjie/nova/config"
 	"github.com/2comjie/nova/config/file"
@@ -14,6 +14,7 @@ import (
 	"github.com/2comjie/nova/logx"
 	"github.com/2comjie/nova/network"
 	nettcp "github.com/2comjie/nova/network/transport/tcp"
+	"github.com/spf13/cast"
 )
 
 func main() {
@@ -43,7 +44,13 @@ func main() {
 				if len(token) == 0 {
 					return 0, errors.New("token不能为空")
 				}
-				uid, err := strconv.ParseUint(string(token), 10, 64)
+				// token 是十进制 Uid，不能让前导 0 被 cast 当成八进制。
+				for _, digit := range token {
+					if digit < '0' || digit > '9' {
+						return 0, errors.New("token中的Uid无效")
+					}
+				}
+				uid, err := cast.ToUint64E(strings.TrimLeft(string(token), "0"))
 				if err != nil {
 					return 0, errors.New("token中的Uid无效")
 				}

@@ -103,12 +103,7 @@ func (c *Client) Direct(_ context.Context, addr string) (*rpc.Conn, error) {
 	return c.pool.Get(addr)
 }
 
-func (c *Client) Route(
-	ctx context.Context,
-	serviceName string,
-	binding string,
-	key string,
-) (*rpc.Conn, error) {
+func (c *Client) Route(ctx context.Context, serviceName string, binding string, key string) (*rpc.Conn, error) {
 	if serviceName == "" || binding == "" || key == "" {
 		return nil, ErrInvalidTarget
 	}
@@ -229,14 +224,9 @@ func (c *Client) update(instances map[string]endpoint.ServiceInstance) {
 	c.mu.Lock()
 	c.serviceMap = serviceMap
 	c.mu.Unlock()
-	// 下线只停止选点；已有连接保留到 Close，让在途 RPC 正常结束。
 }
 
-func (c *Client) pickService(
-	ctx context.Context,
-	serviceName string,
-	policy lx.BalancePolicy,
-) (endpoint.ServiceInstance, error) {
+func (c *Client) pickService(ctx context.Context, serviceName string, policy lx.BalancePolicy) (endpoint.ServiceInstance, error) {
 	c.mu.RLock()
 	instances := append([]endpoint.ServiceInstance(nil), c.serviceMap[serviceName]...)
 	c.mu.RUnlock()

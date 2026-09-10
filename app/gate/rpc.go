@@ -3,11 +3,11 @@ package gate
 import (
 	"context"
 	"errors"
-	"strconv"
 
 	pbGate "github.com/2comjie/nova/internal/pb/transport/gate"
 	"github.com/2comjie/nova/network"
 	"github.com/2comjie/nova/rpc"
+	"github.com/spf13/cast"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -76,7 +76,7 @@ func (g *Gate) MockCall(ctx context.Context, request *pbGate.MockCallRequest) (*
 		Uid:        request.Uid,
 		Route:      request.Route,
 		Body:       request.Body,
-		BindingKey: strconv.FormatUint(request.Uid, 10),
+		BindingKey: cast.ToString(request.Uid),
 		needReply:  true,
 		forward:    g.forward,
 	}

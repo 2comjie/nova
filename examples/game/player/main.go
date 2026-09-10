@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"sync"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/2comjie/nova/flag"
 	"github.com/2comjie/nova/logx"
 	"github.com/redis/go-redis/v9"
+	"github.com/spf13/cast"
 )
 
 const playerDataKey = "nova:demo:players"
@@ -118,7 +118,7 @@ func (s *playerStore) profile(ctx context.Context, uid uint64) (shared.PlayerPro
 		return profile, nil
 	}
 
-	data, err := s.redis.HGet(ctx, playerDataKey, strconv.FormatUint(uid, 10)).Bytes()
+	data, err := s.redis.HGet(ctx, playerDataKey, cast.ToString(uid)).Bytes()
 	if err == nil {
 		if err := json.Unmarshal(data, &profile); err != nil {
 			return shared.PlayerProfile{}, err
@@ -184,7 +184,7 @@ func (s *playerStore) flush(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		values[strconv.FormatUint(profile.Uid, 10)] = data
+		values[cast.ToString(profile.Uid)] = data
 	}
 	if err := s.redis.HSet(ctx, playerDataKey, values).Err(); err != nil {
 		return err

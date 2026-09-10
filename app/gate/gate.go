@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,6 +19,7 @@ import (
 	"github.com/2comjie/nova/registry"
 	"github.com/2comjie/nova/rpc"
 	"github.com/2comjie/nova/rpc/lx"
+	"github.com/spf13/cast"
 )
 
 const defaultLocatorTimeout = 3 * time.Second
@@ -151,6 +151,7 @@ func New(config Config) *Gate {
 		},
 	}))
 	g.server = network.NewServer(options...)
+
 	g.locator.SetOnBindingLost(func(uid uint64, binding locator.GateBinding) {
 		g.server.KickUidSession(uid, binding.SessionId)
 	})
@@ -286,7 +287,7 @@ func (g *Gate) onReq(request *network.ReqContext) {
 		Route:      message.Route,
 		Seq:        message.Seq,
 		Body:       message.Body,
-		BindingKey: strconv.FormatUint(request.Session.Uid(), 10),
+		BindingKey: cast.ToString(request.Session.Uid()),
 		needReply:  request.NeedReply,
 		forward:    g.forward,
 	}
@@ -375,8 +376,6 @@ func (g *Gate) onSessionBind(session *network.Session) error {
 	if err != nil {
 		return err
 	}
-	// Do not overwrite an unreachable Gate's record and restart its TTL on
-	// every reconnect. Let its original lease expire before taking over.
 	if previous.InstanceId != "" && previous.InstanceId != current.InstanceId {
 		if _, err := g.gateClient.Kick(lx.WithNode(ctx, previous.InstanceId), &pbGate.KickRequest{
 			Uid: uid, NodeServiceName: g.instance.ServiceName, NodeInstanceId: g.instance.Id, SessionId: previous.SessionId,

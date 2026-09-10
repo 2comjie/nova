@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"errors"
-	"strconv"
+	"strings"
 
 	"github.com/2comjie/nova/core/util"
 	"github.com/2comjie/nova/logx"
 	"github.com/2comjie/nova/network"
 	netTcp "github.com/2comjie/nova/network/transport/tcp"
+	"github.com/spf13/cast"
 )
 
 func main() {
@@ -25,7 +26,13 @@ func main() {
 			if len(token) == 0 {
 				return 0, errors.New("token is empty")
 			}
-			return strconv.ParseUint(string(token), 10, 64)
+			// token 是十进制 Uid，不能让前导 0 被 cast 当成八进制。
+			for _, digit := range token {
+				if digit < '0' || digit > '9' {
+					return 0, errors.New("invalid uid token")
+				}
+			}
+			return cast.ToUint64E(strings.TrimLeft(string(token), "0"))
 		})),
 		network.WithHooks(network.Hooks{
 			OnSessionStart: func(session *network.Session) {

@@ -7,12 +7,12 @@ import (
 	"io"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/2comjie/nova/logx/logdef"
+	"github.com/spf13/cast"
 )
 
 var builderPool sync.Pool
@@ -257,7 +257,7 @@ func getCallInfoN(skip int) (string, string) {
 	if sLen > 0 {
 		funcName = ss[sLen-1]
 	}
-	return file + ":" + strconv.Itoa(line), funcName
+	return file + ":" + cast.ToString(line), funcName
 }
 func (l Logger) print(level logdef.Level, msg string) {
 	caller, fname := getCallInfoN(l.skip + 1)

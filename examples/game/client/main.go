@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"strconv"
 	"time"
 
 	"github.com/2comjie/nova/core/util"
@@ -12,6 +11,7 @@ import (
 	"github.com/2comjie/nova/logx"
 	"github.com/2comjie/nova/network"
 	nettcp "github.com/2comjie/nova/network/transport/tcp"
+	"github.com/spf13/cast"
 )
 
 func main() {
@@ -35,7 +35,7 @@ func main() {
 	if err := client.Dial(ctx); err != nil {
 		panic(err)
 	}
-	if err := client.Bind(ctx, []byte(strconv.FormatUint(uid, 10))); err != nil {
+	if err := client.Bind(ctx, []byte(cast.ToString(uid))); err != nil {
 		panic(err)
 	}
 	logx.Infof("客户端绑定完成 uid=%d", uid)
