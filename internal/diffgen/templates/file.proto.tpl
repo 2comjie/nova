@@ -2,7 +2,7 @@
 
 syntax = "proto3";
 
-package {{.PackageName}};
+package {{.ProtoPackage}};
 
 option go_package = "{{.GoPackage}}";
 option csharp_namespace = "{{.CSharpNamespace}}";
@@ -11,7 +11,7 @@ option csharp_namespace = "{{.CSharpNamespace}}";
 import "{{.}}";
 {{end}}
 
-{{range .Types}}
+{{range .ProtoTypes}}
 message {{.Name}} {
 {{range .Fields}}
 {{- if or (eq .Kind "primitiveMap") (eq .Kind "pointerMap")}}

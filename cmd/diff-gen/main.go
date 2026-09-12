@@ -9,11 +9,10 @@ import (
 )
 
 func main() {
-	dir := flag.String("dir", ".", "Go 模型目录")
-	protoDir := flag.String("proto-dir", "./proto", "Proto 输出根目录")
+	config := flag.String("config", "diffgen.yaml", "生成配置文件")
 	flag.Parse()
 
-	if err := diffgen.Generate(*dir, *protoDir); err != nil {
+	if err := diffgen.Generate(*config); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

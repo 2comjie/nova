@@ -1,0 +1,11 @@
+source_root: ./diff_app
+
+packages:
+  - ./diff_app/player/item
+  - ./diff_app/player/food
+  - ./diff_app/player/weapon
+  - ./diff_app/player/bag
+
+proto:
+  dir: ./proto
+  go_out: .

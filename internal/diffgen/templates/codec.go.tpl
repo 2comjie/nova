@@ -1,13 +1,13 @@
 {{define "codecs"}}
-// {{.CodecName}} 仅包含业务数据；子对象使用自己的编解码方法。
-type {{.CodecName}} struct {
+// {{.CodecName}}{{.TypeArgs}} 仅包含业务数据；子对象使用自己的编解码方法。
+type {{.CodecName}}{{.TypeParams}} struct {
 {{range .Fields}}
     {{.Name}} {{if or (eq .Kind "primitiveMap") (eq .Kind "pointerMap")}}map[{{.CodecKeyType}}]{{.CodecValueType}}{{else if or (eq .Kind "primitiveSlice") (eq .Kind "pointerSlice")}}[]{{.CodecValueType}}{{else}}{{.CodecValueType}}{{end}}{{if .Tag}} `{{.Tag}}`{{end}}
 {{end}}
 }
 
-func (value *{{.Name}}) exportData() {{.CodecName}} {
-    data := {{.CodecName}}{
+func (value *{{.Name}}{{.TypeArgs}}) exportData() {{.CodecName}}{{.TypeArgs}} {
+    data := {{.CodecName}}{{.TypeArgs}}{
 {{range .Fields}}
 {{- if or (eq .Kind "primitive") (eq .Kind "pointer")}}
         {{.Name}}: {{if .IsTime}}{{.Encode (printf "value.%s.GetValue()" .RuntimeName)}}{{else}}value.{{.RuntimeName}}.GetValue(){{end}},
@@ -36,7 +36,7 @@ func (value *{{.Name}}) exportData() {{.CodecName}} {
 }
 
 // loadData 接管完整解码成功的数据，不记录增量。
-func (value *{{.Name}}) loadData(data {{.CodecName}}) {
+func (value *{{.Name}}{{.TypeArgs}}) loadData(data {{.CodecName}}{{.TypeArgs}}) {
     value.InitLink(nil)
 {{range .Fields}}
 {{- if and (or (eq .Kind "primitiveMap") (eq .Kind "pointerMap")) (or (ne .KeyType .CodecKeyType) .IsTime)}}
@@ -45,11 +45,6 @@ func (value *{{.Name}}) loadData(data {{.CodecName}}) {
         if len(data.{{.Name}}) != 0 {
             values = make(map[{{.KeyType}}]{{.ValueType}}, len(data.{{.Name}}))
             for key, fieldValue := range data.{{.Name}} {
-{{- if eq .Kind "pointerMap"}}
-                if fieldValue == nil {
-                    continue
-                }
-{{- end}}
                 values[{{.KeyType}}(key)] = {{if .IsTime}}{{.Decode "fieldValue"}}{{else}}fieldValue{{end}}
             }
         }
@@ -67,24 +62,17 @@ func (value *{{.Name}}) loadData(data {{.CodecName}}) {
         value.{{.RuntimeName}}.LoadSnapshot(values)
     }
 {{- else}}
-{{- if eq .Kind "pointerMap"}}
-    for key, child := range data.{{.Name}} {
-        if child == nil {
-            delete(data.{{.Name}}, key)
-        }
-    }
-{{- end}}
     value.{{.RuntimeName}}.LoadSnapshot({{if .IsTime}}{{.Decode (printf "data.%s" .Name)}}{{else}}data.{{.Name}}{{end}})
 {{- end}}
 {{end}}
 }
 
-func (value *{{.Name}}) MarshalJSON() ([]byte, error) {
+func (value *{{.Name}}{{.TypeArgs}}) MarshalJSON() ([]byte, error) {
     return {{.JSONPackage}}.Marshal(value.exportData())
 }
 
-func (value *{{.Name}}) UnmarshalJSON(data []byte) error {
-    var decoded {{.CodecName}}
+func (value *{{.Name}}{{.TypeArgs}}) UnmarshalJSON(data []byte) error {
+    var decoded {{.CodecName}}{{.TypeArgs}}
     if err := {{.JSONPackage}}.Unmarshal(data, &decoded); err != nil {
         return err
     }
@@ -92,25 +80,4 @@ func (value *{{.Name}}) UnmarshalJSON(data []byte) error {
     return nil
 }
 
-func (value *{{.Name}}) MarshalBSON() ([]byte, error) {
-    return {{.BSONPackage}}.Marshal(value.exportData())
-}
-
-// MarshalBSONValue 保留嵌套对象和对象 Slice 中的 null。
-func (value *{{.Name}}) MarshalBSONValue() (byte, []byte, error) {
-    if value == nil {
-        return byte({{.BSONPackage}}.TypeNull), nil, nil
-    }
-    data, err := value.MarshalBSON()
-    return byte({{.BSONPackage}}.TypeEmbeddedDocument), data, err
-}
-
-func (value *{{.Name}}) UnmarshalBSON(data []byte) error {
-    var decoded {{.CodecName}}
-    if err := {{.BSONPackage}}.Unmarshal(data, &decoded); err != nil {
-        return err
-    }
-    value.loadData(decoded)
-    return nil
-}
 {{end}}

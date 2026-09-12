@@ -5,27 +5,24 @@
 package {{.PackageName}}
 
 import (
-{{range .Imports}}
-    {{.Alias}} "{{.Path}}"
-{{end}}
-)
+{{range .Imports}}    {{.Alias}} "{{.Path}}"
+{{end}})
 
 {{range .Declarations}}
 {{.}}
 {{end}}
 
 {{range .Types}}
-type {{.Name}} struct {
-{{range .RuntimeFields}}
-    {{.}}
-{{end}}
-    diff.Object
-{{range .Fields}}
-    {{.RuntimeName}} {{.RuntimeType}}{{if .Tag}} `{{.Tag}}`{{end}}
-{{end}}
-}
+{{if .Instance}}
+type {{.Name}} = {{.Instance}}
+{{else}}
+type {{.Name}}{{.TypeParams}} struct {
+{{range .RuntimeFields}}    {{.}}
+{{end}}    diff.Object
+{{range .Fields}}    {{.RuntimeName}} {{.RuntimeType}}{{if .Tag}} `{{.Tag}}`{{end}}
+{{end}}}
 
-func (value *{{.Name}}) InitLink(writer *diff.Writer) {
+func (value *{{.Name}}{{.TypeArgs}}) InitLink(writer *diff.Writer) {
     if value.Object.Initialized() {
         if writer != nil {
             value.Object.Init(writer)
@@ -34,12 +31,11 @@ func (value *{{.Name}}) InitLink(writer *diff.Writer) {
     }
 
     value.Object.Init(writer)
-{{range .Fields}}
-    value.{{.RuntimeName}}.Init(&value.Object, {{.DiffIndex}})
+{{range .Fields}}    value.{{.RuntimeName}}.Init(&value.Object, {{.DiffIndex}})
 {{end}}
 }
 
-{{$typeName := .Name}}
+{{$typeName := printf "%s%s" .Name .TypeArgs}}
 {{range .Fields}}
 {{if or (eq .Kind "primitive") (eq .Kind "pointer")}}
 func (value *{{$typeName}}) Get{{.Name}}() {{.ValueType}} {
@@ -57,8 +53,25 @@ func (value *{{$typeName}}) {{.Name}}() *{{.RuntimeType}} {
 }
 {{end}}
 {{end}}
+{{if .TypeParams}}
+// DiffField 供具体实例的协议转换访问字段容器。
+func (value *{{.Name}}{{.TypeArgs}}) DiffField(index uint32) any {
+    value.InitLink(nil)
+    switch index {
+{{range .Fields}}
+    case {{.DiffIndex}}:
+        return &value.{{.RuntimeName}}
+{{end}}
+    default:
+        panic("diff: unknown field")
+    }
+}
+{{end}}
+{{template "codecs" .}}
+{{end}}
+{{if not .TypeParams}}
 // Snapshot 导出独立的全量 Proto，不修改对象和变更记录。
-func (value *{{.Name}}) Snapshot() *pbData.{{.Name}} {
+{{if .Instance}}func Snapshot{{.Name}}(value *{{.Name}}){{else}}func (value *{{.Name}}) Snapshot(){{end}} *pbData.{{.Name}} {
     snapshot := &pbData.{{.Name}}{
 {{range .Fields}}
 {{- if eq .Kind "primitive"}}
@@ -69,14 +82,14 @@ func (value *{{.Name}}) Snapshot() *pbData.{{.Name}} {
 {{range .Fields}}
 {{- if eq .Kind "pointer"}}
     if child := value.{{.RuntimeName}}.GetValue(); child != nil {
-        snapshot.{{.ProtoGoName}} = child.Snapshot()
+        snapshot.{{.ProtoGoName}} = {{.ChildCall "Snapshot" "child"}}
     }
 {{- else if or (eq .Kind "primitiveMap") (eq .Kind "pointerMap")}}
     if value.{{.RuntimeName}}.Len() != 0 {
         snapshot.{{.ProtoGoName}} = make(map[{{.ProtoKeyType}}]{{.ProtoGoType}}, value.{{.RuntimeName}}.Len())
         value.{{.RuntimeName}}.Range(func(key {{.KeyType}}, fieldValue {{.ValueType}}) bool {
 {{- if eq .Kind "pointerMap"}}
-            snapshot.{{.ProtoGoName}}[{{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = fieldValue.Snapshot()
+            snapshot.{{.ProtoGoName}}[{{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = {{.ChildCall "Snapshot" "fieldValue"}}
 {{- else}}
             snapshot.{{.ProtoGoName}}[{{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = {{.Encode "fieldValue"}}
 {{- end}}
@@ -90,7 +103,7 @@ func (value *{{.Name}}) Snapshot() *pbData.{{.Name}} {
             fieldValue := value.{{.RuntimeName}}.GetValue(index)
 {{- if eq .Kind "pointerSlice"}}
             if fieldValue != nil {
-                snapshot.{{.ProtoGoName}}[index] = fieldValue.Snapshot()
+                snapshot.{{.ProtoGoName}}[index] = {{.ChildCall "Snapshot" "fieldValue"}}
             }
 {{- else}}
             snapshot.{{.ProtoGoName}}[index] = {{.Encode "fieldValue"}}
@@ -104,7 +117,7 @@ func (value *{{.Name}}) Snapshot() *pbData.{{.Name}} {
 
 // LoadSnapshot 加载全量基线并恢复父子链接，不记录增量。
 // snapshot 必须非空；已有待提交变化由调用方在重置基线前处理。
-func (value *{{.Name}}) LoadSnapshot(snapshot *pbData.{{.Name}}) {
+{{if .Instance}}func LoadSnapshot{{.Name}}(value *{{.Name}}, snapshot *pbData.{{.Name}}){{else}}func (value *{{.Name}}) LoadSnapshot(snapshot *pbData.{{.Name}}){{end}} {
     value.InitLink(nil)
 {{range .Fields}}
 {{- if eq .Kind "primitive"}}
@@ -114,7 +127,7 @@ func (value *{{.Name}}) LoadSnapshot(snapshot *pbData.{{.Name}}) {
         var child {{.ValueType}}
         if snapshot.{{.ProtoGoName}} != nil {
             child = new({{.ElementType}})
-            child.LoadSnapshot(snapshot.{{.ProtoGoName}})
+            {{.ChildCall "LoadSnapshot" "child" (printf "snapshot.%s" .ProtoGoName)}}
         }
         value.{{.RuntimeName}}.LoadSnapshot(child)
     }
@@ -127,7 +140,7 @@ func (value *{{.Name}}) LoadSnapshot(snapshot *pbData.{{.Name}}) {
 {{- if eq .Kind "pointerMap"}}
                 child := new({{.ElementType}})
                 if fieldValue != nil {
-                    child.LoadSnapshot(fieldValue)
+                    {{.ChildCall "LoadSnapshot" "child" "fieldValue"}}
                 }
                 values[{{if ne .KeyType .ProtoKeyType}}{{.KeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}] = child
 {{- else}}
@@ -146,7 +159,7 @@ func (value *{{.Name}}) LoadSnapshot(snapshot *pbData.{{.Name}}) {
 {{- if eq .Kind "pointerSlice"}}
                 if fieldValue != nil {
                     child := new({{.ElementType}})
-                    child.LoadSnapshot(fieldValue)
+                    {{.ChildCall "LoadSnapshot" "child" "fieldValue"}}
                     values[index] = child
                 }
 {{- else}}
@@ -160,5 +173,5 @@ func (value *{{.Name}}) LoadSnapshot(snapshot *pbData.{{.Name}}) {
 {{end}}
 }
 {{template "updates" .}}
-{{template "codecs" .}}
+{{end}}
 {{end}}

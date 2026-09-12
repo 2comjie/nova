@@ -3,7 +3,6 @@ module github.com/2comjie/nova
 go 1.27.0
 
 require (
-	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/clbanning/mxj v1.8.4
 	github.com/fsnotify/fsnotify v1.10.1
@@ -11,6 +10,7 @@ require (
 	github.com/klauspost/compress v1.18.4
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/spf13/cast v1.10.0
+	github.com/stoewer/go-strcase v1.3.1
 	github.com/xtaci/kcp-go/v5 v5.6.72
 	golang.org/x/net v0.49.0
 	golang.org/x/sync v0.19.0
@@ -26,12 +26,9 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/xtaci/lossyconn v1.0.0 // indirect
-	github.com/yuin/gopher-lua v1.1.1 // indirect
-	go.mongodb.org/mongo-driver/v2 v2.6.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/mod v0.32.0 // indirect

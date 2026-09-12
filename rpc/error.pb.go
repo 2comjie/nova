@@ -81,7 +81,6 @@ func (x *Error) GetDetail() []byte {
 	return nil
 }
 
-// 仅用于服务间 TCP RPC，不属于游戏客户端协议。
 type Request struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Method        string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`

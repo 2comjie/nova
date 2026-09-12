@@ -1,12 +1,20 @@
 {{define "updates"}}
 {{$typeName := .Name}}
 // Commit 导出本轮增量并清空 Writer；返回值独立于运行时对象。
+{{if .Instance}}
+func Commit{{.Name}}(value *{{.Name}}) *pbData.{{.Name}} {
+    return value.Object.Commit(new(pbData.{{.Name}}), func(update *pbData.{{.Name}}, path diff.Path, operation diff.Operation, data any) {
+        WriteUpdate{{.Name}}(value, update, path, operation, data)
+    })
+}
+{{else}}
 func (value *{{.Name}}) Commit() *pbData.{{.Name}} {
     return value.Object.Commit(new(pbData.{{.Name}}), value.WriteUpdate)
 }
+{{end}}
 
 // WriteUpdate 将 Writer 的内部变更转换为有类型的 Proto 字段。
-func (value *{{.Name}}) WriteUpdate(update *pbData.{{.Name}}, path diff.Path, operation diff.Operation, data any) {
+{{if .Instance}}func WriteUpdate{{.Name}}(value *{{.Name}}, update{{else}}func (value *{{.Name}}) WriteUpdate(update{{end}} *pbData.{{.Name}}, path diff.Path, operation diff.Operation, data any) {
     node := path[0]
     switch node.FieldIndex {
 {{range .Fields}}
@@ -17,7 +25,7 @@ func (value *{{.Name}}) WriteUpdate(update *pbData.{{.Name}}, path diff.Path, op
 {{- else if eq .Kind "pointer"}}
         if len(path) == 1 {
             if operation == diff.PointerSet {
-                update.{{.ProtoGoName}}Diff = &pbData.{{$typeName}}_{{.ProtoGoName}}Set{ {{.ProtoGoName}}Set: data.({{.ValueType}}).Snapshot() }
+                update.{{.ProtoGoName}}Diff = &pbData.{{$typeName}}_{{.ProtoGoName}}Set{ {{.ProtoGoName}}Set: {{.ChildCall "Snapshot" (printf "data.(%s)" .ValueType)}} }
             } else {
                 update.{{.ProtoGoName}}Diff = &pbData.{{$typeName}}_{{.ProtoGoName}}Clear{ {{.ProtoGoName}}Clear: true }
             }
@@ -28,7 +36,7 @@ func (value *{{.Name}}) WriteUpdate(update *pbData.{{.Name}}, path diff.Path, op
             childUpdate = new({{slice .ProtoGoType 1}})
             update.{{.ProtoGoName}}Diff = &pbData.{{$typeName}}_{{.ProtoGoName}}Update{ {{.ProtoGoName}}Update: childUpdate }
         }
-        value.{{.RuntimeName}}.GetValue().WriteUpdate(childUpdate, path[1:], operation, data)
+        {{.ChildCall "WriteUpdate" (printf "value.%s.GetValue()" .RuntimeName) "childUpdate" "path[1:]" "operation" "data"}}
 {{- else if or (eq .Kind "primitiveMap") (eq .Kind "pointerMap")}}
         if node.KeyType == diff.PathField {
             update.{{.ProtoGoName}}Clear = true
@@ -43,13 +51,13 @@ func (value *{{.Name}}) WriteUpdate(update *pbData.{{.Name}}, path diff.Path, op
                 childUpdate = new({{slice .ProtoGoType 1}})
                 diff.SetMap(&update.{{.ProtoGoName}}Update, {{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}, childUpdate)
             }
-            child.WriteUpdate(childUpdate, path[1:], operation, data)
+            {{.ChildCall "WriteUpdate" "child" "childUpdate" "path[1:]" "operation" "data"}}
             return
         }
 {{- end}}
         if operation == diff.MapSet {
 {{- if eq .Kind "pointerMap"}}
-            diff.SetMap(&update.{{.ProtoGoName}}Set, {{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}, data.({{.ValueType}}).Snapshot())
+            diff.SetMap(&update.{{.ProtoGoName}}Set, {{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}, {{.ChildCall "Snapshot" (printf "data.(%s)" .ValueType)}})
 {{- else}}
             diff.SetMap(&update.{{.ProtoGoName}}Set, {{if ne .KeyType .ProtoKeyType}}{{.ProtoKeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}, {{.Encode (printf "data.(%s)" .ValueType)}})
 {{- end}}
@@ -63,7 +71,7 @@ func (value *{{.Name}}) WriteUpdate(update *pbData.{{.Name}}, path diff.Path, op
         for index, fieldValue := range values {
 {{- if eq .Kind "pointerSlice"}}
             if fieldValue != nil {
-                update.{{.ProtoGoName}}Update[index] = fieldValue.Snapshot()
+                update.{{.ProtoGoName}}Update[index] = {{.ChildCall "Snapshot" "fieldValue"}}
             }
 {{- else}}
             update.{{.ProtoGoName}}Update[index] = {{.Encode "fieldValue"}}
@@ -75,7 +83,7 @@ func (value *{{.Name}}) WriteUpdate(update *pbData.{{.Name}}, path diff.Path, op
 }
 
 // Merge 按序应用增量。对象必须已加载对应基线；绑定 Writer 时会记录本地变化。
-func (value *{{.Name}}) Merge(update *pbData.{{.Name}}) {
+{{if .Instance}}func Merge{{.Name}}(value *{{.Name}}, update{{else}}func (value *{{.Name}}) Merge(update{{end}} *pbData.{{.Name}}) {
     value.InitLink(nil)
 {{range .Fields}}
 {{- if eq .Kind "primitive"}}
@@ -86,12 +94,12 @@ func (value *{{.Name}}) Merge(update *pbData.{{.Name}}) {
     switch fieldValue := update.{{.ProtoGoName}}Diff.(type) {
     case *pbData.{{$typeName}}_{{.ProtoGoName}}Set:
         child := new({{.ElementType}})
-        child.LoadSnapshot(fieldValue.{{.ProtoGoName}}Set)
+        {{.ChildCall "LoadSnapshot" "child" (printf "fieldValue.%sSet" .ProtoGoName)}}
         value.{{.RuntimeName}}.SetValue(child)
     case *pbData.{{$typeName}}_{{.ProtoGoName}}Clear:
         value.{{.RuntimeName}}.SetValue(nil)
     case *pbData.{{$typeName}}_{{.ProtoGoName}}Update:
-        value.{{.RuntimeName}}.GetValue().Merge(fieldValue.{{.ProtoGoName}}Update)
+        {{.ChildCall "Merge" (printf "value.%s.GetValue()" .RuntimeName) (printf "fieldValue.%sUpdate" .ProtoGoName)}}
     }
 {{- else if or (eq .Kind "primitiveMap") (eq .Kind "pointerMap")}}
     if update.{{.ProtoGoName}}Clear {
@@ -101,7 +109,7 @@ func (value *{{.Name}}) Merge(update *pbData.{{.Name}}) {
 {{- if eq .Kind "pointerMap"}}
         child := new({{.ElementType}})
         if fieldValue != nil {
-            child.LoadSnapshot(fieldValue)
+            {{.ChildCall "LoadSnapshot" "child" "fieldValue"}}
         }
         value.{{.RuntimeName}}.Store({{if ne .KeyType .ProtoKeyType}}{{.KeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}}, child)
 {{- else}}
@@ -114,7 +122,7 @@ func (value *{{.Name}}) Merge(update *pbData.{{.Name}}) {
 {{- if eq .Kind "pointerMap"}}
     for key, childUpdate := range update.{{.ProtoGoName}}Update {
         child, _ := value.{{.RuntimeName}}.Load({{if ne .KeyType .ProtoKeyType}}{{.KeyType}}({{end}}key{{if ne .KeyType .ProtoKeyType}}){{end}})
-        child.Merge(childUpdate)
+        {{.ChildCall "Merge" "child" "childUpdate"}}
     }
 {{- end}}
 {{- else}}
@@ -125,7 +133,7 @@ func (value *{{.Name}}) Merge(update *pbData.{{.Name}}) {
             var child {{.ValueType}}
             if fieldValue != nil {
                 child = new({{.ElementType}})
-                child.LoadSnapshot(fieldValue)
+                {{.ChildCall "LoadSnapshot" "child" "fieldValue"}}
             }
             value.{{.RuntimeName}}.Append(child)
 {{- else}}

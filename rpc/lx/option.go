@@ -56,12 +56,7 @@ func WithActor(ctx context.Context, serviceName string, actorKey string) context
 	return WithStrategy(ctx, Strategy{Mode: ModeActor, Service: serviceName, Key: actorKey})
 }
 
-func WithSelect(
-	ctx context.Context,
-	serviceName string,
-	binding string,
-	key string,
-) context.Context {
+func WithSelect(ctx context.Context, serviceName string, binding string, key string) context.Context {
 	return WithStrategy(ctx, Strategy{
 		Mode:    ModeSelect,
 		Service: serviceName,
