@@ -24,7 +24,7 @@ func (value *{{.Name}}) Commit() *pbData.{{.Name}} {
         update.{{.ProtoGoName}}Update = &fieldValue
 {{- else if eq .Kind "pointer"}}
         if len(path) == 1 {
-            if operation == diff.PointerSet {
+            if operation == diff.FieldSet {
                 update.{{.ProtoGoName}}Diff = &pbData.{{$typeName}}_{{.ProtoGoName}}Set{ {{.ProtoGoName}}Set: {{.ChildCall "Snapshot" (printf "data.(%s)" .ValueType)}} }
             } else {
                 update.{{.ProtoGoName}}Diff = &pbData.{{$typeName}}_{{.ProtoGoName}}Clear{ {{.ProtoGoName}}Clear: true }

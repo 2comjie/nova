@@ -62,20 +62,19 @@ func (v *Value[T]) SetValue(value T) bool {
 	if equalValue(v.value, value) {
 		return false
 	}
-	operation := PrimitiveSet
+	operation := FieldSet
 	if old := objectValue(v.value); old != nil {
 		old.RemoveParent(v.parent, v.diffIndex)
 		if any(value) == nil {
-			operation = PointerClear
+			operation = FieldClear
 		}
 	}
 	v.value = value
 	if object := objectValue(value); object != nil {
 		object.InitLink(nil)
 		object.AddParent(v.parent, v.diffIndex)
-		operation = PointerSet
 	} else if _, ok := any(value).(ObjectValue); ok {
-		operation = PointerClear
+		operation = FieldClear
 	}
 	v.parent.writeChildPatch(v.diffIndex, nil, operation, value)
 	return true

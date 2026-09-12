@@ -18,13 +18,12 @@ type Path []PathNode
 type Operation uint8
 
 const (
-	PrimitiveSet Operation = 1
-	PointerSet   Operation = 2
-	PointerClear Operation = 3
-	MapSet       Operation = 4
-	MapDelete    Operation = 5
-	MapClear     Operation = 6
-	SliceReplace Operation = 7
+	FieldSet     Operation = 1
+	FieldClear   Operation = 2
+	MapSet       Operation = 3
+	MapDelete    Operation = 4
+	MapClear     Operation = 5
+	SliceReplace Operation = 6
 )
 
 type patch struct {
@@ -64,7 +63,7 @@ func (w *Writer) Reset() {
 
 func (w *Writer) mergeOverwrite(patch patch) {
 	for _, current := range w.patches {
-		if (current.Operation == PointerSet || current.Operation == MapSet || current.Operation == SliceReplace) &&
+		if (current.Operation == FieldSet || current.Operation == MapSet || current.Operation == SliceReplace) &&
 			len(current.Path) < len(patch.Path) && pathWithin(current.Path, patch.Path) {
 			return
 		}

@@ -57,6 +57,7 @@ type Child struct { Count int32 ` + "`diff:\"1\"`" + ` }
 		"type Scalar = Foo[string, int64]", "type Pointer = Foo[int64, *Child]",
 		"(*diff.Value[int64])", "(*diff.Value[*Child])",
 		"(*diff.Map[string, int64])", "(*diff.Map[int64, *Child])",
+		"operation == diff.FieldSet",
 	} {
 		if !strings.Contains(string(code), want) {
 			t.Errorf("生成代码缺少 %s", want)
