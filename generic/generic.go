@@ -13,6 +13,6 @@ type Number interface {
 		~complex64 | ~complex128
 }
 
-type Pointer[T any] interface {
-	~*T
+type Integer interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
 }
