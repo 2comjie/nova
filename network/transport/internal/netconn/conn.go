@@ -81,7 +81,7 @@ func (c *Conn) Write(message *packet.Message) error {
 
 func (c *Conn) WriteContext(ctx context.Context, message *packet.Message) error {
 	err := c.writes.Write(ctx, message)
-	if err == transport.ErrWriteQueueFull {
+	if errors.Is(err, transport.ErrWriteQueueFull) {
 		c.writes.Close()
 		_ = c.conn.Close()
 	}

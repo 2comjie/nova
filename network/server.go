@@ -184,8 +184,6 @@ func (s *Server) HandleMessage(conn transport.Conn, message *packet.Message) {
 	}
 }
 
-// Closing the socket only cancels work. Cleanup runs in the session worker,
-// after its current request exits, and is included in Shutdown's wait.
 func (s *Server) HandleClose(conn transport.Conn) {
 	s.mutex.Lock()
 	session := s.byConn[conn]
